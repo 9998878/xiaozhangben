@@ -1,0 +1,803 @@
+/* 小账本 2.0 —— 计划屏（预算 / 存钱目标 / 定期账单）
+ * 只使用 tokens.css 已冻结的变量；类名前缀 s-plan-；不写死颜色；深色由变量自动切换。
+ */
+
+.s-plan {
+  padding-bottom: calc(var(--sp-6) + env(safe-area-inset-bottom, 0px));
+  color: var(--c-text);
+}
+
+.s-plan-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-top: var(--sp-3);
+}
+
+.s-plan-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.s-plan-section--budget,
+.s-plan-section--goal,
+.s-plan-section--recurring {
+  padding-bottom: var(--sp-2);
+}
+
+.s-plan-heading {
+  margin: var(--sp-4) var(--page-x) 0;
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-cn);
+}
+
+.s-plan-heading--inline {
+  margin: 0;
+}
+
+.s-plan-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: var(--sp-4) var(--page-x) 0;
+}
+
+.s-plan-info {
+  display: inline-grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-text-3);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-plan-info:active {
+  color: var(--c-text);
+  background: var(--c-pressed);
+  border-radius: var(--r-full);
+}
+
+.s-plan-heading__action {
+  flex: none;
+  min-height: var(--tap);
+  padding: 0 var(--sp-2);
+  border: 0;
+  background: transparent;
+  color: var(--c-tint-soft-text);
+  font-size: var(--fs-footnote);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.s-plan-note {
+  margin: 0 var(--page-x);
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-plan-hint {
+  margin: var(--sp-2) var(--page-x);
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-plan-hint--strong {
+  color: var(--c-text);
+  font-weight: var(--fw-medium);
+}
+
+.s-plan-foot {
+  margin: var(--sp-6) var(--page-x) var(--sp-2);
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  text-align: center;
+}
+
+.s-plan-error {
+  margin: var(--sp-2) var(--page-x);
+  color: var(--c-danger);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-plan-error[hidden],
+.s-plan-form [hidden] {
+  display: none;
+}
+
+.s-plan-icon {
+  display: inline-block;
+  border-radius: var(--r-xs);
+  background: var(--c-fill);
+}
+
+/* ---------- 月份切换 ---------- */
+
+.s-plan-monthbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 var(--page-x);
+  min-height: var(--tap);
+}
+
+.s-plan-monthbar__label {
+  color: var(--c-text);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-iconbtn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--c-text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-plan-iconbtn:active {
+  background: var(--c-fill);
+}
+
+.s-plan-iconbtn[disabled],
+.s-plan-iconbtn[aria-disabled="true"] {
+  color: var(--c-text-4);
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ---------- 总预算卡 ---------- */
+
+.s-plan-budget__body {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+}
+
+.s-plan-budget__nums {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.s-plan-budget__spent {
+  color: var(--c-text);
+  font-size: var(--fs-title-1);
+  line-height: var(--lh-title-1);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-budget--over .s-plan-budget__spent {
+  color: var(--c-danger);
+}
+
+.s-plan-budget__meta {
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-budget__remain {
+  color: var(--c-text);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-badge-over {
+  display: inline-flex;
+  align-items: center;
+  margin-top: var(--sp-1);
+  padding: 0 var(--sp-2);
+  height: 20px;
+  border-radius: var(--r-full);
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+  font-size: var(--fs-caption-1);
+  font-weight: var(--fw-semibold);
+}
+
+.s-plan-budget__over {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-plan-budget--empty .s-plan-submit {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.s-plan-carry {
+  align-self: flex-start;
+  margin-top: var(--sp-1);
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ---------- 进度环容器 ---------- */
+
+.s-plan-ring {
+  flex: none;
+  line-height: 0;
+}
+
+.s-plan-ring--budget {
+  width: 120px;
+  height: 120px;
+}
+
+.s-plan-ring--goal {
+  width: 88px;
+  height: 88px;
+}
+
+.s-plan-ring--detail {
+  width: 140px;
+  height: 140px;
+}
+
+.s-plan-ring svg {
+  display: block;
+}
+
+/* ---------- 分类预算 ---------- */
+
+/* 超支：进度条整条转红色斜纹（P1） */
+.s-plan-cat__progress.c-progress--danger .c-progress__bar {
+  background: repeating-linear-gradient(-45deg, var(--c-expense) 0 6px, #FF9A92 6px 12px);
+}
+
+.s-plan-cats {
+  display: flex;
+  flex-direction: column;
+}
+
+.s-plan-cats__add .c-row__title,
+.s-plan-rules__add .c-row__title {
+  color: var(--c-tint-soft-text);
+  font-weight: var(--fw-regular);
+}
+
+.s-plan-cats__hint,
+.s-plan-rules__empty {
+  margin: var(--sp-3) var(--sp-4);
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-plan-cat,
+.s-plan-rule,
+.s-plan-cats__add,
+.s-plan-rules__add {
+  width: 100%;
+  border: 0;
+  font-family: inherit;
+  text-align: left;
+  color: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.s-plan-cat__icon {
+  color: var(--c-tint-soft-text);
+}
+
+.s-plan-cat__trail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-1);
+  flex: none;
+}
+
+.s-plan-cat__bar {
+  display: block;
+  width: 100%;
+  margin-top: var(--sp-2);
+}
+
+.s-plan-cat__progress {
+  width: 100%;
+}
+
+.s-plan-cat__amount {
+  color: var(--c-text);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-cat__over {
+  display: block;
+  margin-top: var(--sp-1);
+  color: var(--c-danger);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-cat__pct {
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-cat__pct--over {
+  color: var(--c-danger);
+}
+
+.s-plan-cat__pct--warn {
+  color: var(--c-warn);
+}
+
+.s-plan-cat--over .s-plan-cat__icon {
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+}
+
+/* ---------- 存钱目标 ---------- */
+
+.s-plan-goal__body {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.s-plan-goal__stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.s-plan-goal__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.s-plan-goal__label {
+  flex: none;
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-plan-goal__stat {
+  min-width: 0;
+  color: var(--c-text);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.s-plan-goal__value--strong {
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  font-weight: var(--fw-semibold);
+}
+
+.s-plan-goal__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.s-plan-goal__save {
+  flex: 1;
+}
+
+.s-plan-goal__edit {
+  flex: none;
+}
+
+.s-plan-goal--done .s-plan-goal__name {
+  color: var(--c-success);
+}
+
+.s-plan-goal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+}
+
+.s-plan-goal-empty__title {
+  margin: 0;
+  color: var(--c-text);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---------- 目标详情 / 存入记录 ---------- */
+
+.s-plan-detail__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+
+.s-plan-detail__nums {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.s-plan-detail__saved {
+  color: var(--c-text);
+  font-size: var(--fs-title-2);
+  line-height: var(--lh-title-2);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-detail__meta {
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-detail__eta,
+.s-plan-detail__count {
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+}
+
+.s-plan-detail__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-3);
+}
+
+.s-plan-deposits {
+  display: flex;
+  flex-direction: column;
+}
+
+.s-plan-deposits__empty {
+  margin: var(--sp-4);
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-plan-deposit__trail {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: none;
+}
+
+.s-plan-deposit__amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-deposit__delete {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  margin-right: calc(-1 * var(--sp-3));
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-text-3);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-plan-deposit__delete:active {
+  color: var(--c-danger);
+}
+
+/* ---------- 定期账单 ---------- */
+
+/* ---------- 待处理区（N5：逾期 + 7 天内到期，页面最前） ---------- */
+
+.s-plan-pending__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.s-plan-pending__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+}
+
+.s-plan-pending__item + .s-plan-pending__item {
+  border-top: var(--hairline) solid var(--c-separator);
+}
+
+.s-plan-pending__item--over .s-plan-pending__name {
+  color: var(--c-danger);
+}
+
+.s-plan-pending__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.s-plan-pending__name {
+  color: var(--c-text);
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-plan-pending__meta {
+  color: var(--c-text-2);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-plan-pending__post,
+.s-plan-pending__skip {
+  flex: none;
+}
+
+.s-plan-pending__all {
+  color: var(--c-tint-soft-text);
+  font-weight: var(--fw-semibold);
+}
+
+.s-plan-pending__more {
+  margin: var(--sp-2) 0 0;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+}
+
+/* M10：分类预算行的「剩余 · 日均还可花」 */
+.s-plan-cat__pace {
+  margin-top: var(--sp-1);
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-rules {
+.s-plan-rules {
+  display: flex;
+  flex-direction: column;
+}
+
+.s-plan-rule {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-plan-rule__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-plan-rule__sub {
+  overflow: hidden;
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-plan-rule__due {
+  display: block;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-rule__due--flat {
+  color: var(--c-text-3);
+}
+
+.s-plan-rule__due--warn {
+  color: var(--c-warn);
+}
+
+.s-plan-rule__due--over {
+  color: var(--c-danger);
+}
+
+.s-plan-rule__trail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  flex: none;
+}
+
+/* 金额和开关上下叠放：金额是整行唯一不能被截断的数字，取消 56% 上限，
+   否则窄屏（390pt）上会出现「-¥…」这种读不出数目的省略号。 */
+.s-plan-rule__trail .c-row__value,
+.s-plan-rule__amount {
+  flex: none;
+  max-width: none;
+  overflow: visible;
+  white-space: nowrap;
+  text-overflow: clip;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+}
+
+.s-plan-rule__postnow {
+  align-self: flex-start;
+  min-height: var(--tap);
+}
+
+/* ---------- Sheet 表单 ---------- */
+
+.s-plan-form {
+  display: flex;
+  flex-direction: column;
+  margin: 0 calc(-1 * var(--page-x));
+}
+
+.s-plan-form > .c-field,
+.s-plan-form > .s-plan-field {
+  border-radius: 0;
+}
+
+.s-plan-field {
+  position: relative;
+}
+
+.s-plan-field + .s-plan-field::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: var(--page-x);
+  height: var(--hairline);
+  background: var(--c-separator);
+  pointer-events: none;
+}
+
+.s-plan-field--inline {
+  align-items: center;
+}
+
+.s-plan-field__seg {
+  display: flex;
+  justify-content: flex-end;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 66%;
+}
+
+.s-plan-segmented {
+  width: 100%;
+}
+
+.s-plan-segmented .c-segmented__item {
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-footnote);
+}
+
+.s-plan-field__switch {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.s-plan-form__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--page-x);
+}
+
+.s-plan-amount,
+.s-plan-number,
+.s-plan-date,
+.s-plan-select {
+  font-variant-numeric: tabular-nums;
+}
+
+.s-plan-number {
+  width: 88px;
+  text-align: right;
+}
+
+.s-plan-select {
+  max-width: 60%;
+  border: 0;
+  background: transparent;
+  color: var(--c-text);
+  font-size: var(--fs-body);
+  font-family: inherit;
+  text-align: right;
+  direction: ltr;
+}
+
+.s-plan-submit {
+  display: flex;
+  width: auto;
+  margin: var(--sp-4) var(--page-x) var(--sp-2);
+}
+
+.s-plan-form > .s-plan-submit {
+  margin-bottom: var(--sp-4);
+}
+
+.s-plan-ghost {
+  min-height: var(--tap);
+  padding: 0 var(--page-x);
+}
+
+.s-plan-danger-text {
+  color: var(--c-danger);
+}
+
+@media (min-width: 520px) {
+  .s-plan-budget__body {
+    gap: var(--sp-6);
+  }
+
+  .s-plan-ring--budget {
+    width: 132px;
+    height: 132px;
+  }
+}

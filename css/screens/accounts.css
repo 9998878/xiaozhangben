@@ -1,0 +1,714 @@
+/* ============================================================
+   小账本 2.0 — 屏幕样式：账户（accounts）
+   owner: 前端#1（T12）
+   规则：只用 tokens.css 变量；类名一律 s-accounts-*；
+        不写死色值；触控命中区 ≥ 44px；不覆盖组件 c-* 的结构定义
+   ============================================================ */
+
+.s-accounts {
+  padding-top: var(--sp-4);
+}
+
+/* ---------- 净资产卡 ---------- */
+
+.s-accounts-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.s-accounts-hero__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.s-accounts-hero__label {
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-accounts-hero__count {
+  background: var(--c-tint-soft);
+  color: var(--c-text);
+  font-weight: var(--fw-semibold);
+}
+
+.s-accounts-hero__value {
+  color: var(--c-text);
+  font-size: var(--fs-money-hero);
+  line-height: 1.1;
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-accounts-hero__sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-5);
+}
+
+.s-accounts-hero__sub-item {
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+/* ---------- 工具栏 ---------- */
+
+.s-accounts-toolbar {
+  margin: var(--sp-5) var(--page-x) 0;
+}
+
+.s-accounts-toolbar__btn {
+  width: 100%;
+  min-height: var(--h-btn-md);
+  padding: 0 var(--sp-3);
+}
+
+.s-accounts-toolbar__btn {
+  width: 100%;
+  min-height: var(--h-btn-md);
+  padding: 0 var(--sp-3);
+}
+
+.s-accounts-toolbar__icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--icon);
+  height: var(--icon);
+}
+
+.s-accounts-toolbar__text {
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+}
+
+/* 列表底部的纯文字新建入口（N2） */
+.s-accounts-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  width: 100%;
+  min-height: var(--h-list-2);
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-text-3);
+  font-family: inherit;
+  font-size: var(--fs-subhead);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-accounts-add:active {
+  color: var(--c-text);
+  background: var(--c-pressed);
+}
+
+.s-accounts-add__icon {
+  display: inline-flex;
+  color: var(--c-text-3);
+}
+
+.s-accounts-glyph {
+  display: inline-grid;
+  place-items: center;
+  width: var(--icon);
+  height: var(--icon);
+  color: inherit;
+}
+
+/* ---------- 分组 ---------- */
+
+.s-accounts-group {
+  margin-top: var(--sp-7);
+}
+
+.s-accounts-group--archived {
+  margin-top: var(--sp-6);
+}
+
+.s-accounts-group__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: var(--sp-3) var(--page-x) var(--sp-2) calc(var(--page-x) + var(--sp-5));
+}
+
+.s-accounts-group__title {
+  margin: 0;
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: var(--fw-medium);
+}
+
+.s-accounts-group__count {
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption-1);
+}
+
+.s-accounts-list {
+  overflow: hidden;
+}
+
+/* 信用卡行：第一行沿用标准行结构，第二行全宽显示「已用 / 额度 / 可用」 */
+.s-accounts-row--credit {
+  flex-wrap: wrap;
+  row-gap: 0;
+  padding-bottom: var(--sp-2);
+}
+
+.s-accounts-credit-meta {
+  flex: 1 0 100%;
+  min-width: 0;
+  padding-left: calc(32px + var(--sp-4));
+  overflow: hidden;
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 账户行 ---------- */
+
+.s-accounts-avatar {
+  background: var(--c-tint-soft);
+  color: var(--c-tint-soft-text);
+}
+
+.s-accounts-avatar--lg {
+  width: var(--h-compact);
+  height: var(--h-compact);
+  border-radius: var(--r-lg);
+}
+
+.s-accounts-avatar--muted {
+  opacity: 0.6;
+}
+
+.s-accounts-avatar--cash {
+  background: var(--acc-cash-soft);
+  color: var(--acc-cash);
+}
+
+.s-accounts-avatar--bank {
+  background: var(--acc-bank-soft);
+  color: var(--acc-bank);
+}
+
+.s-accounts-avatar--wechat {
+  background: var(--acc-wechat-soft);
+  color: var(--acc-wechat);
+}
+
+.s-accounts-avatar--alipay {
+  background: var(--acc-alipay-soft);
+  color: var(--acc-alipay);
+}
+
+.s-accounts-avatar--credit {
+  background: var(--acc-credit-soft);
+  color: var(--acc-credit);
+}
+
+.s-accounts-avatar--savings {
+  background: var(--acc-savings-soft);
+  color: var(--acc-savings);
+}
+
+.s-accounts-row--archived .c-row__title {
+  color: var(--c-text-2);
+}
+
+.s-accounts-restore {
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-subhead);
+}
+
+.s-accounts-footnote {
+  margin: var(--sp-6) var(--page-x) 0;
+  padding-bottom: var(--sp-6);
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption-1);
+}
+
+.s-accounts-empty {
+  margin-top: var(--sp-5);
+}
+
+/* ---------- 账户详情头 ---------- */
+
+.s-accounts-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.s-accounts-detail__top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.s-accounts-detail__head {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.s-accounts-detail__name {
+  margin: 0;
+  overflow: hidden;
+  color: var(--c-text);
+  font-size: var(--fs-title-2);
+  line-height: var(--lh-title-2);
+  font-weight: var(--fw-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-accounts-detail__type {
+  margin: 0;
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-accounts-detail__balance {
+  margin: var(--sp-3) 0 0;
+  color: var(--c-text);
+  font-size: var(--fs-money-hero);
+  line-height: 1.1;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-accounts-detail__balance--debt {
+  color: var(--c-danger);
+}
+
+.s-accounts-detail__balance-label {
+  margin: 0;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption-1);
+}
+
+.s-accounts-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-6);
+  margin-top: var(--sp-3);
+}
+
+.s-accounts-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.s-accounts-meta-item__label {
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption-1);
+}
+
+.s-accounts-meta-item__value {
+  color: var(--c-text);
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-accounts-detail__note {
+  margin: var(--sp-3) 0 0;
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+/* ---------- 详情操作条 ---------- */
+
+.s-accounts-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+  margin: var(--sp-5) var(--page-x) 0;
+}
+
+.s-accounts-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  min-height: calc(var(--tap) + var(--sp-4));
+  padding: var(--sp-2) var(--sp-1);
+  border-radius: var(--r-lg);
+}
+
+.s-accounts-action__icon {
+  display: grid;
+  place-items: center;
+  width: var(--icon);
+  height: var(--icon);
+}
+
+.s-accounts-action__label {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 流水 ---------- */
+
+.s-accounts-txns {
+  overflow: hidden;
+}
+
+.s-accounts-txn__icon {
+  background: var(--c-fill);
+  color: var(--c-text-2);
+}
+
+.s-accounts-more {
+  margin: var(--sp-4) var(--page-x) 0;
+}
+
+.s-accounts-totalbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  min-height: var(--h-compact);
+  margin: var(--sp-5) var(--page-x) 0;
+  padding: var(--sp-2) var(--page-x);
+  border-radius: var(--r-lg);
+  background: var(--c-fill);
+}
+
+.s-accounts-totalbar__item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.s-accounts-totalbar__label {
+  color: var(--c-text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption-1);
+}
+
+.s-accounts-totalbar__value {
+  color: var(--c-text);
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  font-weight: var(--fw-medium);
+}
+
+/* ---------- 浮层表单 ---------- */
+
+.s-accounts-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.s-accounts-field {
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.s-accounts-amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.s-accounts-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-1);
+}
+
+.s-accounts-block__label {
+  padding-left: var(--sp-3);
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-accounts-typegrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+}
+
+.s-accounts-type {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: var(--h-list);
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--c-fill);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-accounts-type.is-active {
+  box-shadow: inset 0 0 0 var(--focus-width) var(--c-tint);
+  background: var(--c-tint-soft);
+  color: var(--c-tint-soft-text);
+}
+
+.s-accounts-type__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--icon);
+  height: var(--icon);
+  border-radius: var(--r-sm);
+  background: var(--c-bg-elev);
+  color: var(--c-text-2);
+}
+
+.s-accounts-type__icon--cash { background: var(--acc-cash-soft); color: var(--acc-cash); }
+.s-accounts-type__icon--bank { background: var(--acc-bank-soft); color: var(--acc-bank); }
+.s-accounts-type__icon--wechat { background: var(--acc-wechat-soft); color: var(--acc-wechat); }
+.s-accounts-type__icon--alipay { background: var(--acc-alipay-soft); color: var(--acc-alipay); }
+.s-accounts-type__icon--credit { background: var(--acc-credit-soft); color: var(--acc-credit); }
+.s-accounts-type__icon--savings { background: var(--acc-savings-soft); color: var(--acc-savings); }
+
+.s-accounts-type__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-accounts-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: var(--sp-2);
+}
+
+.s-accounts-icon-cell {
+  display: grid;
+  place-items: center;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--c-fill);
+  color: var(--c-text-2);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.s-accounts-icon-cell.is-active,
+.s-accounts-icon-cell[aria-pressed="true"] {
+  background: var(--c-tint-soft);
+  color: var(--c-tint-soft-text);
+  box-shadow: inset 0 0 0 var(--hairline) var(--c-tint);
+}
+
+.s-accounts-colors {
+  display: flex;
+  gap: var(--sp-4);
+  padding-left: var(--sp-3);
+}
+
+.s-accounts-color {
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--c-fill);
+  box-shadow: inset 0 0 0 var(--hairline) var(--c-separator);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.s-accounts-color--cash { background: var(--acc-cash); }
+.s-accounts-color--bank { background: var(--acc-bank); }
+.s-accounts-color--wechat { background: var(--acc-wechat); }
+.s-accounts-color--alipay { background: var(--acc-alipay); }
+.s-accounts-color--credit { background: var(--acc-credit); }
+.s-accounts-color--savings { background: var(--acc-savings); }
+
+.s-accounts-color.is-active,
+.s-accounts-color[aria-pressed="true"] {
+  box-shadow: 0 0 0 var(--sp-1) var(--c-bg-elev), 0 0 0 calc(var(--sp-1) + var(--focus-width)) var(--c-tint);
+}
+
+.s-accounts-credit[hidden] {
+  display: none;
+}
+
+.s-accounts-submit {
+  margin-top: var(--sp-2);
+}
+
+.s-accounts-danger {
+  min-height: var(--h-btn-md);
+  align-self: center;
+  color: var(--c-danger);
+  font-size: var(--fs-subhead);
+}
+
+.s-accounts-hint {
+  margin: 0;
+  padding: 0 var(--sp-3);
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption-1);
+}
+
+.s-accounts-error {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-accounts-error[hidden] {
+  display: none;
+}
+
+/* ---------- 转账选择器 ---------- */
+
+.s-accounts-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.s-accounts-picker__label {
+  padding-left: var(--sp-3);
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-accounts-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-1);
+}
+
+.s-accounts-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: 100%;
+  min-height: var(--tap);
+  padding: 0 var(--sp-4);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--c-fill);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.s-accounts-chip.is-active {
+  background: var(--c-tint-soft);
+  color: var(--c-tint-soft-text);
+  box-shadow: inset 0 0 0 var(--hairline) var(--c-tint);
+}
+
+.s-accounts-chip__dot {
+  flex: none;
+  width: var(--sp-3);
+  height: var(--sp-3);
+  border-radius: var(--r-full);
+  background: var(--c-text-3);
+}
+
+.s-accounts-chip__dot--cash { background: var(--acc-cash); }
+.s-accounts-chip__dot--bank { background: var(--acc-bank); }
+.s-accounts-chip__dot--wechat { background: var(--acc-wechat); }
+.s-accounts-chip__dot--alipay { background: var(--acc-alipay); }
+.s-accounts-chip__dot--credit { background: var(--acc-credit); }
+.s-accounts-chip__dot--savings { background: var(--acc-savings); }
+
+.s-accounts-chip__name {
+  overflow: hidden;
+  max-width: 12rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-accounts-summary {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--c-fill);
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  text-align: center;
+}
+
+/* ---------- 确认浮层 ---------- */
+
+.s-accounts-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.s-accounts-confirm__text {
+  margin: 0;
+  color: var(--c-text);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+/* ---------- 减弱动效 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .s-accounts-type,
+  .s-accounts-chip,
+  .s-accounts-icon-cell,
+  .s-accounts-color {
+    transition: none;
+  }
+}

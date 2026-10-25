@@ -1,0 +1,356 @@
+/* 小账本 2.0 · css/screens/home.css
+ * 概览屏专属样式。类名一律 s-home-*；通用外观全部来自 c-* 组件层。
+ * 鲨鱼风改版要点（2026-10-25）：
+ *   1) 深色英雄卡删除，改白底大卡：本月支出黑体大数字 + 黄色涨跌 pill，收入/结余降为卡底灰字；
+ *   2) 预算扁平化：黄进度条一行读懂，超支整条转红斜纹；
+ *   3) 最近流水金额黑粗，支出带 −、收入带 +，转账灰；
+ *   4) 分类图标统一用 .c-tile 底座，soft 底色更浅（alpha 1F→14）。
+ */
+
+/* ---------------- 容器 ---------------- */
+
+.s-home-inner {
+  box-sizing: border-box;
+  padding: 0 0 var(--sp-8);
+}
+
+.s-home-glyph {
+  display: grid;
+  place-items: center;
+  width: var(--icon);
+  height: var(--icon);
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+}
+
+/* ---------------- 大标题（月份 + 账本，鲨鱼式首屏标题） ---------------- */
+
+.s-home-titlebar {
+  display: flex;
+  align-items: center;
+  padding: var(--sp-2) var(--page-x) var(--sp-3);
+}
+
+.s-home-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: var(--tap);
+  margin-left: calc(var(--sp-2) * -1);
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-lg);
+  color: var(--c-text);
+  font-size: var(--fs-title-3);
+  line-height: var(--lh-title-3);
+  font-weight: var(--fw-bold);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-home-title:active,
+.s-home-title.is-pressed {
+  background: var(--c-pressed);
+}
+
+.s-home-title__text {
+  max-width: 70vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-home-title .c-icon {
+  margin-top: 2px;
+  color: var(--c-text-3);
+}
+
+/* ---------------- 本月支出大卡（白底 + 黑色大数字 + 黄色涨跌 pill） ---------------- */
+
+.s-home-hero {
+  margin: 0 var(--page-x);
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  border-radius: var(--r-card);
+  background: var(--c-bg-elev);
+  box-shadow: var(--shadow-card);
+  color: var(--c-text);
+}
+
+.s-home-hero__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 22px;
+}
+
+.s-home-hero__label {
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+}
+
+.s-home-hero__amount {
+  margin: var(--sp-2) 0 0;
+}
+
+.s-home-hero__amount .c-money {
+  color: var(--c-text);
+  font-size: var(--fs-large-title);
+  line-height: var(--lh-large-title);
+  font-weight: var(--fw-bold);
+}
+
+.s-home-hero__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-4) 0 0;
+  padding-top: var(--sp-3);
+  border-top: var(--hairline) solid var(--c-hairline);
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-home-hero__foot-item {
+  font-variant-numeric: tabular-nums;
+}
+
+.s-home-hero__foot-sep {
+  color: var(--c-text-4);
+}
+
+/* ---------------- 预算（扁平：黄进度条 + 一行数字） ---------------- */
+
+.s-home-budget {
+  display: block;
+  margin: var(--sp-4) var(--page-x) 0;
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-card);
+  background: var(--c-bg-elev);
+  box-shadow: var(--shadow-card);
+  color: var(--c-text);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-home-budget__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.s-home-budget__title {
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  font-weight: var(--fw-semibold);
+}
+
+/* 剩余额度用深金（黄在白卡上不可读）；超支转红 */
+.s-home-budget__remain {
+  color: var(--c-tint-soft-text);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-home-budget--danger .s-home-budget__remain {
+  color: var(--c-expense);
+}
+
+.s-home-budget--blank {
+  display: flex;
+  align-items: center;
+}
+
+.s-home-budget--blank .s-home-budget__title {
+  color: var(--c-text);
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  font-weight: var(--fw-semibold);
+}
+
+.s-home-budget__nums {
+  margin: var(--sp-2) 0 var(--sp-3);
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-home-budget__nums-spent .c-money {
+  color: var(--c-text);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.s-home-budget .c-progress {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--c-ring-track);
+}
+
+/* 超支：进度条整条转红色斜纹，一眼看出越线 */
+.s-home-budget--danger .c-progress__bar {
+  background: repeating-linear-gradient(-45deg, var(--c-expense) 0 6px, #FF9A92 6px 12px);
+}
+
+.s-home-budget__daily-text {
+  margin: var(--sp-2) 0 0;
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- 待入账定期账单（M8：标准轻量 warning 卡，不再大色块） ---------------- */
+
+.s-home-due {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-4) var(--page-x) 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--hairline) solid var(--c-stroke);
+  border-left: 3px solid var(--c-warn);
+  border-radius: var(--r-card);
+  background: var(--c-bg-elev);
+  box-shadow: var(--shadow-card);
+}
+
+.s-home-due__main {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.s-home-due__body {
+  min-width: 0;
+}
+
+.s-home-due__title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--c-text);
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  font-weight: var(--fw-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-home-due__sub {
+  margin: var(--sp-1) 0 0;
+  overflow: hidden;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-home-due__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-height: var(--tap);
+  padding: 0 var(--sp-2);
+  margin-right: calc(var(--sp-2) * -1);
+  border-radius: var(--r-md);
+  color: var(--c-warn);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-home-due__link:active,
+.s-home-due__link.is-pressed {
+  background: var(--c-pressed);
+}
+
+/* ---------------- 最近流水 ---------------- */
+
+.s-home-day {
+  padding: var(--sp-1) var(--page-x) 0;
+}
+
+.s-home-day + .s-home-day {
+  margin-top: var(--sp-3);
+}
+
+.s-home-day__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-1);
+}
+
+.s-home-day__date {
+  color: var(--c-text-2);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  font-weight: var(--fw-semibold);
+}
+
+.s-home-day__sum {
+  max-width: 56%;
+  overflow: hidden;
+  color: var(--c-text-4);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-home-row__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: none;
+  gap: 2px;
+  margin-left: var(--sp-2);
+}
+
+.s-home-row__time {
+  color: var(--c-text-4);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- 空态 ---------------- */
+
+.s-home-empty {
+  margin: var(--sp-4) var(--page-x) 0;
+  border-radius: var(--r-card);
+  background: var(--c-bg-elev);
+  box-shadow: var(--shadow-card);
+}
+
+/* ---------------- 分类色槽（按 categories 顺序循环 1..12） ---------------- */
+
+.s-home-cat--1 { color: var(--cat-1); background: var(--cat-1-soft); }
+.s-home-cat--2 { color: var(--cat-2); background: var(--cat-2-soft); }
+.s-home-cat--3 { color: var(--cat-3); background: var(--cat-3-soft); }
+.s-home-cat--4 { color: var(--cat-4); background: var(--cat-4-soft); }
+.s-home-cat--5 { color: var(--cat-5); background: var(--cat-5-soft); }
+.s-home-cat--6 { color: var(--cat-6); background: var(--cat-6-soft); }
+.s-home-cat--7 { color: var(--cat-7); background: var(--cat-7-soft); }
+.s-home-cat--8 { color: var(--cat-8); background: var(--cat-8-soft); }
+.s-home-cat--9 { color: var(--cat-9); background: var(--cat-9-soft); }
+.s-home-cat--10 { color: var(--cat-10); background: var(--cat-10-soft); }
+.s-home-cat--11 { color: var(--cat-11); background: var(--cat-11-soft); }
+.s-home-cat--12 { color: var(--cat-12); background: var(--cat-12-soft); }
+
+/* ---------------- 降级动效 ---------------- */

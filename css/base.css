@@ -1,0 +1,375 @@
+/* ============================================================
+   小账本 2.0 · 基础层（T04）
+   ------------------------------------------------------------
+   只负责：盒模型与重置、html/body 基础、字体栈、字号/行高映射、
+   滚动与过滚动、安全区工具类、聚焦环、选择与触摸高亮、
+   输入框 16px 防缩放、无障碍隐藏类、发丝线、减动效兜底。
+   约束：
+   1. 只引用 tokens.css 已存在的变量，不自创变量名，不写死颜色；
+   2. 组件类 c-* 归 components.css，本文件不放任何组件外观；
+   3. u-sr-only 与 u-visually-hidden 必须同时存在（D16.7）。
+   ============================================================ */
+
+/* ---------- 盒模型与重置 ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  font-size: 100%; /* 16px 基准，字号 token 全部用 rem，支持系统级缩放 */
+  background: var(--c-bg);
+  color: var(--c-text);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-cn);
+  font-weight: var(--fw-regular);
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 浮层打开时锁住页面滚动（滚动位置由 sheet.js 保存与恢复） */
+body.is-sheet-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* ---------- 标题与正文的字号 / 行高映射 ---------- */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-cn);
+}
+
+h1 {
+  font-size: var(--fs-large-title);
+  line-height: var(--lh-large-title);
+  font-weight: var(--fw-bold);
+}
+
+h2 {
+  font-size: var(--fs-title-2);
+  line-height: var(--lh-title-2);
+}
+
+h3 {
+  font-size: var(--fs-title-3);
+  line-height: var(--lh-title-3);
+}
+
+h4 {
+  font-size: var(--fs-headline);
+  line-height: var(--lh-headline);
+}
+
+h5 {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+h6 {
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  color: var(--c-text-2);
+}
+
+p {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+small {
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+strong,
+b {
+  font-weight: var(--fw-semibold);
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+dl,
+dd,
+dt,
+figure,
+blockquote {
+  margin: 0;
+}
+
+hr {
+  height: var(--hairline);
+  margin: 0;
+  border: 0;
+  background: var(--c-separator);
+}
+
+/* ---------- 表单与交互元素重置 ---------- */
+button,
+input,
+select,
+textarea {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+button {
+  min-height: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+a {
+  color: var(--c-tint-soft-text);
+  text-decoration: none;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+svg {
+  flex: none;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+textarea {
+  resize: none;
+}
+
+/* iOS 聚焦自动放大的硬门槛：任何输入控件字号不得低于 16px */
+input,
+textarea,
+select {
+  font-size: max(1rem, 1em);
+}
+
+/* 去掉 Safari 搜索框的装饰性圆角与清除按钮 */
+input[type="search"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+::placeholder {
+  color: var(--c-text-3);
+  opacity: 1;
+}
+
+/* ---------- 滚动与过滚动 ---------- */
+:where(
+  .c-sheet__body,
+  .c-list,
+  .c-segmented,
+  .c-chip-row
+) {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+body,
+html {
+  overscroll-behavior-y: none;
+}
+
+/* 隐藏滚动条但保留滚动能力（屏幕阅读器仍可滚动） */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* ---------- 选择 / 触摸高亮 ---------- */
+::selection {
+  background: var(--c-tint-soft);
+  color: var(--c-text);
+}
+
+::-moz-selection {
+  background: var(--c-tint-soft);
+  color: var(--c-text);
+}
+
+/* 输入框与备注允许系统文本选择，其余位置不弹选择菜单 */
+input::selection,
+textarea::selection {
+  background: var(--c-tint-soft);
+  color: var(--c-text);
+}
+
+/* ---------- 聚焦环（仅键盘 / 辅助技术聚焦时显示） ---------- */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--r-sm);
+}
+
+/* 辅助技术强聚焦时也要能看见 */
+[tabindex="-1"]:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: var(--focus-offset);
+}
+
+/* ---------- 安全区工具类 ---------- */
+.u-safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.u-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.u-safe-x {
+  padding-left: max(var(--page-x), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--page-x), env(safe-area-inset-right, 0px));
+}
+
+/* ---------- 无障碍隐藏：两套类名同时提供（D16.7） ---------- */
+.u-sr-only,
+.u-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* ---------- 0.5px 高清发丝线 ---------- */
+.u-hairline {
+  position: relative;
+}
+
+.u-hairline::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--hairline);
+  background: var(--c-separator);
+  pointer-events: none;
+}
+
+.u-hairline--top::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--hairline);
+  background: var(--c-separator);
+  pointer-events: none;
+}
+
+/* ---------- 文本工具类 ---------- */
+.u-ellipsis {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.u-tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ---------- 禁用态兜底 ---------- */
+[hidden] {
+  display: none !important;
+}
+
+[aria-disabled="true"] {
+  cursor: default;
+}
+
+/* ---------- 减动效兜底（唯一允许 !important 的场景） ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
