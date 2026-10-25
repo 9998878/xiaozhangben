@@ -687,7 +687,7 @@
     var protocol = global.location ? global.location.protocol : '';
     if (protocol !== 'http:' && protocol !== 'https:') return;
     try {
-      var registration = global.navigator.serviceWorker.register('sw.js');
+      var registration = global.navigator.serviceWorker.register('pwa/sw.js');
       if (registration && typeof registration.catch === 'function') {
         registration.catch(function () { /* 注册失败静默，不影响使用 */ });
       }
