@@ -22847,8 +22847,112 @@ textarea::selection {
 
 </script>
   <script>
+/* 小账本 2.0 · js/ui/haptics.js · 点按震动（2.11.1 新增）
+ * ------------------------------------------------------------------
+ * 只做一件事：把「点一下」翻译成一次极短的马达震动，并保证不会连成一片嗡。
+ *
+ * 平台现实（别再走回头路）：
+ *   · Android / 桌面 Chrome / 大部分国产浏览器：有 navigator.vibrate，真震。
+ *   · iPhone Safari：**没有** navigator.vibrate，任何网页都震不了。
+ *     所以 supported() 是 false，设置页里那个开关也就不会出现——
+ *     2.1 删掉过一次「震动开关」，理由正是「留一个永远不震的开关比没有更伤信任」，
+ *     这条结论继续成立：只在真能震的设备上出开关。
+ *
+ * 公开：XZB.ui.haptics
+ *   supported()            当前设备能不能震
+ *   fire(kind)             按类型震一下，返回是否真的震了
+ *   setEnabled(bool) / isEnabled()
+ *   applyPrefs(prefs)      启动时把偏好灌进来（默认开）
+ *
+ * 类型：tap（默认，8ms）｜key（键盘，6ms）｜select（选中分类，12ms）
+ *       success（双段轻快）｜warn（一记稍长）｜error（三段重）
+ * 约束：不读业务数据、不写存储、出错静默（震动失败绝不能影响记账）。
+ */
+(function (global) {
+  'use strict';
+
+  var XZB = global.XZB || (global.XZB = {});
+  var UI = XZB.UI || (XZB.UI = {});
+
+  var PATTERNS = {
+    tap: 8,
+    key: 6,
+    select: 12,
+    success: [10, 40, 14],
+    warn: 18,
+    error: [26, 60, 26]
+  };
+
+  /* 两次震动的最小间隔：手指连点时避免马达来不及停、糊成一片长震 */
+  var MIN_GAP = 32;
+
+  var enabled = true;
+  var lastAt = 0;
+
+  function supported() {
+    return !!(global.navigator && typeof global.navigator.vibrate === 'function');
+  }
+
+  function setEnabled(on) {
+    enabled = on !== false;
+  }
+
+  function isEnabled() {
+    return enabled;
+  }
+
+  function fire(kind) {
+    if (!enabled) { return false; }
+    if (!supported()) { return false; }
+    var key = String(kind || 'tap');
+    if (key === 'none' || key === 'off') { return false; }
+    var pattern = PATTERNS[key];
+    if (pattern === undefined) { pattern = PATTERNS.tap; }
+    var at = Date.now();
+    if (at - lastAt < MIN_GAP) { return false; }
+    lastAt = at;
+    try {
+      global.navigator.vibrate(pattern);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /* 启动时灌偏好：读不到就按「开」处理（震动是加分项，不该因为读不到偏好而消失） */
+  function applyPrefs(prefs) {
+    var source = prefs || (XZB.app && XZB.app.prefs) || null;
+    if (!source || typeof source.get !== 'function') { return; }
+    try { setEnabled(source.get('haptics', true) !== false); } catch (error) { /* 保持默认 */ }
+  }
+
+  var api = Object.freeze({
+    supported: supported,
+    fire: fire,
+    setEnabled: setEnabled,
+    isEnabled: isEnabled,
+    applyPrefs: applyPrefs,
+    patterns: function () { return { tap: 8, key: 6, select: 12, success: '10-40-14', warn: 18, error: '26-60-26' }; }
+  });
+
+  UI.haptics = api;
+  var lower = XZB.ui || (XZB.ui = {});
+  if (!lower.haptics) { lower.haptics = api; }
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+  }
+})(
+  typeof window !== 'undefined'
+    ? window
+    : (typeof globalThis !== 'undefined' ? globalThis : this)
+);
+
+</script>
+  <script>
 /* 小账本 2.0 · js/ui/press.js
- * 全局按压反馈引擎。唯一职责：在指针按下/抬起的正确时机给元素加/去 .is-pressed。
+ * 全局按压反馈引擎。职责：在指针按下/抬起的正确时机给元素加/去 .is-pressed，
+ * 并在「确认是一次点按」时交给 XZB.ui.haptics 震一下（滑动不算点按，不震）。
  *
  * 为什么需要它（踩过的两个坑）：
  *   1) iOS Safari 只在文档存在 touchstart 监听时才激活 :active。旧实现把按压
@@ -22908,6 +23012,19 @@ textarea::selection {
     return null;
   }
 
+  function hapticsApi() {
+    var group = XZB.ui || XZB.UI || null;
+    return group ? group.haptics : null;
+  }
+
+  function tick(el) {
+    var api = hapticsApi();
+    if (!api || typeof api.fire !== 'function') { return; }
+    var kind = el && el.getAttribute ? el.getAttribute('data-haptic') : '';
+    if (kind === 'none') { return; }
+    api.fire(kind || 'tap');
+  }
+
   function press(el) {
     /* 减弱动态只关闭位移，不应丢掉背景/颜色反馈；由 CSS media query 控制。 */
     el.classList.add('is-pressed');
@@ -22920,6 +23037,10 @@ textarea::selection {
     var el = session.el;
     var elapsed = now() - session.at;
     var wait = elapsed < MIN_VISIBLE ? (MIN_VISIBLE - elapsed) : 0;
+
+    /* 震动只跟「确认点按」走：onMove / scroll 会先以 cancelled=true 撤销，
+       所以滚列表时不会一路嗒嗒响。元素可用 data-haptic 指定力度，none 完全不震。 */
+    if (!cancelled) { tick(el); }
 
     var finish = function () {
       el.classList.remove('is-pressed');
@@ -26625,6 +26746,15 @@ textarea::selection {
     var host = ensureRoot();
     if (!host) { return null; }
 
+    /* 震动跟着提示走：成功两下轻快、失败一记重。
+       点按自带的 tap 已经在 32ms 内，会被节流吃掉，所以不会叠成两串。 */
+    var haptics = XZB.ui && XZB.ui.haptics;
+    if (haptics && typeof haptics.fire === 'function') {
+      if (type === 'success') { haptics.fire('success'); }
+      else if (type === 'danger') { haptics.fire('error'); }
+      else if (type === 'warning') { haptics.fire('warn'); }
+    }
+
     /* 新的顶掉旧的：旧提示不播退出动画，直接移除。 */
     removeNow();
 
@@ -28902,6 +29032,8 @@ textarea::selection {
       cell.setAttribute('data-category', category.id);
       /* 颜色跟分类走，不跟位置走：同屏顺序变了也不会串色 */
       cell.setAttribute('data-tone', String(toneOf(category)));
+      /* 选分类是这一屏最重的动作，震动比普通按钮重一档 */
+      cell.setAttribute('data-haptic', 'select');
       cell.setAttribute('aria-pressed', 'false');
       var ico = make('span', 's-add-cat__ico');
       ico.appendChild(iconNode(category.icon || CAT_ICON[category.id] || 'tag', 26));
@@ -29030,6 +29162,7 @@ textarea::selection {
         var cell = button('s-add-cat s-add-cat--sm');
         cell.setAttribute('data-category', category.id);
         cell.setAttribute('data-tone', String(toneOf(category)));
+        cell.setAttribute('data-haptic', 'select');
         cell.setAttribute('aria-label', '选择分类 ' + (category.name || ''));
         var ico = make('span', 's-add-cat__ico');
         ico.appendChild(iconNode(category.icon || CAT_ICON[category.id] || 'tag', 24));
@@ -38416,7 +38549,13 @@ textarea::selection {
     return false;
   }
 
+  /* 开关拨动的手感：统一走 ui/haptics，别在屏幕层各写一份 vibrate */
   function buzz(ctx) {
+    var api = XZB.ui && XZB.ui.haptics;
+    if (api && typeof api.fire === 'function') {
+      api.fire('select');
+      return;
+    }
     if (prefsGet(ctx, 'haptics', true) === false) { return; }
     try {
       if (global.navigator && typeof global.navigator.vibrate === 'function') {
@@ -38731,10 +38870,26 @@ textarea::selection {
   }
 
   function sectionAppearance(ctx) {
-    /* 2.1：删掉「震动」开关。iOS Safari 没有 navigator.vibrate，
-       这个开关在 iPhone 上从来没有生效过——留着一个永远不震的开关，
-       比没有更伤信任。按压反馈改由 ui/press.js 用视觉回弹表达。 */
-    return group('显示', [themeRow(ctx)]);
+    /* 2.1 删过一次「震动」开关，理由是 iOS Safari 没有 navigator.vibrate，
+       留一个永远不震的开关比没有更伤信任——这条继续成立，所以开关**按平台出现**：
+       只有 haptics.supported() 为真（Android 这类真能震的设备）才渲染。
+       2.11.1 起震动本身接到了 ui/press.js：每一次确认点按都会震，不只是这个开关。 */
+    var rows = [themeRow(ctx)];
+    var haptics = XZB.ui && XZB.ui.haptics;
+    if (haptics && typeof haptics.supported === 'function' && haptics.supported()) {
+      rows.push(switchRow(ctx, {
+        icon: 'sparkles',
+        title: '点按震动',
+        sub: '每次点击给一下轻微反馈',
+        checked: prefsGet(ctx, 'haptics', true) !== false,
+        onChange: function (next) {
+          var saved = prefsSet(ctx, 'haptics', next);
+          try { haptics.setEnabled(next); } catch (error) { /* 忽略 */ }
+          return saved;
+        }
+      }));
+    }
+    return group('显示', rows);
   }
 
   /* ---------------- 记账管理（M12：按任务找入口，不按实现方式） ---------------- */
@@ -40464,7 +40619,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.11.0';
+  XZB.version = '2.11.1';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -40697,6 +40852,14 @@ textarea::selection {
     }
     state.ui.theme = effective;
     updateThemeColor(effective, pref);
+  }
+
+  /* 点按震动：把偏好灌进 ui/haptics（默认开）。iPhone 没有 navigator.vibrate，
+     haptics 自己会返回 false，这里不需要判断平台。 */
+  function applyHaptics() {
+    var api = XZB.ui && XZB.ui.haptics;
+    if (!api || typeof api.applyPrefs !== 'function') return;
+    api.applyPrefs(prefsApi);
   }
 
   function updateThemeColor(effective, pref) {
@@ -41394,6 +41557,7 @@ textarea::selection {
     }
 
     applyTheme();
+    applyHaptics();
     watchThemeMedia();
 
     Promise.resolve().then(function () {
