@@ -143,19 +143,32 @@
   --shadow-2: 0 8px 32px #0000001F, 0 1px 2px #0000000A;
   --shadow-thumb: 0 2px 4px #00000026;
 
-  /* ---------- 分类色 12 槽（浅 · 底色更柔） ---------- */
-  --cat-1: #C2410C;  --cat-1-soft: #C2410C14;
-  --cat-2: #1D4ED8;  --cat-2-soft: #1D4ED814;
-  --cat-3: #BE185D;  --cat-3-soft: #BE185D14;
-  --cat-4: #0F766E;  --cat-4-soft: #0F766E14;
-  --cat-5: #7C3AED;  --cat-5-soft: #7C3AED14;
-  --cat-6: #B91C1C;  --cat-6-soft: #B91C1C14;
-  --cat-7: #0369A1;  --cat-7-soft: #0369A114;
-  --cat-8: #A16207;  --cat-8-soft: #A1620714;
-  --cat-9: #0E7490;  --cat-9-soft: #0E749014;
-  --cat-10: #15803D; --cat-10-soft: #15803D14;
-  --cat-11: #4338CA; --cat-11-soft: #4338CA14;
-  --cat-12: #52525B; --cat-12-soft: #52525B14;
+  /* ---------- 分类色 12 槽（浅 · 底色更柔） ----------
+   * 每槽三值：主色（描边/文字）、accent（双色图标的局部填充）、soft（底座底色）。
+   * accent 比主色更亮更跳，保证 22~28px 下也能看出"两色"，不是一团单色线。 */
+  --cat-1: #C2410C;  --cat-1-soft: #C2410C14;  --cat-1-accent: #F59E0B;
+  --cat-2: #1D4ED8;  --cat-2-soft: #1D4ED814;  --cat-2-accent: #38BDF8;
+  --cat-3: #BE185D;  --cat-3-soft: #BE185D14;  --cat-3-accent: #FB7185;
+  --cat-4: #0F766E;  --cat-4-soft: #0F766E14;  --cat-4-accent: #2DD4BF;
+  --cat-5: #7C3AED;  --cat-5-soft: #7C3AED14;  --cat-5-accent: #C084FC;
+  --cat-6: #B91C1C;  --cat-6-soft: #B91C1C14;  --cat-6-accent: #FCA5A5;
+  --cat-7: #0369A1;  --cat-7-soft: #0369A114;  --cat-7-accent: #7DD3FC;
+  --cat-8: #A16207;  --cat-8-soft: #A1620714;  --cat-8-accent: #FBBF24;
+  --cat-9: #0E7490;  --cat-9-soft: #0E749014;  --cat-9-accent: #67E8F9;
+  --cat-10: #15803D; --cat-10-soft: #15803D14; --cat-10-accent: #4ADE80;
+  --cat-11: #4338CA; --cat-11-soft: #4338CA14; --cat-11-accent: #A5B4FC;
+  --cat-12: #52525B; --cat-12-soft: #52525B14; --cat-12-accent: #A1A1AA;
+
+  /* ---------- 双色图标（sticker）----------
+   * 图标 SVG 里的 accent 形状用 fill:var(--ico-a)、fill-opacity:var(--ico-a-o)。
+   * 默认值 = 单色淡填充（没有带色槽的容器时也不至于变成实心黑块）；
+   * 带了 c-tile--cat-N / [data-tone=N] / s-settings-tone-N 的容器会覆盖这两个变量。 */
+  --ico-a: currentColor;
+  --ico-a-o: 0.20;
+  /* 底座柔和渐变 + 内高光（浅色主题：白上加白，只提亮不脏色） */
+  --tile-gloss: #FFFFFFCC;
+  --tile-inner-hi: #FFFFFFE0;
+  --tile-ring: #FFFFFF;
 
   /* ---------- 账户色（浅） ---------- */
   --acc-cash: #A16207;    --acc-cash-soft: #A1620714;
@@ -381,19 +394,23 @@
   --shadow-1: 0 1px 2px #00000080, 0 4px 12px #00000066;
   --shadow-2: 0 12px 40px #000000B3, 0 1px 2px #00000080;
   --shadow-thumb: 0 2px 4px #00000080;
+  /* 深色下底座不提白，改用极淡白叠加做内高光 */
+  --tile-gloss: #FFFFFF12;
+  --tile-inner-hi: #FFFFFF1F;
+  --tile-ring: #0B0B0C;
 
-  --cat-1: #FB923C;  --cat-1-soft: #FB923C33;
-  --cat-2: #60A5FA;  --cat-2-soft: #60A5FA33;
-  --cat-3: #F472B6;  --cat-3-soft: #F472B633;
-  --cat-4: #2DD4BF;  --cat-4-soft: #2DD4BF33;
-  --cat-5: #A78BFA;  --cat-5-soft: #A78BFA33;
-  --cat-6: #F87171;  --cat-6-soft: #F8717133;
-  --cat-7: #38BDF8;  --cat-7-soft: #38BDF833;
-  --cat-8: #FBBF24;  --cat-8-soft: #FBBF2433;
-  --cat-9: #22D3EE;  --cat-9-soft: #22D3EE33;
-  --cat-10: #4ADE80; --cat-10-soft: #4ADE8033;
-  --cat-11: #818CF8; --cat-11-soft: #818CF833;
-  --cat-12: #A1A1AA; --cat-12-soft: #A1A1AA33;
+  --cat-1: #FB923C;  --cat-1-soft: #FB923C33;  --cat-1-accent: #FDE68A;
+  --cat-2: #60A5FA;  --cat-2-soft: #60A5FA33;  --cat-2-accent: #A5F3FC;
+  --cat-3: #F472B6;  --cat-3-soft: #F472B633;  --cat-3-accent: #FBCFE8;
+  --cat-4: #2DD4BF;  --cat-4-soft: #2DD4BF33;  --cat-4-accent: #A7F3D0;
+  --cat-5: #A78BFA;  --cat-5-soft: #A78BFA33;  --cat-5-accent: #E9D5FF;
+  --cat-6: #F87171;  --cat-6-soft: #F8717133;  --cat-6-accent: #FECACA;
+  --cat-7: #38BDF8;  --cat-7-soft: #38BDF833;  --cat-7-accent: #BAE6FD;
+  --cat-8: #FBBF24;  --cat-8-soft: #FBBF2433;  --cat-8-accent: #FEF08A;
+  --cat-9: #22D3EE;  --cat-9-soft: #22D3EE33;  --cat-9-accent: #CFFAFE;
+  --cat-10: #4ADE80; --cat-10-soft: #4ADE8033; --cat-10-accent: #BBF7D0;
+  --cat-11: #818CF8; --cat-11-soft: #818CF833; --cat-11-accent: #C7D2FE;
+  --cat-12: #A1A1AA; --cat-12-soft: #A1A1AA33; --cat-12-accent: #E4E4E7;
 
   --acc-cash: #FBBF24;    --acc-cash-soft: #FBBF2433;
   --acc-bank: #60A5FA;    --acc-bank-soft: #60A5FA33;
@@ -487,19 +504,23 @@
     --shadow-1: 0 1px 2px #00000080, 0 4px 12px #00000066;
     --shadow-2: 0 12px 40px #000000B3, 0 1px 2px #00000080;
     --shadow-thumb: 0 2px 4px #00000080;
+    /* 深色下底座不提白，改用极淡白叠加做内高光 */
+    --tile-gloss: #FFFFFF12;
+    --tile-inner-hi: #FFFFFF1F;
+    --tile-ring: #0B0B0C;
 
-    --cat-1: #FB923C;  --cat-1-soft: #FB923C33;
-    --cat-2: #60A5FA;  --cat-2-soft: #60A5FA33;
-    --cat-3: #F472B6;  --cat-3-soft: #F472B633;
-    --cat-4: #2DD4BF;  --cat-4-soft: #2DD4BF33;
-    --cat-5: #A78BFA;  --cat-5-soft: #A78BFA33;
-    --cat-6: #F87171;  --cat-6-soft: #F8717133;
-    --cat-7: #38BDF8;  --cat-7-soft: #38BDF833;
-    --cat-8: #FBBF24;  --cat-8-soft: #FBBF2433;
-    --cat-9: #22D3EE;  --cat-9-soft: #22D3EE33;
-    --cat-10: #4ADE80; --cat-10-soft: #4ADE8033;
-    --cat-11: #818CF8; --cat-11-soft: #818CF833;
-    --cat-12: #A1A1AA; --cat-12-soft: #A1A1AA33;
+    --cat-1: #FB923C;  --cat-1-soft: #FB923C33;  --cat-1-accent: #FDE68A;
+    --cat-2: #60A5FA;  --cat-2-soft: #60A5FA33;  --cat-2-accent: #A5F3FC;
+    --cat-3: #F472B6;  --cat-3-soft: #F472B633;  --cat-3-accent: #FBCFE8;
+    --cat-4: #2DD4BF;  --cat-4-soft: #2DD4BF33;  --cat-4-accent: #A7F3D0;
+    --cat-5: #A78BFA;  --cat-5-soft: #A78BFA33;  --cat-5-accent: #E9D5FF;
+    --cat-6: #F87171;  --cat-6-soft: #F8717133;  --cat-6-accent: #FECACA;
+    --cat-7: #38BDF8;  --cat-7-soft: #38BDF833;  --cat-7-accent: #BAE6FD;
+    --cat-8: #FBBF24;  --cat-8-soft: #FBBF2433;  --cat-8-accent: #FEF08A;
+    --cat-9: #22D3EE;  --cat-9-soft: #22D3EE33;  --cat-9-accent: #CFFAFE;
+    --cat-10: #4ADE80; --cat-10-soft: #4ADE8033; --cat-10-accent: #BBF7D0;
+    --cat-11: #818CF8; --cat-11-soft: #818CF833; --cat-11-accent: #C7D2FE;
+    --cat-12: #A1A1AA; --cat-12-soft: #A1A1AA33; --cat-12-accent: #E4E4E7;
 
     --acc-cash: #FBBF24;    --acc-cash-soft: #FBBF2433;
     --acc-bank: #60A5FA;    --acc-bank-soft: #60A5FA33;
@@ -2758,6 +2779,22 @@ textarea::selection {
 }
 
 /* ---------- 19.3 图标底座 ---------- */
+/* 2.6 图标底座：平坦浅底 → 同色系柔和渐变 + 极淡内高光。
+   不做阴影、不做 3D，只让 44~52px 的圆角块有一点"贴纸"的厚度感。
+   .c-icon .ic-a 是双色图标的局部填充（js/ui/icons.js 的 A()）：
+   --ico-a / --ico-a-o 由下面的色槽类注入，没有色槽时回落到 currentColor @ 20%。 */
+.c-icon .ic-a {
+  fill: var(--ico-a);
+  fill-opacity: var(--ico-a-o);
+  stroke: none;
+}
+
+/* 实心小圆点（三点图标）：填充走主色，不描边 */
+.c-icon .ic-d {
+  fill: currentColor;
+  stroke: none;
+}
+
 .c-tile {
   display: inline-grid;
   place-items: center;
@@ -2765,8 +2802,12 @@ textarea::selection {
   width: 36px;
   height: 36px;
   border-radius: var(--r-lg);
-  background: var(--c-fill);
+  background-color: var(--c-fill);
+  background-image: radial-gradient(120% 110% at 28% 0%, var(--tile-gloss), transparent 72%);
+  box-shadow: inset 0 1px 0 var(--tile-inner-hi);
   color: var(--c-text-2);
+  transition: background-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
 }
 
 .c-tile--lg {
@@ -2775,23 +2816,23 @@ textarea::selection {
   border-radius: var(--r-xl);
 }
 
-.c-tile--tint { color: var(--c-tint-soft-text); background: var(--c-tint-soft); }
-.c-tile--warn { color: var(--c-warn); background: var(--c-warn-soft); }
-.c-tile--danger { color: var(--c-danger); background: var(--c-danger-soft); }
-.c-tile--success { color: var(--c-success); background: var(--c-success-soft); }
+.c-tile--tint { color: var(--c-tint-soft-text); background-color: var(--c-tint-soft); }
+.c-tile--warn { color: var(--c-warn); background-color: var(--c-warn-soft); }
+.c-tile--danger { color: var(--c-danger); background-color: var(--c-danger-soft); }
+.c-tile--success { color: var(--c-success); background-color: var(--c-success-soft); }
 
-.c-tile--cat-1 { color: var(--cat-1); background: var(--cat-1-soft); }
-.c-tile--cat-2 { color: var(--cat-2); background: var(--cat-2-soft); }
-.c-tile--cat-3 { color: var(--cat-3); background: var(--cat-3-soft); }
-.c-tile--cat-4 { color: var(--cat-4); background: var(--cat-4-soft); }
-.c-tile--cat-5 { color: var(--cat-5); background: var(--cat-5-soft); }
-.c-tile--cat-6 { color: var(--cat-6); background: var(--cat-6-soft); }
-.c-tile--cat-7 { color: var(--cat-7); background: var(--cat-7-soft); }
-.c-tile--cat-8 { color: var(--cat-8); background: var(--cat-8-soft); }
-.c-tile--cat-9 { color: var(--cat-9); background: var(--cat-9-soft); }
-.c-tile--cat-10 { color: var(--cat-10); background: var(--cat-10-soft); }
-.c-tile--cat-11 { color: var(--cat-11); background: var(--cat-11-soft); }
-.c-tile--cat-12 { color: var(--cat-12); background: var(--cat-12-soft); }
+.c-tile--cat-1 { color: var(--cat-1); background-color: var(--cat-1-soft); --ico-a: var(--cat-1-accent); --ico-a-o: 1; }
+.c-tile--cat-2 { color: var(--cat-2); background-color: var(--cat-2-soft); --ico-a: var(--cat-2-accent); --ico-a-o: 1; }
+.c-tile--cat-3 { color: var(--cat-3); background-color: var(--cat-3-soft); --ico-a: var(--cat-3-accent); --ico-a-o: 1; }
+.c-tile--cat-4 { color: var(--cat-4); background-color: var(--cat-4-soft); --ico-a: var(--cat-4-accent); --ico-a-o: 1; }
+.c-tile--cat-5 { color: var(--cat-5); background-color: var(--cat-5-soft); --ico-a: var(--cat-5-accent); --ico-a-o: 1; }
+.c-tile--cat-6 { color: var(--cat-6); background-color: var(--cat-6-soft); --ico-a: var(--cat-6-accent); --ico-a-o: 1; }
+.c-tile--cat-7 { color: var(--cat-7); background-color: var(--cat-7-soft); --ico-a: var(--cat-7-accent); --ico-a-o: 1; }
+.c-tile--cat-8 { color: var(--cat-8); background-color: var(--cat-8-soft); --ico-a: var(--cat-8-accent); --ico-a-o: 1; }
+.c-tile--cat-9 { color: var(--cat-9); background-color: var(--cat-9-soft); --ico-a: var(--cat-9-accent); --ico-a-o: 1; }
+.c-tile--cat-10 { color: var(--cat-10); background-color: var(--cat-10-soft); --ico-a: var(--cat-10-accent); --ico-a-o: 1; }
+.c-tile--cat-11 { color: var(--cat-11); background-color: var(--cat-11-soft); --ico-a: var(--cat-11-accent); --ico-a-o: 1; }
+.c-tile--cat-12 { color: var(--cat-12); background-color: var(--cat-12-soft); --ico-a: var(--cat-12-accent); --ico-a-o: 1; }
 
 .c-tile--acc-cash { color: var(--acc-cash); background: var(--acc-cash-soft); }
 .c-tile--acc-bank { color: var(--acc-bank); background: var(--acc-bank-soft); }
@@ -2799,6 +2840,179 @@ textarea::selection {
 .c-tile--acc-alipay { color: var(--acc-alipay); background: var(--acc-alipay-soft); }
 .c-tile--acc-credit { color: var(--acc-credit); background: var(--acc-credit-soft); }
 .c-tile--acc-savings { color: var(--acc-savings); background: var(--acc-savings-soft); }
+
+/* ---------- 19.3b 分类图标选择器（2.6 · js/ui/icon-picker.js） ----------
+ * 96 枚图标不能一整片铺开，所以做成「搜索 + 分组标签 + 6 列网格」。
+ * 网格只渲染当前分组，手机上滚一屏就够。 */
+.s-icon-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.s-icon-picker__search {
+  position: relative;
+}
+
+.s-icon-picker__input {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 var(--sp-4) 0 34px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--c-fill-2);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body-2);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.s-icon-picker__search::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin-top: -7px;
+  border: 1.6px solid var(--c-text-3);
+  border-radius: var(--r-full);
+  pointer-events: none;
+}
+
+.s-icon-picker__search::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  top: 50%;
+  width: 6px;
+  height: 1.6px;
+  margin-top: 3px;
+  background: var(--c-text-3);
+  transform: rotate(45deg);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.s-icon-picker__input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--c-tint);
+}
+
+.s-icon-picker__tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.s-icon-picker__tabs::-webkit-scrollbar { display: none; }
+
+.s-icon-picker__tab {
+  flex: none;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--c-fill-2);
+  color: var(--c-text-2);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption-1);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+
+.s-icon-picker__tab.is-active {
+  background: var(--c-on-tint);
+  color: #FFFFFF;
+  font-weight: var(--fw-semibold);
+}
+
+.s-icon-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(var(--s-icon-cols, 6), minmax(0, 1fr));
+  gap: var(--sp-2) 6px;
+  max-height: 236px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 0 4px;
+}
+
+.s-icon-picker__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.s-icon-picker__tile {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-width: 44px;
+  aspect-ratio: 1 / 1;
+  border-radius: 13px;
+  background-color: var(--c-fill);
+  background-image: radial-gradient(120% 110% at 28% 0%, var(--tile-gloss), transparent 72%);
+  box-shadow: inset 0 1px 0 var(--tile-inner-hi),
+    0 0 0 1.5px transparent;
+  color: var(--c-text-2);
+  transition: transform var(--dur-press-out) var(--ease-spring),
+    box-shadow var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out);
+}
+
+.s-icon-picker__cap {
+  max-width: 100%;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--c-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-icon-picker__item.is-active .s-icon-picker__tile {
+  background-color: var(--c-tint-soft);
+  box-shadow: inset 0 1px 0 var(--tile-inner-hi),
+    0 0 0 2px var(--c-tint);
+}
+
+.s-icon-picker__item.is-active .s-icon-picker__cap {
+  color: var(--c-text);
+  font-weight: var(--fw-semibold);
+}
+
+.s-icon-picker__item:active .s-icon-picker__tile {
+  transform: scale(0.94);
+  transition-duration: var(--dur-press-in);
+  transition-timing-function: var(--ease-press);
+}
+
+.s-icon-picker__hint,
+.s-icon-picker__empty {
+  margin: 0;
+  font-size: var(--fs-caption);
+  color: var(--c-text-3);
+}
+
+.s-icon-picker__empty {
+  grid-column: 1 / -1;
+  padding: var(--sp-3) 0;
+  text-align: center;
+}
 
 /* ---------- 19.4 英雄卡已废弃（鲨鱼风改版 H1）：首页改白底大卡，见 screens/home.css ---------- */
 
@@ -2974,6 +3188,16 @@ textarea::selection {
   }
 
   .c-pressable.is-pressed {
+    transform: none;
+  }
+
+  /* 2.6：减动效下关掉图标贴纸的回弹/位移动画，只保留颜色变化 */
+  .s-icon-picker__tile,
+  .c-tile {
+    transition: background-color 0ms, color 0ms, box-shadow 0ms;
+  }
+
+  .s-icon-picker__item:active .s-icon-picker__tile {
     transform: none;
   }
 }
@@ -3687,7 +3911,7 @@ textarea::selection {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 86px;
+  min-height: 92px;
   padding: var(--sp-1) 2px;
   border: 0;
   border-radius: var(--r-lg);
@@ -3700,9 +3924,10 @@ textarea::selection {
 .s-add-cat.is-pressed {
   background: var(--c-pressed);
 }
+/* 点按回弹：0.88 收得太狠，像被"摁扁"；0.94 只是轻轻一沉 */
 .s-add-cat:active .s-add-cat__ico,
 .s-add-cat.is-pressed .s-add-cat__ico {
-  transform: scale(0.88);
+  transform: scale(0.94);
   transition-duration: var(--dur-press-in);
   transition-timing-function: var(--ease-press);
 }
@@ -3711,18 +3936,24 @@ textarea::selection {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 50px;
-  height: 50px;
-  border-radius: var(--r-full);
-  background: var(--c-fill);
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  /* 同色系柔和渐变 + 极淡内高光：不做阴影、不做 3D */
+  background-color: var(--c-fill);
+  background-image: radial-gradient(120% 110% at 30% 0%, var(--tile-gloss), transparent 72%);
+  box-shadow: inset 0 1px 0 var(--tile-inner-hi),
+    0 0 0 2px transparent;
   color: var(--c-text-2);
   transition: transform var(--dur-press-out) var(--ease-spring),
-    background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+    background-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
 }
-/* 50px 圆底配 24px 线性图标（图标本体仍由 JS 按 24 生成） */
+/* 52px 底座配 26px 双色图标：小尺寸下也要有视觉重量 */
 .s-add-cat__ico svg {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
 }
 .s-add-cat__name {
   max-width: 100%;
@@ -3733,12 +3964,56 @@ textarea::selection {
   white-space: nowrap;
 }
 
-.s-add-cat.is-active .s-add-cat__ico {
+/* 选中徽章：右上角小黄勾，默认缩到 0 不可见 */
+.s-add-cat__badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-full);
+  background: var(--c-tint);
   color: var(--c-on-tint);
+  box-shadow: 0 0 0 2px var(--c-bg-elev);
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity var(--dur-1) var(--ease-out),
+    transform var(--dur-press-out) var(--ease-spring);
+  pointer-events: none;
+}
+.s-add-cat__badge svg {
+  width: 11px;
+  height: 11px;
+}
+.s-add-cat--sm .s-add-cat__badge {
+  width: 16px;
+  height: 16px;
+  top: -2px;
+  right: -2px;
+}
+
+.s-add-cat.is-active .s-add-cat__badge {
+  opacity: 1;
+  transform: scale(1);
+}
+/* 选中不再把图标刷成黄底黑图：保留分类自己的双色，只在外圈加品牌黄描边 + 短促回弹 */
+.s-add-cat.is-active .s-add-cat__ico {
+  box-shadow: inset 0 1px 0 var(--tile-inner-hi),
+    0 0 0 2px var(--c-tint);
+  animation: s-add-cat-pop 200ms var(--ease-spring) both;
 }
 .s-add-cat.is-active .s-add-cat__name {
-  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+  font-weight: var(--fw-bold);
 }
+@keyframes s-add-cat-pop {
+  0% { transform: scale(0.96); }
+  62% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
 /* 「全部」格：中性虚线，打开全部分类面板 */
 .s-add-cat--all .s-add-cat__ico {
   border: 1.5px dashed var(--c-separator-strong);
@@ -3756,45 +4031,43 @@ textarea::selection {
 
 /* 面板内的小号格（「全部」面板） */
 .s-add-cat--sm {
-  min-height: 74px;
+  min-height: 80px;
   gap: 4px;
 }
 .s-add-cat--sm .s-add-cat__ico {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
 }
 .s-add-cat--sm .s-add-cat__ico svg {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
 }
 .s-add-cat--sm .s-add-cat__name {
   font-size: var(--fs-caption);
 }
 
-/* 12 个色槽：每类分类一个（--cat-N / --cat-N-soft），不写死色值 */
-.s-add-cat[data-tone="1"] .s-add-cat__ico { background: var(--cat-1-soft); color: var(--cat-1); }
-.s-add-cat[data-tone="2"] .s-add-cat__ico { background: var(--cat-2-soft); color: var(--cat-2); }
-.s-add-cat[data-tone="3"] .s-add-cat__ico { background: var(--cat-3-soft); color: var(--cat-3); }
-.s-add-cat[data-tone="4"] .s-add-cat__ico { background: var(--cat-4-soft); color: var(--cat-4); }
-.s-add-cat[data-tone="5"] .s-add-cat__ico { background: var(--cat-5-soft); color: var(--cat-5); }
-.s-add-cat[data-tone="6"] .s-add-cat__ico { background: var(--cat-6-soft); color: var(--cat-6); }
-.s-add-cat[data-tone="7"] .s-add-cat__ico { background: var(--cat-7-soft); color: var(--cat-7); }
-.s-add-cat[data-tone="8"] .s-add-cat__ico { background: var(--cat-8-soft); color: var(--cat-8); }
-.s-add-cat[data-tone="9"] .s-add-cat__ico { background: var(--cat-9-soft); color: var(--cat-9); }
-.s-add-cat[data-tone="10"] .s-add-cat__ico { background: var(--cat-10-soft); color: var(--cat-10); }
-.s-add-cat[data-tone="11"] .s-add-cat__ico { background: var(--cat-11-soft); color: var(--cat-11); }
-.s-add-cat[data-tone="12"] .s-add-cat__ico { background: var(--cat-12-soft); color: var(--cat-12); }
-/* 鲨鱼式选中：黄底圆块 + 黑图标 + 黑字加粗（不再按分类色上底） */
-.s-add-cat[data-tone].is-active .s-add-cat__ico {
-  background: var(--c-tint);
-  color: var(--c-on-tint);
-}
-.s-add-cat.is-active .s-add-cat__name {
-  color: var(--c-text);
-  font-weight: var(--fw-bold);
-}
+/* 12 个色槽：每类分类一个（--cat-N / --cat-N-soft / --cat-N-accent），不写死色值。
+   --ico-a 供双色图标的局部填充使用，这里跟色槽一起注入，图标才有"两色"。 */
+.s-add-cat[data-tone="1"] .s-add-cat__ico { background-color: var(--cat-1-soft); color: var(--cat-1); --ico-a: var(--cat-1-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="2"] .s-add-cat__ico { background-color: var(--cat-2-soft); color: var(--cat-2); --ico-a: var(--cat-2-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="3"] .s-add-cat__ico { background-color: var(--cat-3-soft); color: var(--cat-3); --ico-a: var(--cat-3-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="4"] .s-add-cat__ico { background-color: var(--cat-4-soft); color: var(--cat-4); --ico-a: var(--cat-4-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="5"] .s-add-cat__ico { background-color: var(--cat-5-soft); color: var(--cat-5); --ico-a: var(--cat-5-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="6"] .s-add-cat__ico { background-color: var(--cat-6-soft); color: var(--cat-6); --ico-a: var(--cat-6-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="7"] .s-add-cat__ico { background-color: var(--cat-7-soft); color: var(--cat-7); --ico-a: var(--cat-7-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="8"] .s-add-cat__ico { background-color: var(--cat-8-soft); color: var(--cat-8); --ico-a: var(--cat-8-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="9"] .s-add-cat__ico { background-color: var(--cat-9-soft); color: var(--cat-9); --ico-a: var(--cat-9-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="10"] .s-add-cat__ico { background-color: var(--cat-10-soft); color: var(--cat-10); --ico-a: var(--cat-10-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="11"] .s-add-cat__ico { background-color: var(--cat-11-soft); color: var(--cat-11); --ico-a: var(--cat-11-accent); --ico-a-o: 1; }
+.s-add-cat[data-tone="12"] .s-add-cat__ico { background-color: var(--cat-12-soft); color: var(--cat-12); --ico-a: var(--cat-12-accent); --ico-a-o: 1; }
 
-/* 旧 .is-active 图标着色规则已并入上方黄底规则 */
+/* 「全部」「管理」两格是中性功能格，不参与分类配色 */
+.s-add-cat--all .s-add-cat__ico,
+.s-add-cat--quick .s-add-cat__ico {
+  --ico-a: currentColor;
+  --ico-a-o: 0.18;
+}
 
 /* ---------- 备注 sheet / 账户 sheet ---------- */
 .s-add-notesheet {
@@ -4307,6 +4580,56 @@ textarea::selection {
 .s-quick__icon.is-active:active,
 .s-quick__icon.is-active.is-pressed {
   background: var(--c-tint-soft-strong);
+}
+
+/* ---------- 2.6：新建分类的图标选择器容器 + 颜色色板 ---------- */
+.s-quick__picker {
+  margin: 2px 0 var(--sp-3);
+}
+
+.s-quick__swatches {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin: 2px 0 var(--sp-3);
+  justify-items: center;
+}
+
+.s-quick__swatch {
+  position: relative;
+  width: 100%;
+  max-width: 40px;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--c-fill);
+  cursor: pointer;
+  touch-action: manipulation;
+  box-shadow: inset 0 0 0 1.5px var(--c-separator);
+  transition: transform var(--dur-press-out) var(--ease-spring),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+
+.s-quick__swatch--1 { background: var(--cat-1); }
+.s-quick__swatch--2 { background: var(--cat-2); }
+.s-quick__swatch--3 { background: var(--cat-3); }
+.s-quick__swatch--4 { background: var(--cat-4); }
+.s-quick__swatch--5 { background: var(--cat-5); }
+.s-quick__swatch--6 { background: var(--cat-6); }
+.s-quick__swatch--7 { background: var(--cat-7); }
+.s-quick__swatch--8 { background: var(--cat-8); }
+.s-quick__swatch--9 { background: var(--cat-9); }
+.s-quick__swatch--10 { background: var(--cat-10); }
+.s-quick__swatch--11 { background: var(--cat-11); }
+.s-quick__swatch--12 { background: var(--cat-12); }
+
+.s-quick__swatch.is-active {
+  box-shadow: 0 0 0 2px var(--c-bg-elev), 0 0 0 4px var(--c-tint);
+}
+
+.s-quick__swatch:active {
+  transform: scale(0.94);
 }
 
 </style>
@@ -5755,18 +6078,18 @@ textarea::selection {
 }
 
 /* 分类色槽：图标用 -soft，进度条用实色（都来自 tokens.css） */
-.s-stats-rank__icon.s-stats-rank--1 { background: var(--cat-1-soft); color: var(--cat-1); }
-.s-stats-rank__icon.s-stats-rank--2 { background: var(--cat-2-soft); color: var(--cat-2); }
-.s-stats-rank__icon.s-stats-rank--3 { background: var(--cat-3-soft); color: var(--cat-3); }
-.s-stats-rank__icon.s-stats-rank--4 { background: var(--cat-4-soft); color: var(--cat-4); }
-.s-stats-rank__icon.s-stats-rank--5 { background: var(--cat-5-soft); color: var(--cat-5); }
-.s-stats-rank__icon.s-stats-rank--6 { background: var(--cat-6-soft); color: var(--cat-6); }
-.s-stats-rank__icon.s-stats-rank--7 { background: var(--cat-7-soft); color: var(--cat-7); }
-.s-stats-rank__icon.s-stats-rank--8 { background: var(--cat-8-soft); color: var(--cat-8); }
-.s-stats-rank__icon.s-stats-rank--9 { background: var(--cat-9-soft); color: var(--cat-9); }
-.s-stats-rank__icon.s-stats-rank--10 { background: var(--cat-10-soft); color: var(--cat-10); }
-.s-stats-rank__icon.s-stats-rank--11 { background: var(--cat-11-soft); color: var(--cat-11); }
-.s-stats-rank__icon.s-stats-rank--12 { background: var(--cat-12-soft); color: var(--cat-12); }
+.s-stats-rank__icon.s-stats-rank--1 { background-color: var(--cat-1-soft); color: var(--cat-1); --ico-a: var(--cat-1-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--2 { background-color: var(--cat-2-soft); color: var(--cat-2); --ico-a: var(--cat-2-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--3 { background-color: var(--cat-3-soft); color: var(--cat-3); --ico-a: var(--cat-3-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--4 { background-color: var(--cat-4-soft); color: var(--cat-4); --ico-a: var(--cat-4-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--5 { background-color: var(--cat-5-soft); color: var(--cat-5); --ico-a: var(--cat-5-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--6 { background-color: var(--cat-6-soft); color: var(--cat-6); --ico-a: var(--cat-6-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--7 { background-color: var(--cat-7-soft); color: var(--cat-7); --ico-a: var(--cat-7-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--8 { background-color: var(--cat-8-soft); color: var(--cat-8); --ico-a: var(--cat-8-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--9 { background-color: var(--cat-9-soft); color: var(--cat-9); --ico-a: var(--cat-9-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--10 { background-color: var(--cat-10-soft); color: var(--cat-10); --ico-a: var(--cat-10-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--11 { background-color: var(--cat-11-soft); color: var(--cat-11); --ico-a: var(--cat-11-accent); --ico-a-o: 1; }
+.s-stats-rank__icon.s-stats-rank--12 { background-color: var(--cat-12-soft); color: var(--cat-12); --ico-a: var(--cat-12-accent); --ico-a-o: 1; }
 
 .s-stats-rank__fill.s-stats-rank--1 { background: var(--cat-1); }
 .s-stats-rank__fill.s-stats-rank--2 { background: var(--cat-2); }
@@ -8348,21 +8671,22 @@ textarea::selection {
   border-radius: var(--r-md);
 }
 
-.s-settings-tone-1 { background: var(--cat-1-soft); color: var(--cat-1); }
-.s-settings-tone-2 { background: var(--cat-2-soft); color: var(--cat-2); }
-.s-settings-tone-3 { background: var(--cat-3-soft); color: var(--cat-3); }
-.s-settings-tone-4 { background: var(--cat-4-soft); color: var(--cat-4); }
-.s-settings-tone-5 { background: var(--cat-5-soft); color: var(--cat-5); }
-.s-settings-tone-6 { background: var(--cat-6-soft); color: var(--cat-6); }
-.s-settings-tone-7 { background: var(--cat-7-soft); color: var(--cat-7); }
-.s-settings-tone-8 { background: var(--cat-8-soft); color: var(--cat-8); }
-.s-settings-tone-9 { background: var(--cat-9-soft); color: var(--cat-9); }
-.s-settings-tone-10 { background: var(--cat-10-soft); color: var(--cat-10); }
-.s-settings-tone-11 { background: var(--cat-11-soft); color: var(--cat-11); }
-.s-settings-tone-12 { background: var(--cat-12-soft); color: var(--cat-12); }
+/* 列表行的小图标底座：跟记账宫格同一套色槽 + 双色填充 */
+.s-settings-tone-1 { background-color: var(--cat-1-soft); color: var(--cat-1); --ico-a: var(--cat-1-accent); --ico-a-o: 1; }
+.s-settings-tone-2 { background-color: var(--cat-2-soft); color: var(--cat-2); --ico-a: var(--cat-2-accent); --ico-a-o: 1; }
+.s-settings-tone-3 { background-color: var(--cat-3-soft); color: var(--cat-3); --ico-a: var(--cat-3-accent); --ico-a-o: 1; }
+.s-settings-tone-4 { background-color: var(--cat-4-soft); color: var(--cat-4); --ico-a: var(--cat-4-accent); --ico-a-o: 1; }
+.s-settings-tone-5 { background-color: var(--cat-5-soft); color: var(--cat-5); --ico-a: var(--cat-5-accent); --ico-a-o: 1; }
+.s-settings-tone-6 { background-color: var(--cat-6-soft); color: var(--cat-6); --ico-a: var(--cat-6-accent); --ico-a-o: 1; }
+.s-settings-tone-7 { background-color: var(--cat-7-soft); color: var(--cat-7); --ico-a: var(--cat-7-accent); --ico-a-o: 1; }
+.s-settings-tone-8 { background-color: var(--cat-8-soft); color: var(--cat-8); --ico-a: var(--cat-8-accent); --ico-a-o: 1; }
+.s-settings-tone-9 { background-color: var(--cat-9-soft); color: var(--cat-9); --ico-a: var(--cat-9-accent); --ico-a-o: 1; }
+.s-settings-tone-10 { background-color: var(--cat-10-soft); color: var(--cat-10); --ico-a: var(--cat-10-accent); --ico-a-o: 1; }
+.s-settings-tone-11 { background-color: var(--cat-11-soft); color: var(--cat-11); --ico-a: var(--cat-11-accent); --ico-a-o: 1; }
+.s-settings-tone-12 { background-color: var(--cat-12-soft); color: var(--cat-12); --ico-a: var(--cat-12-accent); --ico-a-o: 1; }
 
 .s-settings-tone-none {
-  background: var(--c-fill);
+  background-color: var(--c-fill);
   color: var(--c-text-2);
 }
 
@@ -8374,31 +8698,57 @@ textarea::selection {
 
 .s-settings-icon-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: var(--sp-2);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--sp-2) 6px;
 }
 
+/* 系统分类的图标候选：中性底 + 品牌黄做局部填充，和记账宫格里的贴纸感一致 */
 .s-settings-icon-btn {
   display: grid;
   place-items: center;
   width: 100%;
-  height: var(--h-compact);
+  aspect-ratio: 1 / 1;
   padding: 0;
   border: 0;
-  border-radius: var(--r-md);
-  background: var(--c-fill);
+  border-radius: 13px;
+  background-color: var(--c-fill);
+  background-image: radial-gradient(120% 110% at 30% 0%, var(--tile-gloss), transparent 72%);
+  box-shadow: inset 0 1px 0 var(--tile-inner-hi),
+    0 0 0 1.5px transparent;
   color: var(--c-text-2);
+  --ico-a: var(--c-tint);
+  --ico-a-o: 0.9;
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+  transition: background-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out),
+    transform var(--dur-press-out) var(--ease-spring),
+    color var(--dur-1) var(--ease-out);
 }
 
 .s-settings-icon-btn:active {
-  background: var(--c-fill-press);
+  background-color: var(--c-fill-press);
+  transform: scale(0.94);
 }
 
 .s-settings-icon-btn.is-active {
-  background: var(--c-tint-soft);
-  color: var(--c-tint-soft-text);
+  background-color: var(--c-tint-soft);
+  box-shadow: inset 0 1px 0 var(--tile-inner-hi),
+    0 0 0 2px var(--c-tint);
+  color: var(--c-text);
+  --ico-a: var(--c-tint);
+  --ico-a-o: 1;
+}
+
+/* 说明文字：图标候选换了、来源不同的时候说清楚，别让用户以为是缺陷 */
+.s-settings-sheet__hint {
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: 1.45;
+  color: var(--c-text-3);
+}
+
+.s-settings-picker {
+  margin-top: 2px;
 }
 
 .s-settings-swatches {
@@ -10817,7 +11167,7 @@ textarea::selection {
       createCategory({ id: 'ca_food', kind: 'expense', name: '餐饮', icon: 'food', color: '#FF9500', sort: 10, hidden: false, system: true, aliases: ['吃饭', '午饭', '晚饭', '早饭', '外卖', '咖啡', '零食'] }, at),
       createCategory({ id: 'ca_transport', kind: 'expense', name: '交通', icon: 'bus', color: '#007AFF', sort: 20, hidden: false, system: true, aliases: ['打车', '地铁', '公交', '加油', '停车', '高铁'] }, at),
       createCategory({ id: 'ca_shopping', kind: 'expense', name: '购物', icon: 'bag', color: '#FF2D55', sort: 30, hidden: false, system: true, aliases: ['买', '购物', '衣服', '日用品', '网购'] }, at),
-      createCategory({ id: 'ca_home', kind: 'expense', name: '居住', icon: 'home', color: '#8E8E93', sort: 40, hidden: false, system: true, aliases: ['房租', '水电', '物业', '燃气', '宽带'] }, at),
+      createCategory({ id: 'ca_home', kind: 'expense', name: '居住', icon: 'house', color: '#8E8E93', sort: 40, hidden: false, system: true, aliases: ['房租', '水电', '物业', '燃气', '宽带'] }, at),
       createCategory({ id: 'ca_fun', kind: 'expense', name: '娱乐', icon: 'game', color: '#AF52DE', sort: 50, hidden: false, system: true, aliases: ['电影', '游戏', '演出', '会员', '旅游'] }, at),
       createCategory({ id: 'ca_health', kind: 'expense', name: '医疗', icon: 'health', color: '#FF3B30', sort: 60, hidden: false, system: true, aliases: ['看病', '买药', '体检', '牙医'] }, at),
       createCategory({ id: 'ca_study', kind: 'expense', name: '学习', icon: 'book', color: '#5856D6', sort: 70, hidden: false, system: true, aliases: ['书', '课程', '培训', '学费'] }, at),
@@ -10854,7 +11204,7 @@ textarea::selection {
       createCategory({ id: 'ca_invest', kind: 'income', name: '理财', icon: 'invest', color: '#007AFF', sort: 30, hidden: false, system: true, aliases: ['利息', '基金', '股票', '分红'] }, at),
       createCategory({ id: 'ca_parttime', kind: 'income', name: '兼职', icon: 'parttime', color: '#5856D6', sort: 40, hidden: false, system: true, aliases: ['兼职', '外快', '稿费'] }, at),
       createCategory({ id: 'ca_redpacket', kind: 'income', name: '红包', icon: 'redpacket', color: '#FF2D55', sort: 50, hidden: false, system: true, aliases: ['红包', '收红包', '压岁钱'] }, at),
-      createCategory({ id: 'ca_other_income', kind: 'income', name: '其他', icon: 'ellipsis', color: '#8E8E93', sort: 60, hidden: false, system: true, aliases: ['其他', '退款', '报销'] }, at)
+      createCategory({ id: 'ca_other_income', kind: 'income', name: '其他', icon: 'coins', color: '#8E8E93', sort: 60, hidden: false, system: true, aliases: ['其他', '退款', '报销'] }, at)
     ];
 
     return { books: books, accounts: accounts, categories: categories };
@@ -10925,7 +11275,28 @@ textarea::selection {
     mergeSeedById(db.books, seeds.books);
     mergeSeedById(db.accounts, seeds.accounts);
     mergeSeedById(db.categories, seeds.categories);
+    upgradeSeedCategoryIcons(db.categories);
     return db;
+  }
+
+  /* 2.6 图标换新：只动「还是出厂默认值」的两个系统分类，用户自己挑过的图标一律不碰。
+   *   ca_home        home    → house   （home 是导航图标，改双色会污染底部标签栏）
+   *   ca_other_income ellipsis → coins  （支出/收入两个「其他」不再共用三点）
+   * 这两个字段值本身就是默认值，命中即说明用户没改过，属于可安全升级范围。 */
+  var SEED_ICON_UPGRADES = {
+    ca_home: { from: 'home', to: 'house' },
+    ca_other_income: { from: 'ellipsis', to: 'coins' }
+  };
+
+  function upgradeSeedCategoryIcons(list) {
+    if (!Array.isArray(list)) { return list; }
+    for (var i = 0; i < list.length; i++) {
+      var category = list[i];
+      if (!category || category.system !== true) { continue; }
+      var rule = SEED_ICON_UPGRADES[category.id];
+      if (rule && category.icon === rule.from) { category.icon = rule.to; }
+    }
+    return list;
   }
 
   function dbFailure(path) {
@@ -20617,17 +20988,32 @@ textarea::selection {
 
   var DEFAULT_SIZE = 24;
   var DEFAULT_STROKE = 1.8;
-  /* 分类图标单独一档线宽：1.5px 在 20px 尺寸下更接近系统图标的重量，
-     UI 图标（导航、动作）仍用 1.8，保证小尺寸下不糊。 */
-  var CATEGORY_STROKE = 1.5;
+  /* 分类图标线宽 1.5 → 1.75：细线在小尺寸下发虚，加了局部填色之后更要压住轮廓。
+     UI 图标（导航、动作）仍是 1.8，两者视觉重量接近但不抢戏。 */
+  var CATEGORY_STROKE = 1.75;
+  /* 分类图标 key：双色轻填充那一套（系统分类 + 自定义库），描边用 CATEGORY_STROKE */
   var CATEGORY_KEYS = {
     food: 1, bag: 1, daily: 1, bus: 1, carrot: 1, fruit: 1, snack: 1, sport: 1,
     fun: 1, phone: 1, shirt: 1, beauty: 1, house: 1, sofa: 1, baby: 1, elder: 1,
     chat: 1, plane: 1, glass: 1, plug: 1, kit: 1, book: 1, cap: 1, pet: 1,
     envelope: 1, gift: 1, briefcase: 1, hammer: 1, heart: 1, ticket: 1,
     family: 1, box: 1, gamepad: 1, wrench: 1, washer: 1,
-    car: 1, health: 1, salary: 1, bonus: 1, invest: 1, parttime: 1, redpacket: 1
+    car: 1, health: 1, salary: 1, bonus: 1, invest: 1, parttime: 1, redpacket: 1,
+    coins: 1, ellipsis: 1, dots: 1, target: 1, tag: 1, award: 1,
+    /* Morphicons 图标包：老版本留下的线性分类图标，命名不变、保持可用 */
+    store: 1, coffee: 1, pizza: 1, truck: 1, package: 1, droplet: 1, building: 1,
+    headphones: 1, film: 1, graduation: 1, crown: 1, diamond: 1, scissors: 1
   };
+
+  /* 分类图标的两支画笔：
+   *   A(d) —— 局部填充（accent，见 CSS 的 .c-icon .ic-a），面积占 20%~40%；
+   *   S(d) —— 描边（currentColor，分类主色）。
+   * 填充色用 CSS 变量 --ico-a / --ico-a-o，由容器（c-tile--cat-N、[data-tone=N]）
+   * 按色槽注入；没有色槽时回落到 currentColor @ 20%，不会变成实心黑块。 */
+  function A(d) { return '<path class="ic-a" d="' + d + '"/>'; }
+  function S(d) { return '<path d="' + d + '"/>'; }
+  /* 实心圆点：三点图标用它，比零长描边稳（getBBox 也有尺寸） */
+  function D(cx, cy, r) { return '<circle class="ic-d" cx="' + cx + '" cy="' + cy + '" r="' + (r || 1.3) + '"/>'; }
 
   /* 全部路径都是本文件常量，不接受外部字符串。 */
   var PATHS = {
@@ -20678,59 +21064,234 @@ textarea::selection {
     'piggy': '<path d="M4.5 11.5A6.5 6.5 0 0 1 11 5h2.5a5.5 5.5 0 0 1 5.5 5.5V12h1.5v3H18l-1 3h-3l-.5-1.5h-3L10 19H7l-.5-2.2a6.5 6.5 0 0 1-2-5.3Z"/><path d="M8.2 9.3h.01M5.5 10H3"/><path d="M16 5.5 17.5 3"/>',
     'savings': '<path d="M4.5 11.5A6.5 6.5 0 0 1 11 5h2.5a5.5 5.5 0 0 1 5.5 5.5V12h1.5v3H18l-1 3h-3l-.5-1.5h-3L10 19H7l-.5-2.2a6.5 6.5 0 0 1-2-5.3Z"/><path d="M8.2 9.3h.01M5.5 10H3"/>',
 
-    /* ----- 分类（2.2 重绘：参照鲨鱼记账的细线圆头风格，24×24、1.5px、单色） -----
-     * 这一组是「同一套笔」画出来的：统一的 1.5 描边、圆头圆角、留 2px 内边距。
-     * 原有键名（food/bag/car/house/fun/health/book/phone/gift/ellipsis）保持不变，
-     * 只重画字形——老数据里存的 icon 名不用迁移就能换上新图标。
+    /* ----- 分类图标（2.6 重绘：双色轻填充 sticker 风格）-----
+     * 笔：24×24、1.75 描边、圆头圆角、留 2px 内边距 —— 与导航图标同源；
+     * 色：描边走 currentColor（分类主色），局部填充走 var(--ico-a)（分类 accent），
+     *     见 A() —— 填充面积控制在 20%~40%，保留镂空，22px 下也读得清形状。
+     * 键名与 2.2 完全一致，老数据存着的 icon 名不用迁移就能换上新字形。
      */
-    'food': '<path d="M7.6 3.4v6.2a2.3 2.3 0 0 0 4.6 0V3.4"/><path d="M9.9 11.9v8.7"/><path d="M17.6 3.4c1.7 2.1 2.2 4.3 1.4 6.4-.4 1.1-1.1 1.9-2.2 2.3v8.5"/>',
-    'bag': '<path d="M5.7 8h12.6l.9 10.9a1.7 1.7 0 0 1-1.7 1.8H6.5a1.7 1.7 0 0 1-1.7-1.8L5.7 8Z"/><path d="M9.3 8V6.5a2.7 2.7 0 0 1 5.4 0V8"/>',
-    'daily': '<rect x="5.8" y="5.2" width="7.6" height="13.6" rx="3.8"/><path d="M13.4 8.6c2.6.2 4.6 1.7 5 3.6.4 1.7-.7 3.2-2.7 3.9"/>',
-    'bus': '<rect x="4.2" y="3.8" width="15.6" height="14.4" rx="2.6"/><path d="M4.2 10.2h15.6"/><path d="M7.6 18.2v2.2M16.4 18.2v2.2"/><path d="M7.8 14.2h.01M16.2 14.2h.01"/>',
-    'carrot': '<path d="M19.8 4.2c-7.6 0-13.4 4.2-13.4 9.6a5.9 5.9 0 0 0 5.9 5.9c5.4 0 7.5-5.9 7.5-15.5Z"/><path d="M5.6 18.6c3.4-3.6 7.4-6.4 11.8-8.4"/>',
-    'fruit': '<path d="M12 8.3c-1.2-1-2.6-1.5-4-1.5-2.6 0-4 2.2-4 4.8 0 3.8 3 7.9 5.2 7.9.9 0 1.6-.4 2.8-.4s1.9.4 2.8.4c2.2 0 5.2-4.1 5.2-7.9 0-2.6-1.4-4.8-4-4.8-1.4 0-2.8.5-4 1.5Z"/><path d="M12 8.3V5.5a2.5 2.5 0 0 1 2.5-2.5"/>',
-    'snack': '<path d="M7 12h10l-1 6.6a2 2 0 0 1-2 1.7h-4a2 2 0 0 1-2-1.7L7 12Z"/><path d="M7 12a5 5 0 0 1 10 0"/><circle cx="12" cy="5.4" r="1.1"/>',
-    'sport': '<path d="M6.6 9.4v5.2M4.2 10.4v3.2M17.4 9.4v5.2M19.8 10.4v3.2M6.6 12h10.8"/>',
-    'fun': '<rect x="9.2" y="3.4" width="5.6" height="10.2" rx="2.8"/><path d="M6.6 11.4a5.4 5.4 0 0 0 10.8 0"/><path d="M12 16.8v3.4M9.2 20.2h5.6"/>',
-    'phone': '<path d="M8.3 3.9 10 7.6c.2.5.1 1-.3 1.4l-1 1a10.6 10.6 0 0 0 4.3 4.3l1-1c.4-.4.9-.5 1.4-.3l3.7 1.7c.5.2.8.7.8 1.2v2c0 .9-.8 1.7-1.7 1.6C10.3 19 5 13.7 4.5 5.5c-.1-.9.7-1.6 1.6-1.6h1.4c.4 0 .8.3.8.7Z"/>',
-    'shirt': '<path d="m9.1 4.3-4.2 2-1 4.2 3.1.9v8.3h10v-8.3l3.1-.9-1-4.2-4.2-2-1.2 1.5a2.4 2.4 0 0 1-3.4 0L9.1 4.3Z"/>',
-    'beauty': '<circle cx="12" cy="8.4" r="4.6"/><path d="M12 13v2.2l3.2 5.2"/><path d="M9.2 6.8a3.2 3.2 0 0 1 2.2-1.4"/>',
-    'house': '<path d="M3.6 10.4 12 3.8l8.4 6.6"/><path d="M5.4 9.2v11h13.2v-11"/><path d="M9.6 20.2v-5.4h4.8v5.4"/>',
-    'sofa': '<rect x="4" y="11.4" width="16" height="6.4" rx="2"/><path d="M6.8 11.4V8.8a2.2 2.2 0 0 1 2.2-2.2h6a2.2 2.2 0 0 1 2.2 2.2v2.6"/><path d="M8 11.4v6.4M16 11.4v6.4"/><path d="M6.4 17.8v1.6M17.6 17.8v1.6"/>',
-    'baby': '<circle cx="12" cy="12" r="8"/><circle cx="9.2" cy="10.4" r=".55"/><circle cx="14.8" cy="10.4" r=".55"/><path d="M9.6 14.2c.8.9 1.6 1.3 2.4 1.3s1.6-.4 2.4-1.3"/><path d="M12 4c1.4 0 2.3.8 2.3 1.9"/>',
-    'elder': '<circle cx="12" cy="8.6" r="3.6"/><path d="M5.8 20.4c.6-3.7 2.9-5.7 6.2-5.7s5.6 2 6.2 5.7"/><path d="M8.8 5.6h6.4"/>',
-    'chat': '<rect x="3.6" y="6.6" width="16.8" height="8.4" rx="2.8"/><path d="M7.6 15v2.6l2.8-2.6"/><circle cx="8.6" cy="10.8" r=".55"/><circle cx="12" cy="10.8" r=".55"/><circle cx="15.4" cy="10.8" r=".55"/>',
-    'plane': '<path d="M10.4 3.7a1.6 1.6 0 0 1 3.2 0v4.9l6.7 4v2l-6.7-2v4.1l2.4 1.8v1.6L12 20l-4 1.1v-1.6l2.4-1.8v-4.1l-6.7 2v-2l6.7-4V3.7Z"/>',
-    'glass': '<path d="M7.6 3.6h8.8l-1 6.5a3.4 3.4 0 0 1-6.8 0l-1-6.5Z"/><path d="M12 13.6v6.8M8.4 20.4h7.2"/>',
-    'plug': '<rect x="8.2" y="3.6" width="7.6" height="8" rx="2"/><path d="M10.2 3.6V2.1M13.8 3.6V2.1"/><path d="M12 11.6v4.6a3.6 3.6 0 0 0 3.6 3.6h1.6"/>',
-    'kit': '<rect x="3.4" y="7.8" width="17.2" height="11.6" rx="2.2"/><path d="M9 7.8V6.2a1.7 1.7 0 0 1 1.7-1.7h2.6A1.7 1.7 0 0 1 15 6.2v1.6"/><path d="M12 11.2v4.8M9.6 13.6h4.8"/>',
-    'book': '<path d="M6.6 4.4h10.8a1.6 1.6 0 0 1 1.6 1.6v13.6H8.2a2.6 2.6 0 0 1-2.6-2.6V6a1.6 1.6 0 0 1 1-1.6Z"/><path d="M5.6 16.4h13.4"/><path d="M9.4 4.4v6.8l1.9-1.4 1.9 1.4V4.4"/>',
-    'cap': '<path d="m3 9.2 9-4 9 4-9 4-9-4Z"/><path d="M7.2 11v4.1c0 1.6 2.1 2.8 4.8 2.8s4.8-1.2 4.8-2.8V11"/><path d="M21 9.2v5.2"/>',
-    'pet': '<path d="m5 9.4 2-3.4 2.6 2h4.8l2.6-2 2 3.4v4.6a5 5 0 0 1-5 5h-4a5 5 0 0 1-5-5V9.4Z"/><circle cx="9.6" cy="12.2" r=".55"/><circle cx="14.4" cy="12.2" r=".55"/><path d="M10.8 15.4h2.4"/>',
-    'envelope': '<rect x="3.2" y="5.8" width="17.6" height="12.4" rx="2"/><path d="m3.8 7 8.2 5.8L20.2 7"/><path d="M10.4 13.4 12 15l1.6-1.6M12 15v2.2"/>',
-    'gift': '<rect x="4" y="9.4" width="16" height="10.6" rx="1.8"/><path d="M3 9.4h18v4H3z"/><path d="M12 9.4V20"/><path d="M12 9.4C10.6 5.9 9 4.5 7.4 4.5a2.4 2.4 0 0 0 0 4.9H12ZM12 9.4c1.4-3.5 3-4.9 4.6-4.9a2.4 2.4 0 0 1 0 4.9H12Z"/>',
-    'briefcase': '<rect x="3.4" y="7.4" width="17.2" height="11.8" rx="2"/><path d="M9 7.4V6a1.6 1.6 0 0 1 1.6-1.6h2.8A1.6 1.6 0 0 1 15 6v1.4"/><path d="M3.4 12.6h17.2"/>',
-    'hammer': '<path d="M8.4 3.6h7.2a1.4 1.4 0 0 1 1.4 1.4v2.6H7V5a1.4 1.4 0 0 1 1.4-1.4Z"/><path d="M12 7.6v12.8"/><path d="M9.8 20.4h4.4"/>',
-    'heart': '<path d="M12 20.2s-7.6-4.6-7.6-9.7A4.5 4.5 0 0 1 12 7.2a4.5 4.5 0 0 1 7.6 3.3c0 5.1-7.6 9.7-7.6 9.7Z"/>',
-    'ticket': '<path d="M3.4 8.4h17.2v3a2 2 0 0 0 0 4v3H3.4v-3a2 2 0 0 0 0-4v-3Z"/><path d="M14.4 9.4v1.4M14.4 12.2v1.6M14.4 15.4v1.2"/>',
-    'family': '<path d="M3.8 11.4 12 4.3l8.2 7.1"/><path d="M6 9.9v10.3h12V9.9"/><circle cx="9.4" cy="13.6" r="1.7"/><circle cx="14.6" cy="13.6" r="1.7"/><path d="M7.4 20.2c0-1.7.9-2.8 2-2.8s2 1.1 2 2.8M12.6 20.2c0-1.7.9-2.8 2-2.8s2 1.1 2 2.8"/>',
-    'box': '<path d="m12 3.4 8.2 4.3v8.6L12 20.6 3.8 16.3V7.7L12 3.4Z"/><path d="m3.8 7.7 8.2 4.4 8.2-4.4M12 12.1v8.5"/>',
-    'gamepad': '<path d="M8.6 7.8h6.8a4.6 4.6 0 0 1 4.5 5.7l-.6 2.9a2.7 2.7 0 0 1-4.5 1.3l-1.9-1.8h-1.8l-1.9 1.8a2.7 2.7 0 0 1-4.5-1.3l-.6-2.9a4.6 4.6 0 0 1 4.5-5.7Z"/><path d="M8 10.6v2.6M6.7 11.9h2.6"/><path d="M15.4 11h.01M17 12.6h.01"/>',
-    'wrench': '<path d="M14.9 4.1a4.7 4.7 0 0 0-5.7 6.1l-5.6 5.6a1.9 1.9 0 0 0 2.7 2.7l5.6-5.6a4.7 4.7 0 0 0 6.1-5.7l-2.7 2.7-2.4-2.4 2-3.4Z"/>',
-    'washer': '<rect x="4.2" y="3.4" width="15.6" height="17.2" rx="2.4"/><circle cx="12" cy="13.6" r="4.3"/><path d="M7.7 6.9h.01M11.1 6.9h.01"/>',
-    'salary': '<rect x="2.6" y="6" width="18.8" height="12" rx="2"/><path d="M12 9v6M9.6 11.5 12 9l2.4 2.5"/>',
-    'bonus': '<circle cx="12" cy="9" r="5.4"/><path d="m8.6 13.4-1.4 7 4.8-2.4 4.8 2.4-1.4-7"/><path d="m12 6.6.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8.8-1.7Z"/>',
-    'invest': '<path d="M3.6 19.6h16.8"/><path d="m4.6 15 4-4.5 3 2.5 5-6 3 3"/><path d="M16.6 6.5h3v3"/>',
-    'parttime': '<rect x="3.4" y="7.4" width="17.2" height="11.8" rx="2"/><path d="M8.6 7.4V5.8a1.4 1.4 0 0 1 1.4-1.4h4a1.4 1.4 0 0 1 1.4 1.4v1.6M3.4 12.2h17.2"/>',
-    'redpacket': '<rect x="4" y="3.4" width="16" height="17.2" rx="2.4"/><path d="M4 3.4c2.7 2.5 5.3 3.8 8 3.8s5.3-1.3 8-3.8"/><circle cx="12" cy="13" r="2.5"/><path d="M12 11.6v2.8"/>',
-    /* 仍在用的旧键：种子分类（交通/医疗/其他）与别名（more/tag/target）指到这里 */
-    'car': '<path d="M4 14.6 5.8 8.2A2 2 0 0 1 7.7 6.7h8.6a2 2 0 0 1 1.9 1.5L20 14.6"/><rect x="3.5" y="13.6" width="17" height="5.6" rx="1.7"/><path d="M6.6 19.2v1.5M17.4 19.2v1.5"/><path d="M6.6 16.4h.01M17.4 16.4h.01"/>',
-    'health': '<path d="M12 20.2s-7.6-4.6-7.6-9.7A4.5 4.5 0 0 1 12 7.2a4.5 4.5 0 0 1 7.6 3.3c0 5.1-7.6 9.7-7.6 9.7Z"/><path d="M8.2 12.4h2l1.2-2.2 1.6 4.2 1.2-2h1.8"/>',
-    'ellipsis': '<circle cx="5" cy="12" r="1.15"/><circle cx="12" cy="12" r="1.15"/><circle cx="19" cy="12" r="1.15"/>',
-    'dots': '<circle cx="5" cy="12" r="1.15"/><circle cx="12" cy="12" r="1.15"/><circle cx="19" cy="12" r="1.15"/>',
-    'target': '<circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1"/>',
-    'tag': '<path d="M3.6 4.6h7.1l9.2 9.2-6.6 6.6-9.3-9.2V4.6Z"/><circle cx="7.6" cy="8.6" r="1.2"/>',
-    'award': '<circle cx="12" cy="9" r="5.4"/><path d="m8.6 13.4-1.4 7 4.8-2.4 4.8 2.4-1.4-7"/>',
+    'food': A('M6.2 10.6h11.6c0 3.8-2.6 6.7-5.8 6.7s-5.8-2.9-5.8-6.7Z')
+      + S('M4.1 10.6h15.8') + S('M9.6 20.4h4.8')
+      + S('M9.4 7.5c-.8 1-.8 2 .1 3') + S('M12.2 6.3c-.8 1-.8 2 .1 3')
+      + S('M15 7.5c-.8 1-.8 2 .1 3'),
+
+    'bag': A('M5.9 8.4h12.2l.9 10.2a2 2 0 0 1-2 2.2H7a2 2 0 0 1-2-2.2l.9-10.2Z')
+      + S('M5.9 8.4h12.2l.9 10.2a2 2 0 0 1-2 2.2H7a2 2 0 0 1-2-2.2l.9-10.2Z')
+      + S('M9.3 8.4V6.6a2.7 2.7 0 0 1 5.4 0v1.8')
+      + S('M9.9 12.4h4.2'),
+
+    'daily': A('M8.9 8.7h6.2v9.1a2.1 2.1 0 0 1-2.1 2.1h-2a2.1 2.1 0 0 1-2.1-2.1V8.7Z')
+      + S('M8.9 8.7h6.2') + S('M10.3 8.7V5.9h3.4v2.8') + S('M12 3.5v2.4')
+      + S('M8.9 12.8h6.2'),
+
+    'bus': A('M4.2 10.4h15.6V6.4a2.6 2.6 0 0 0-2.6-2.6H6.8a2.6 2.6 0 0 0-2.6 2.6v4Z')
+      + S('M6.8 3.8h10.4a2.6 2.6 0 0 1 2.6 2.6v10.4H4.2V6.4a2.6 2.6 0 0 1 2.6-2.6Z')
+      + S('M4.2 10.4h15.6')
+      + S('M7.8 14.4h.01') + S('M16.2 14.4h.01')
+      + S('M7.8 16.8v2.6') + S('M16.2 16.8v2.6'),
+
+    'carrot': A('M18.8 6.6c-6.6.4-11.4 4-11.8 8.6a5.2 5.2 0 0 0 4.8 5.4c4.8.4 7.6-4.8 7-14Z')
+      + S('M18.8 6.6c-6.6.4-11.4 4-11.8 8.6a5.2 5.2 0 0 0 4.8 5.4c4.8.4 7.6-4.8 7-14Z')
+      + S('M6.6 18.6c2.8-3.2 6-5.8 9.8-7.8')
+      + S('M18.6 6.4c.4-1.6 1.4-2.6 3-3-.2 1.8-1.2 3-3 3.4')
+      + S('M13.6 15.4l1.8 1'),
+
+    'fruit': A('M12 8.5c-1.3-1-2.7-1.5-4.1-1.5-2.6 0-4.1 2.2-4.1 4.8 0 3.9 3 7.9 5.2 7.9.9 0 1.7-.4 3-.4s2.1.4 3 .4c2.2 0 5.2-4 5.2-7.9 0-2.6-1.5-4.8-4.1-4.8-1.4 0-2.8.5-4.1 1.5Z')
+      + S('M12 8.5c-1.3-1-2.7-1.5-4.1-1.5-2.6 0-4.1 2.2-4.1 4.8 0 3.9 3 7.9 5.2 7.9.9 0 1.7-.4 3-.4s2.1.4 3 .4c2.2 0 5.2-4 5.2-7.9 0-2.6-1.5-4.8-4.1-4.8-1.4 0-2.8.5-4.1 1.5Z')
+      + S('M12 8.5V5.6a2.6 2.6 0 0 1 2.6-2.6')
+      + S('M14.7 6c1.8.2 3.1-.5 3.8-2.2-1.9-.3-3.2.4-3.8 2.2Z'),
+
+    'snack': A('M8.4 10.6h7.2L12 20.4 8.4 10.6Z')
+      + A('M12 4.9a3.3 3.3 0 0 1 3.3 3.3H8.7A3.3 3.3 0 0 1 12 4.9Z')
+      + S('M8.7 8.2a3.3 3.3 0 0 1 6.6 0')
+      + S('M7.4 10.6h9.2') + S('M8.4 10.6 12 20.4l3.6-9.8')
+      + S('M10.2 12.6h3.6') + S('M11 15.4h2'),
+
+    'sport': A('M7.2 9.8h9.6v4.4H7.2z')
+      + S('M6.6 9.4v5.2') + S('M4.2 10.4v3.2')
+      + S('M17.4 9.4v5.2') + S('M19.8 10.4v3.2')
+      + S('M6.6 12h10.8'),
+
+    'fun': A('M9.2 6.2a2.8 2.8 0 0 1 5.6 0v4.6a2.8 2.8 0 0 1-5.6 0V6.2Z')
+      + S('M9.2 6.2a2.8 2.8 0 0 1 5.6 0v4.6a2.8 2.8 0 0 1-5.6 0V6.2Z')
+      + S('M6.6 11.4a5.4 5.4 0 0 0 10.8 0')
+      + S('M12 16.8v3.4') + S('M9.2 20.2h5.6'),
+
+    'phone': A('M8.3 3.9 10 7.6c.2.5.1 1-.3 1.4l-1 1a10.6 10.6 0 0 0 4.3 4.3l1-1c.4-.4.9-.5 1.4-.3l3.7 1.7c.5.2.8.7.8 1.2v2c0 .9-.8 1.7-1.7 1.6C10.3 19 5 13.7 4.5 5.5c-.1-.9.7-1.6 1.6-1.6h1.4c.4 0 .8.3.8.7Z')
+      + S('M8.3 3.9 10 7.6c.2.5.1 1-.3 1.4l-1 1a10.6 10.6 0 0 0 4.3 4.3l1-1c.4-.4.9-.5 1.4-.3l3.7 1.7c.5.2.8.7.8 1.2v2c0 .9-.8 1.7-1.7 1.6C10.3 19 5 13.7 4.5 5.5c-.1-.9.7-1.6 1.6-1.6h1.4c.4 0 .8.3.8.7Z'),
+
+    'shirt': A('m9.1 4.3-4.2 2-1 4.2 3.1.9v8.3h10v-8.3l3.1-.9-1-4.2-4.2-2-1.2 1.5a2.4 2.4 0 0 1-3.4 0L9.1 4.3Z')
+      + S('m9.1 4.3-4.2 2-1 4.2 3.1.9v8.3h10v-8.3l3.1-.9-1-4.2-4.2-2-1.2 1.5a2.4 2.4 0 0 1-3.4 0L9.1 4.3Z'),
+
+    'beauty': A('M12 3.9a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z')
+      + S('M12 3.9a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z')
+      + S('M12 13v2.2l3.2 5.2')
+      + S('M9.6 6.7a3 3 0 0 1 2-1.3'),
+
+    'house': A('M5.4 9.5 12 4.2l6.6 5.3v9.8h-3.9v-5.2H9.3v5.2H5.4V9.5Z')
+      + S('M3.6 10.4 12 3.8l8.4 6.6')
+      + S('M5.4 9.2v11h13.2v-11')
+      + S('M9.6 20.2v-5.4h4.8v5.4'),
+
+    'sofa': A('M6.8 8.8a2.2 2.2 0 0 1 2.2-2.2h6a2.2 2.2 0 0 1 2.2 2.2v2.6H6.8V8.8Z')
+      + S('M6 11.4h12a2 2 0 0 1 2 2v4.4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4.4a2 2 0 0 1 2-2Z')
+      + S('M6.8 11.4V8.8a2.2 2.2 0 0 1 2.2-2.2h6a2.2 2.2 0 0 1 2.2 2.2v2.6')
+      + S('M8 11.4v6.4') + S('M16 11.4v6.4')
+      + S('M6.4 19.8v-1.4') + S('M17.6 19.8v-1.4'),
+
+    'baby': A('M12 4.1a7.9 7.9 0 1 1 0 15.8 7.9 7.9 0 0 1 0-15.8Z')
+      + S('M12 4.1a7.9 7.9 0 1 1 0 15.8 7.9 7.9 0 0 1 0-15.8Z')
+      + S('M9.2 10.4h.01') + S('M14.8 10.4h.01')
+      + S('M9.7 14.3c.8.9 1.5 1.3 2.3 1.3s1.5-.4 2.3-1.3')
+      + S('M12 4c1.4 0 2.3.8 2.3 1.9'),
+
+    'elder': A('M6 20.3c.5-3.6 2.7-5.5 6-5.5s5.5 1.9 6 5.5H6Z')
+      + S('M12 5a3.6 3.6 0 1 1 0 7.2A3.6 3.6 0 0 1 12 5Z')
+      + S('M5.9 20.3c.5-3.6 2.8-5.6 6.1-5.6s5.6 2 6.1 5.6')
+      + S('M8.9 5.8h6.2'),
+
+    'chat': A('M3.6 9.4A2.8 2.8 0 0 1 6.4 6.6h11.2a2.8 2.8 0 0 1 2.8 2.8v5.2a2.8 2.8 0 0 1-2.8 2.8h-8.2L6.5 20v-2.6h-.1a2.8 2.8 0 0 1-2.8-2.8V9.4Z')
+      + S('M3.6 9.4A2.8 2.8 0 0 1 6.4 6.6h11.2a2.8 2.8 0 0 1 2.8 2.8v5.2a2.8 2.8 0 0 1-2.8 2.8h-8.2L6.5 20v-2.6h-.1a2.8 2.8 0 0 1-2.8-2.8V9.4Z')
+      + S('M8.6 10.8h.01') + S('M12 10.8h.01') + S('M15.4 10.8h.01'),
+
+    'plane': A('M10.4 3.7a1.6 1.6 0 0 1 3.2 0v4.9l6.7 4v2l-6.7-2v4.1l2.4 1.8v1.6L12 20l-4 1.1v-1.6l2.4-1.8v-4.1l-6.7 2v-2l6.7-4V3.7Z')
+      + S('M10.4 3.7a1.6 1.6 0 0 1 3.2 0v4.9l6.7 4v2l-6.7-2v4.1l2.4 1.8v1.6L12 20l-4 1.1v-1.6l2.4-1.8v-4.1l-6.7 2v-2l6.7-4V3.7Z'),
+
+    'glass': A('M8.2 8.5h7.6l-.5 3.1a3.4 3.4 0 0 1-6.6 0l-.5-3.1Z')
+      + S('M7.6 3.6h8.8l-1 6.5a3.4 3.4 0 0 1-6.8 0l-1-6.5Z')
+      + S('M12 13.6v6.8') + S('M8.4 20.4h7.2'),
+
+    'plug': A('M8.2 5.6h7.6v4.2a3.8 3.8 0 0 1-7.6 0V5.6Z')
+      + S('M8.2 3.6h7.6v6.2a3.8 3.8 0 0 1-7.6 0V3.6Z')
+      + S('M10.2 3.6V2.1') + S('M13.8 3.6V2.1')
+      + S('M12 13.6v2.6a3.6 3.6 0 0 0 3.6 3.6h1.6'),
+
+    'kit': A('M5 8.6h14v10.2a1.4 1.4 0 0 1-1.4 1.4H6.4A1.4 1.4 0 0 1 5 18.8V8.6Z')
+      + S('M3.6 8.6h16.8v10.2a1.4 1.4 0 0 1-1.4 1.4H5a1.4 1.4 0 0 1-1.4-1.4V8.6Z')
+      + S('M9 8.6V6.9a1.6 1.6 0 0 1 1.6-1.6h2.8A1.6 1.6 0 0 1 15 6.9v1.7')
+      + S('M12 11.6v4.6') + S('M9.7 13.9h4.6'),
+
+    'book': A('M6.6 4.4h10.8a1.6 1.6 0 0 1 1.6 1.6v11.9H8.2a2.6 2.6 0 0 1-2.6-2.6V6a1.6 1.6 0 0 1 1-1.6Z')
+      + S('M6.6 4.4h10.8a1.6 1.6 0 0 1 1.6 1.6v13.6H8.2a2.6 2.6 0 0 1-2.6-2.6V6a1.6 1.6 0 0 1 1-1.6Z')
+      + S('M5.6 16.4h13.4')
+      + S('M9.4 4.4v6.8l1.9-1.4 1.9 1.4V4.4'),
+
+    'cap': A('m3 9.2 9-4 9 4-9 4-9-4Z')
+      + S('m3 9.2 9-4 9 4-9 4-9-4Z')
+      + S('M7.2 11v4.1c0 1.6 2.1 2.8 4.8 2.8s4.8-1.2 4.8-2.8V11')
+      + S('M21 9.2v5.2'),
+
+    'pet': A('M5 9.4 7 6l2.6 2h4.8L17 6l2 3.4v4.6a5 5 0 0 1-5 5h-4a5 5 0 0 1-5-5V9.4Z')
+      + S('m5 9.4 2-3.4 2.6 2h4.8l2.6-2 2 3.4v4.6a5 5 0 0 1-5 5h-4a5 5 0 0 1-5-5V9.4Z')
+      + S('M9.6 12.2h.01') + S('M14.4 12.2h.01') + S('M10.8 15.4h2.4'),
+
+    'envelope': A('M3.4 8.1 12 13.8l8.6-5.7v8.1a2 2 0 0 1-2 2H5.4a2 2 0 0 1-2-2V8.1Z')
+      + S('M5.2 5.8h13.6a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2H5.2a2 2 0 0 1-2-2V7.8a2 2 0 0 1 2-2Z')
+      + S('m3.8 7 8.2 5.8L20.2 7')
+      + S('M10.4 13.4 12 15l1.6-1.6M12 15v2.2'),
+
+    'gift': A('M4.2 13h15.6v6.9a1.7 1.7 0 0 1-1.7 1.7H5.9a1.7 1.7 0 0 1-1.7-1.7V13Z')
+      + S('M4 9.4h16v10.6a1.8 1.8 0 0 1-1.8 1.8H5.8A1.8 1.8 0 0 1 4 20V9.4Z')
+      + S('M3 9.4h18v4H3z')
+      + S('M12 9.4V20')
+      + S('M12 9.4C10.6 5.9 9 4.5 7.4 4.5a2.4 2.4 0 0 0 0 4.9H12ZM12 9.4c1.4-3.5 3-4.9 4.6-4.9a2.4 2.4 0 0 1 0 4.9H12Z'),
+
+    'briefcase': A('M3.4 12.4h17.2v5.2a1.7 1.7 0 0 1-1.7 1.7H5.1a1.7 1.7 0 0 1-1.7-1.7v-5.2Z')
+      + S('M5.1 7.4h13.8a1.7 1.7 0 0 1 1.7 1.7v8.5a1.7 1.7 0 0 1-1.7 1.7H5.1a1.7 1.7 0 0 1-1.7-1.7V9.1a1.7 1.7 0 0 1 1.7-1.7Z')
+      + S('M9 7.4V6a1.6 1.6 0 0 1 1.6-1.6h2.8A1.6 1.6 0 0 1 15 6v1.4')
+      + S('M3.4 12.6h17.2'),
+
+    'hammer': A('M8.4 3.6h7.2a1.4 1.4 0 0 1 1.4 1.4v2.6H7V5a1.4 1.4 0 0 1 1.4-1.4Z')
+      + S('M8.4 3.6h7.2a1.4 1.4 0 0 1 1.4 1.4v2.6H7V5a1.4 1.4 0 0 1 1.4-1.4Z')
+      + S('M12 7.6v12.8') + S('M9.8 20.4h4.4'),
+
+    'heart': A('M12 20.2s-7.6-4.6-7.6-9.7A4.5 4.5 0 0 1 12 7.2a4.5 4.5 0 0 1 7.6 3.3c0 5.1-7.6 9.7-7.6 9.7Z')
+      + S('M12 20.2s-7.6-4.6-7.6-9.7A4.5 4.5 0 0 1 12 7.2a4.5 4.5 0 0 1 7.6 3.3c0 5.1-7.6 9.7-7.6 9.7Z'),
+
+    'ticket': A('M5.4 8.4h13.2v2.6a2 2 0 0 0 0 4v2.6H5.4V15a2 2 0 0 0 0-4V8.4Z')
+      + S('M3.4 8.4h17.2v3a2 2 0 0 0 0 4v3H3.4v-3a2 2 0 0 0 0-4v-3Z')
+      + S('M14.4 9.4v1.4') + S('M14.4 12.2v1.6') + S('M14.4 15.4v1.2'),
+
+    'family': A('M9.4 11.9a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4ZM14.6 11.9a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4Z')
+      + S('M3.8 11.4 12 4.3l8.2 7.1')
+      + S('M6 9.9v10.3h12V9.9')
+      + S('M9.4 11.9a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4Z')
+      + S('M14.6 11.9a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4Z')
+      + S('M7.4 20.2c0-1.7.9-2.8 2-2.8s2 1.1 2 2.8')
+      + S('M12.6 20.2c0-1.7.9-2.8 2-2.8s2 1.1 2 2.8'),
+
+    'box': A('m12 3.4 8.2 4.3v8.6L12 20.6 3.8 16.3V7.7L12 3.4Z')
+      + S('m12 3.4 8.2 4.3v8.6L12 20.6 3.8 16.3V7.7L12 3.4Z')
+      + S('m3.8 7.7 8.2 4.4 8.2-4.4M12 12.1v8.5'),
+
+    'gamepad': A('M8.6 7.8h6.8a4.6 4.6 0 0 1 4.5 5.7l-.6 2.9a2.7 2.7 0 0 1-4.5 1.3l-1.9-1.8h-1.8l-1.9 1.8a2.7 2.7 0 0 1-4.5-1.3l-.6-2.9a4.6 4.6 0 0 1 4.5-5.7Z')
+      + S('M8.6 7.8h6.8a4.6 4.6 0 0 1 4.5 5.7l-.6 2.9a2.7 2.7 0 0 1-4.5 1.3l-1.9-1.8h-1.8l-1.9 1.8a2.7 2.7 0 0 1-4.5-1.3l-.6-2.9a4.6 4.6 0 0 1 4.5-5.7Z')
+      + S('M8 10.6v2.6M6.7 11.9h2.6')
+      + S('M15.4 11h.01') + S('M17 12.6h.01'),
+
+    'wrench': A('M14.9 4.1a4.7 4.7 0 0 0-5.7 6.1l-5.6 5.6a1.9 1.9 0 0 0 2.7 2.7l5.6-5.6a4.7 4.7 0 0 0 6.1-5.7l-2.7 2.7-2.4-2.4 2-3.4Z')
+      + S('M14.9 4.1a4.7 4.7 0 0 0-5.7 6.1l-5.6 5.6a1.9 1.9 0 0 0 2.7 2.7l5.6-5.6a4.7 4.7 0 0 0 6.1-5.7l-2.7 2.7-2.4-2.4 2-3.4Z'),
+
+    'washer': A('M12 9.3a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8Z')
+      + S('M6.6 3.4h10.8a2.4 2.4 0 0 1 2.4 2.4v12.4a2.4 2.4 0 0 1-2.4 2.4H6.6a2.4 2.4 0 0 1-2.4-2.4V5.8a2.4 2.4 0 0 1 2.4-2.4Z')
+      + S('M12 9.3a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8Z')
+      + S('M7.8 6.9h.01') + S('M11.2 6.9h.01'),
+
+    'car': A('M4 14.7 5.8 8.3a2 2 0 0 1 1.9-1.4h8.6a2 2 0 0 1 1.9 1.4L20 14.7H4Z')
+      + S('M4 14.7 5.8 8.2A2 2 0 0 1 7.7 6.7h8.6a2 2 0 0 1 1.9 1.5L20 14.6')
+      + S('M5.2 13.6h13.6a1.7 1.7 0 0 1 1.7 1.7v2.2a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7v-2.2a1.7 1.7 0 0 1 1.7-1.7Z')
+      + S('M6.6 19.2v1.5') + S('M17.4 19.2v1.5')
+      + S('M6.6 16.4h.01') + S('M17.4 16.4h.01'),
+
+    'health': A('M12 20.2s-7.6-4.6-7.6-9.7A4.5 4.5 0 0 1 12 7.2a4.5 4.5 0 0 1 7.6 3.3c0 5.1-7.6 9.7-7.6 9.7Z')
+      + S('M12 20.2s-7.6-4.6-7.6-9.7A4.5 4.5 0 0 1 12 7.2a4.5 4.5 0 0 1 7.6 3.3c0 5.1-7.6 9.7-7.6 9.7Z')
+      + S('M8.2 12.4h2l1.2-2.2 1.6 4.2 1.2-2h1.8'),
+
+    'salary': A('M4.6 8.6h14.8v6.8H4.6z')
+      + S('M4.6 5.9h14.8a2 2 0 0 1 2 2v8.2a2 2 0 0 1-2 2H4.6a2 2 0 0 1-2-2V7.9a2 2 0 0 1 2-2Z')
+      + S('M12 9v6') + S('M9.6 11.5 12 9l2.4 2.5'),
+
+    'bonus': A('M12 3.6a5.4 5.4 0 1 1 0 10.8 5.4 5.4 0 0 1 0-10.8Z')
+      + S('M12 3.6a5.4 5.4 0 1 1 0 10.8 5.4 5.4 0 0 1 0-10.8Z')
+      + S('m8.6 13.4-1.4 7 4.8-2.4 4.8 2.4-1.4-7')
+      + S('m12 6.4.7 1.5 1.6.7-1.6.7-.7 1.5-.7-1.5-1.6-.7 1.6-.7.7-1.5Z'),
+
+    'invest': A('M4.6 19.4h14.8v-5.8l-4.2-4.4-4 4.2-3-2.4-3.6 4.1v4.3Z')
+      + S('M3.6 19.6h16.8')
+      + S('m4.6 15 4-4.5 3 2.5 5-6 3 3')
+      + S('M16.6 6.5h3v3'),
+
+    'parttime': A('M12 6.3a5.7 5.7 0 1 1 0 11.4 5.7 5.7 0 0 1 0-11.4Z')
+      + S('M12 6.3a5.7 5.7 0 1 1 0 11.4 5.7 5.7 0 0 1 0-11.4Z')
+      + S('M12 9.2v3.4l2.4 1.6')
+      + S('M10.1 3.6h3.8'),
+
+    'redpacket': A('M5.8 3.4h12.4v17.2H5.8z')
+      + S('M7.2 3.4h9.6a1.6 1.6 0 0 1 1.6 1.6v13.4a1.6 1.6 0 0 1-1.6 1.6H7.2a1.6 1.6 0 0 1-1.6-1.6V5a1.6 1.6 0 0 1 1.6-1.6Z')
+      + S('M5.6 3.4c2.4 2.3 4.5 3.4 6.4 3.4s4-1.1 6.4-3.4')
+      + S('M12 11.2a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8Z')
+      + S('M12 12.6v2'),
+
+    'ellipsis': D(5, 12, 1.35) + D(12, 12, 1.35) + D(19, 12, 1.35),
+
+    'dots': D(5, 12, 1.35) + D(12, 12, 1.35) + D(19, 12, 1.35),
+
+    /* 收入「其他」专属字形：一摞硬币，与支出「其他」的三点区分开 */
+    'coins': A('M6 8.2v7.4c0 1.3 2.7 2.4 6 2.4s6-1.1 6-2.4V8.2H6Z')
+      + S('M18 8.2a6 2.4 0 1 0-12 0 6 2.4 0 1 0 12 0Z')
+      + S('M6 8.2v5.4c0 1.3 2.7 2.4 6 2.4s6-1.1 6-2.4V8.2')
+      + S('M6 13.6v2.6c0 1.3 2.7 2.4 6 2.4s6-1.1 6-2.4v-2.6'),
+
+    /* 仍在用的旧键：别名（more/tag/target）与设置色板里的中性图标，保持线性 */
+    'target': S('M12 3.6a8.4 8.4 0 1 1 0 16.8 8.4 8.4 0 0 1 0-16.8Z')
+      + S('M12 7.4a4.6 4.6 0 1 1 0 9.2 4.6 4.6 0 0 1 0-9.2Z')
+      + A('M12 10.8a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4Z'),
+    'tag': A('M4.6 5.6h6.1l8.5 8.5-6.1 6.1-8.5-8.5V5.6Z')
+      + S('M3.6 4.6h7.1l9.2 9.2-6.6 6.6-9.3-9.2V4.6Z')
+      + S('M7.6 8.6h.01'),
+    'award': A('M12 3.9a5.1 5.1 0 1 1 0 10.2 5.1 5.1 0 0 1 0-10.2Z')
+      + S('M12 3.6a5.4 5.4 0 1 1 0 10.8 5.4 5.4 0 0 1 0-10.8Z')
+      + S('m8.6 13.4-1.4 7 4.8-2.4 4.8 2.4-1.4-7'),
 
     /* ----- 文件 / 系统 ----- */
     'download': '<path d="M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5"/><path d="M4 16.5v2.5a1.5 1.5 0 0 0 1.5 1.5h13a1.5 1.5 0 0 0 1.5-1.5v-2.5"/>',
@@ -20749,8 +21310,588 @@ textarea::selection {
     'arrow-down-left': '<path d="M17 7 7 17M16 17H7V8"/>',
     'transfer': '<path d="M4 8h15M16 5l3 3-3 3"/><path d="M20 16H5M8 13l-3 3 3 3"/>',
     'calendar': '<rect x="3.5" y="5" width="17" height="15.5" rx="2.2"/><path d="M3.5 9.5h17M8 3v4M16 3v4M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01M16 17h.01"/>',
-    'clock-alt': '<circle cx="12" cy="12" r="9"/><path d="M12 7v5.3l3.4 2"/>'
+    'clock-alt': '<circle cx="12" cy="12" r="9"/><path d="M12 7v5.3l3.4 2"/>',
+
+    /* ----- 主题 / 账单 / 工具（Morphicons 图标包，Lucide 24×24） ----- */
+    'sun': '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+    'moon': '<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
+    'receipt': '<path d="M12 17V7m4 1h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"/><path d="M4 3a1 1 0 0 1 1-1a1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1a1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2a1 1 0 0 1-1-1z"/>',
+    'minus': '<path d="M5 12h14"/>',
+    'fingerprint': '<path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4M14 13.12c0 2.38 0 6.38-1 8.88m4.29-.98c.12-.6.43-2.3.5-3.02M2 12a10 10 0 0 1 18-6M2 16h.01m19.79 0c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2m2.31 12c.21-.66.45-1.32.57-2M9 6.8a6 6 0 0 1 9 5.2v2"/>',
+    'fire': '<path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0a5 5 0 0 1 1-3a1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4"/>',
+    'flag': '<path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/>',
+    'lightbulb': '<path d="M15 14c.2-1 .7-1.7 1.5-2.5c1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5c.7.7 1.3 1.5 1.5 2.5m0 4h6m-5 4h4"/>',
+    'qr-code': '<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3m5 0v.01M12 7v3a2 2 0 0 1-2 2H7m-4 0h.01M12 3h.01M12 16v.01M16 12h1m4 0v.01M12 21v-1"/>',
+    'image': '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15l-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+    'share': '<path d="M12 2v13m4-9l-4-4l-4 4m-4 6v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>',
+    'file': '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/>',
+    'printer': '<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect width="12" height="8" x="6" y="14" rx="1"/>',
+    'cloud': '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9"/>',
+    'refresh': '<path d="M3 12a9 9 0 0 1 9-9a9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5m5 4a9 9 0 0 1-9 9a9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    'shield': '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    'database': '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
+    'users': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3.128a4 4 0 0 1 0 7.744M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>',
+    'folder': '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    'logout': '<path d="m16 17l5-5l-5-5m5 5H9m0 9H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
+    'grid': '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+    'alarm': '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M5 3L2 6m20 0l-3-3M6.38 18.7L4 21m13.64-2.33L20 21"/>',
+    /* ----- 分类补充（Morphicons 图标包） ----- */
+    'store': '<path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5m8.774-10.69a1.12 1.12 0 0 0-1.549 0a2.5 2.5 0 0 1-3.451 0a1.12 1.12 0 0 0-1.548 0a2.5 2.5 0 0 1-3.452 0a1.12 1.12 0 0 0-1.549 0a2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244"/><path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05"/>',
+    'coffee': '<path d="M10 2v2m4-2v2m2 4a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1M6 2v2"/>',
+    'pizza': '<path d="m12 14l-1 1m2.75 3.25l-1.25 1.42m5.275-14.016a15.68 15.68 0 0 0-12.121 12.12M18.8 9.3a1 1 0 0 0 2.1 7.7"/><path d="M21.964 20.732a1 1 0 0 1-1.232 1.232l-18-5a1 1 0 0 1-.695-1.232A19.68 19.68 0 0 1 15.732 2.037a1 1 0 0 1 1.232.695z"/>',
+    'truck': '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2m10 0H9m10 0h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+    'package': '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73zm1 .27V12"/><path d="M3.29 7L12 12l8.71-5M7.5 4.27l9 5.15"/>',
+    'droplet': '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7"/>',
+    'building': '<path d="M12 10h.01M12 14h.01M12 6h.01M16 10h.01M16 14h.01M16 6h.01M8 10h.01M8 14h.01M8 6h.01M9 22v-3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/><rect width="16" height="20" x="4" y="2" rx="2"/>',
+    'headphones': '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+    'film': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18M3 7.5h4M3 12h18M3 16.5h4M17 3v18m0-13.5h4m-4 9h4"/>',
+    'graduation': '<path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0zM22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/>',
+    'crown': '<path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294zM5 21h14"/>',
+    'diamond': '<path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41L13.7 2.71a2.41 2.41 0 0 0-3.41 0Z"/>',
+    'scissors': '<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12L12 12m8-8L8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8L20 20"/>',
   };
+
+
+  /* ============================================================
+     自定义分类专属图标库（2.6 新增）
+     ------------------------------------------------------------
+     规则：
+     1. 与系统默认分类正在使用的 key **零交集**（tools/check-icons.cjs 强制校验），
+        这样用户新建分类时看到的永远是系统分类里没有的新造型，不会"自己抄自己"。
+     2. 元组格式 [key, 中文名, 搜索关键词, body]，body 由 A()/S() 拼，写法与系统分类一致。
+     3. 分组只存在于这张表里，数据库仍然只存 icon 字符串 —— 不改账本数据结构。
+     ============================================================ */
+  var CUSTOM_ICON_GROUPS = [
+    {
+      key: 'food', label: '饮食', hint: '吃饭、外卖、下馆子',
+      items: [
+        ['hotpot', '火锅', '涮锅 麻辣烫 火锅店 打边炉',
+          A('M4.6 11.6h14.8v3.2a4.4 4.4 0 0 1-4.4 4.4H9a4.4 4.4 0 0 1-4.4-4.4v-3.2Z')
+          + S('M3.4 11.6h17.2')
+          + S('M4.6 11.6v3.2a4.4 4.4 0 0 0 4.4 4.4h6a4.4 4.4 0 0 0 4.4-4.4v-3.2')
+          + S('M9.4 8.4c-.8 1-.8 1.9 0 2.8') + S('M14.6 8.4c-.8 1-.8 1.9 0 2.8')],
+        ['grill', '烧烤', '撸串 烤串 烤肉 大排档',
+          A('M7 9.6h3.8v4.8H7zM12.6 9.6h3.8v4.8h-3.8z')
+          + S('M2.8 12h18.4')
+          + S('M7 9.6h3.8v4.8H7z') + S('M12.6 9.6h3.8v4.8h-3.8z')
+          + S('M5.6 17.4c0 1.4 1.8 1.4 1.8 0s1.8-1.4 1.8 0')],
+        ['latte', '咖啡', '拿铁 美式 瑞幸 星巴克 咖啡豆',
+          A('M6.4 9.4h9.2v4.6a4.6 4.6 0 0 1-9.2 0V9.4Z')
+          + S('M6.4 9.4h9.2v4.6a4.6 4.6 0 0 1-9.2 0V9.4Z')
+          + S('M15.6 10.4h1.4a2.2 2.2 0 0 1 0 4.4h-1.4')
+          + S('M4.6 19.6h12.8')
+          + S('M8.2 6.6c-.7.8-.7 1.5 0 2.2') + S('M11.4 6.6c-.7.8-.7 1.5 0 2.2')],
+        ['milktea', '奶茶', '珍珠奶茶 喜茶 奶茶店 果茶',
+          A('M6.6 9.6h10.8l-1.2 9.2a2 2 0 0 1-2 1.8H9.8a2 2 0 0 1-2-1.8L6.6 9.6Z')
+          + S('M6.6 9.6h10.8l-1.2 9.2a2 2 0 0 1-2 1.8H9.8a2 2 0 0 1-2-1.8L6.6 9.6Z')
+          + S('M5.8 9.6h12.4') + S('M15.2 3.4 12.6 9.6')
+          + S('M10 14.4h.01') + S('M13 15h.01') + S('M11.6 17.2h.01')],
+        ['cake', '蛋糕', '甜品 生日蛋糕 烘焙 下午茶',
+          A('M5.4 14.4h13.2v5.2H5.4z')
+          + S('M4.4 14.4c1.6-2.4 3.4-2.4 5 0s3.4 2.4 5 0 3.4-2.4 5 0')
+          + S('M5.4 14.4h13.2v3.4a1.8 1.8 0 0 1-1.8 1.8H7.2a1.8 1.8 0 0 1-1.8-1.8v-3.4Z')
+          + S('M12 8.4v3') + S('M12 4.6c1 1 .9 1.9 0 2.4-.9-.5-1-1.4 0-2.4Z')],
+        ['burger', '汉堡', '快餐 麦当劳 肯德基 堡',
+          A('M4.4 12.2h15.2v2.4H4.4z')
+          + S('M4 10.8c0-3.3 3.6-5.4 8-5.4s8 2.1 8 5.4H4Z')
+          + S('M3.4 12.2h17.2') + S('M4.2 14.6h15.6')
+          + S('M4.6 14.6h14.8a3 3 0 0 1-3 3.4H7.6a3 3 0 0 1-3-3.4Z')
+          + S('M8.4 7.8h.01') + S('M12 6.8h.01') + S('M15.6 7.8h.01')],
+        ['noodles', '面条', '拉面 米线 面馆 牛肉面',
+          A('M6.2 11.6h11.6c0 3.6-2.6 6.3-5.8 6.3s-5.8-2.7-5.8-6.3Z')
+          + S('M4.2 11.6h15.6') + S('M9.4 20.4h5.2')
+          + S('M8.6 10.4c0-2 .8-3 1.6-4.2') + S('M12 10.4c0-2 .8-3 1.6-4.2')
+          + S('M15.4 10.4c0-2 .8-3 1.6-4.2')],
+        ['icecream', '冰淇淋', '冰棍 雪糕 棒冰 甜品',
+          A('M8.8 4.2h6.4a1 1 0 0 1 1 1v7.4a1 1 0 0 1-1 1H8.8a1 1 0 0 1-1-1V5.2a1 1 0 0 1 1-1Z')
+          + S('M8.8 4.2h6.4a1 1 0 0 1 1 1v7.4a1 1 0 0 1-1 1H8.8a1 1 0 0 1-1-1V5.2a1 1 0 0 1 1-1Z')
+          + S('M7.8 8.6h8.4') + S('M12 13.6v6.2')],
+        ['sushi', '寿司', '日料 刺身 三文鱼 料理',
+          A('M4.6 11.4h14.8v2.6a2 2 0 0 1-2 2H6.6a2 2 0 0 1-2-2v-2.6Z')
+          + S('M4.6 11.4h14.8v3.4a2.6 2.6 0 0 1-2.6 2.6H7.2a2.6 2.6 0 0 1-2.6-2.6v-3.4Z')
+          + S('M5.6 11.4c1.4-2.6 3.6-3.8 6.4-3.8s5 1.2 6.4 3.8')
+          + S('M9.4 13.6h5.2')],
+        ['dumpling', '饺子', '水饺 馄饨 包子 云吞',
+          A('M5.6 13.8a6.4 6.4 0 0 1 12.8 0H5.6Z')
+          + S('M5.2 14.2a6.8 6.8 0 0 1 13.6 0c0 1.6-3 2.6-6.8 2.6s-6.8-1-6.8-2.6Z')
+          + S('M8.4 11.6v-1.4') + S('M12 10.6V9') + S('M15.6 11.6v-1.4')],
+        ['bread', '面包', '吐司 烘焙 早餐 面包店',
+          A('M4.4 11.4h15.2v7.6H4.4z')
+          + S('M6.2 5.4h11.6a3 3 0 0 1 3 3v10.8H3.2V8.4a3 3 0 0 1 3-3Z')
+          + S('M8.2 8.8 9.6 12.4M12 8.8l1.4 3.6M15.8 8.8l1.4 3.6')],
+        ['juice', '果汁', '饮料 鲜榨 汽水 可乐',
+          A('M7.6 9.6h8.8l-1 9a1.8 1.8 0 0 1-1.8 1.6H10.4a1.8 1.8 0 0 1-1.8-1.6l-1-9Z')
+          + S('M7.6 9.6h8.8l-1 9a1.8 1.8 0 0 1-1.8 1.6H10.4a1.8 1.8 0 0 1-1.8-1.6l-1-9Z')
+          + S('M6.8 9.6h10.4') + S('M15.4 3.4 13 9.6') + S('M8.6 12.8h6.8')]
+      ]
+    },
+    {
+      key: 'travel', label: '出行', hint: '通勤、打车、旅行',
+      items: [
+        ['subway', '地铁', '轨交 地铁站 通勤 地下铁',
+          A('M6 8.4h12v4.4H6z')
+          + S('M7.4 3.8h9.2a2.6 2.6 0 0 1 2.6 2.6v8.4a2.6 2.6 0 0 1-2.6 2.6H7.4a2.6 2.6 0 0 1-2.6-2.6V6.4a2.6 2.6 0 0 1 2.6-2.6Z')
+          + S('M4.8 8.4h14.4')
+          + S('M8 17.4 6 21M16 17.4 18 21')],
+        ['bike', '单车', '自行车 骑行 共享单车 脚踏车',
+          A('M9.6 8.4h6.4l2.4 7.2H5.6L9.6 8.4Z')
+          + S('M5.6 12.2a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
+          + S('M18.4 12.2a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
+          + S('M9.6 8.4h6.4l2.4 7.2H5.6L9.6 8.4Z')
+          + S('M12.6 8.4 10.6 15') + S('M9.6 8.4 8.2 6')],
+        ['moto', '摩托', '摩托车 机车 电瓶车 电动车',
+          A('M6.4 12.6h7.4l2.6 3.8H6.4z')
+          + S('M5.6 14.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z')
+          + S('M18.4 14.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z')
+          + S('M5.6 17 9 11.4h4.6l3 5.6') + S('M13.6 11.4h3.4')],
+        ['taxi', '出租车', '打车 网约车 滴滴 的士',
+          A('M4.6 14.4 6.2 9.4a2 2 0 0 1 1.9-1.4h8.2a2 2 0 0 1 1.9 1.4l1.6 5H4.6Z')
+          + S('M4.6 14.4 6.2 9.4a2 2 0 0 1 1.9-1.4h8.2a2 2 0 0 1 1.9 1.4l1.6 5')
+          + S('M4.6 14.4h15.2v2.8H4.6z')
+          + S('M9.4 5.4h5.2v2.4H9.4z')
+          + S('M7.6 17.2v1.6M16.8 17.2v1.6')],
+        ['train', '高铁', '火车 动车 铁路 出差',
+          A('M6.6 9.4h10.8v3.2H6.6z')
+          + S('M7.2 3.6h6.4c3.6 0 6.8 3.2 6.8 8v8.2H7.2a2.8 2.8 0 0 1-2.8-2.8V6.4a2.8 2.8 0 0 1 2.8-2.8Z')
+          + S('M4.4 9.4h14.8') + S('M4.4 14.8h14.8')
+          + S('M4 20.8h16')],
+        ['ship', '轮船', '邮轮 坐船 渡轮 出海',
+          A('M4.2 13.6h15.6l-1.8 4.2a2 2 0 0 1-1.8 1.2H7.8a2 2 0 0 1-1.8-1.2l-1.8-4.2Z')
+          + S('M4.2 13.6h15.6l-1.8 4.2a2 2 0 0 1-1.8 1.2H7.8a2 2 0 0 1-1.8-1.2l-1.8-4.2Z')
+          + S('M8.4 13.6V8.4h7.2v5.2') + S('M12 3.6v4.8')
+          + S('M3 20.6c1.5-.9 3-.9 4.5 0s3 .9 4.5 0 3-.9 4.5 0 3 .9 4.5 0')],
+        ['luggage', '行李箱', '旅行箱 拉杆箱 出差 箱子',
+          A('M7.4 7.6h9.2v10.8H7.4z')
+          + S('M8.8 7.6h6.4a1.4 1.4 0 0 1 1.4 1.4v9.4a1.4 1.4 0 0 1-1.4 1.4H8.8a1.4 1.4 0 0 1-1.4-1.4V9a1.4 1.4 0 0 1 1.4-1.4Z')
+          + S('M10.2 7.6V5.4h3.6v2.2')
+          + S('M10.6 11.4v4.6M13.4 11.4v4.6')],
+        ['passport', '护照', '签证 出境 证件 旅行证',
+          A('M12 9a3.2 3.2 0 1 1 0 6.4A3.2 3.2 0 0 1 12 9Z')
+          + S('M6 4.4h12a1.6 1.6 0 0 1 1.6 1.6v12a1.6 1.6 0 0 1-1.6 1.6H6a1.6 1.6 0 0 1-1.6-1.6V6A1.6 1.6 0 0 1 6 4.4Z')
+          + S('M4.4 17.4h15.2')
+          + S('M12 9a3.2 3.2 0 1 1 0 6.4A3.2 3.2 0 0 1 12 9Z')
+          + S('M8.8 12.2h6.4')],
+        ['gas', '加油', '油费 汽油 加油站 92 95',
+          A('M6.8 8.4h6v10.4h-6z')
+          + S('M5.4 20.4V6.6a2 2 0 0 1 2-2h4.8a2 2 0 0 1 2 2v13.8')
+          + S('M6.8 8.4h6v4.4h-6z')
+          + S('M4 20.4h8')
+          + S('M14.2 8.6h1.2a1.8 1.8 0 0 1 1.8 1.8v6a1.8 1.8 0 0 0 3.6 0v-2.2')],
+        ['parking', '停车', '车位 停车费 停车场 泊车',
+          A('M12 3.4a8.6 8.6 0 1 1 0 17.2 8.6 8.6 0 0 1 0-17.2Z')
+          + S('M12 3.4a8.6 8.6 0 1 1 0 17.2 8.6 8.6 0 0 1 0-17.2Z')
+          + S('M10 17.4V6.8h3.2a3.2 3.2 0 0 1 0 6.4H10')],
+        ['toll', '高速', '过路费 ETC 收费 关口',
+          A('M4.2 12.4h15.6v3.2H4.2z')
+          + S('M4.2 12.4 7.4 6.4h9.2l3.2 6')
+          + S('M4.2 12.4h15.6v3.2H4.2z')
+          + S('M5.6 15.6v4.8M18.4 15.6v4.8')
+          + S('M9.6 12.4 8 9.4M14.4 12.4 16 9.4')],
+        ['nav', '导航', '指路 地图 定位 路线',
+          A('M12 4.6 18.6 19.4 12 16.2 5.4 19.4 12 4.6Z')
+          + S('M12 4.6 18.6 19.4 12 16.2 5.4 19.4 12 4.6Z')]
+      ]
+    },
+    {
+      key: 'home', label: '居家', hint: '水电、家居、日用',
+      items: [
+        ['key', '钥匙', '房租 换锁 门禁 配钥匙',
+          A('M8.4 6.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
+          + S('M8.4 6.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
+          + S('M11 11 19.4 19.4')
+          + S('M16.6 16.6 18.4 14.8') + S('M18.6 18.6 20.4 16.8')],
+        ['bed', '床', '床垫 卧室 家具 床品',
+          A('M4 12.8h16v3.2H4z')
+          + S('M3.4 18.6v-9a2.4 2.4 0 0 1 2.4-2.4h13.4a1.4 1.4 0 0 1 1.4 1.4v10')
+          + S('M3.4 16.4h17.2')
+          + S('M6.6 12.8V9.8h4v3')],
+        ['lamp', '台灯', '灯 照明 灯具 落地灯',
+          A('M8.6 5.4h6.8L17.4 11H6.6l2-5.6Z')
+          + S('M8.6 5.4h6.8L17.4 11H6.6l2-5.6Z')
+          + S('M12 11v7.4') + S('M8.4 20.4h7.2') + S('M9.6 18.4h4.8')],
+        ['fridge', '冰箱', '冰柜 家电 冷藏 保鲜',
+          A('M6.6 4.4h10.8a1.4 1.4 0 0 1 1.4 1.4v4.2H5.2V5.8a1.4 1.4 0 0 1 1.4-1.4Z')
+          + S('M6.6 3.6h10.8a1.6 1.6 0 0 1 1.6 1.6v13.4a1.6 1.6 0 0 1-1.6 1.6H6.6A1.6 1.6 0 0 1 5 18.6V5.2a1.6 1.6 0 0 1 1.6-1.6Z')
+          + S('M5 10.2h14')
+          + S('M8 6.6v2M8 12.4v3')],
+        ['aircon', '空调', '冷气 电费 制冷 家电',
+          A('M4.4 8.6h15.2v5.8H4.4z')
+          + S('M5.6 5.4h12.8a2.2 2.2 0 0 1 2.2 2.2v8.6a2.2 2.2 0 0 1-2.2 2.2H5.6a2.2 2.2 0 0 1-2.2-2.2V7.6a2.2 2.2 0 0 1 2.2-2.2Z')
+          + S('M3.4 10.4h17.2') + S('M7 13.4h10')
+          + S('M8 18.6c0 1.4 1 1.4 1 2.8') + S('M12 18.6c0 1.4 1 1.4 1 2.8') + S('M16 18.6c0 1.4 1 1.4 1 2.8')],
+        ['detergent', '洗衣液', '洗洁精 清洁剂 日化 柔顺剂',
+          A('M7.4 10.4h9.2v8.2a2 2 0 0 1-2 2H9.4a2 2 0 0 1-2-2v-8.2Z')
+          + S('M7.4 10.4h9.2v8.2a2 2 0 0 1-2 2H9.4a2 2 0 0 1-2-2v-8.2Z')
+          + S('M10.4 10.4V7.6h3.2v2.8') + S('M13.6 7.6V5.4')
+          + S('M7.4 14.4h9.2')],
+        ['broom', '扫帚', '拖把 打扫 清洁 家政',
+          A('M6.6 13.6h6.8l-1.6 6.8H8.2l-1.6-6.8Z')
+          + S('M6.6 13.6h6.8l-1.6 6.8H8.2l-1.6-6.8Z')
+          + S('M11.4 13.6 19.6 4.4')
+          + S('M8.6 16.6h5') + S('M9.2 19h3.6')],
+        ['bin', '垃圾桶', '垃圾袋 丢垃圾 卫生 回收',
+          A('M6.6 9.4h10.8l-.8 9.4a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8L6.6 9.4Z')
+          + S('M6.6 9.4h10.8l-.8 9.4a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8L6.6 9.4Z')
+          + S('M4.8 6.6h14.4') + S('M9.6 6.6V4.4h4.8v2.2')
+          + S('M10.4 12.4v4.4M13.6 12.4v4.4')],
+        ['curtain', '窗帘', '布艺 遮光 窗 软装',
+          A('M8.4 4.4h7.2v11.8H8.4z')
+          + S('M3.4 4.4h17.2')
+          + S('M8.4 4.4c-1 4-1 8 0 12') + S('M12 4.4c-1 4-1 8 0 12') + S('M15.6 4.4c-1 4-1 8 0 12')
+          + S('M7.6 16.4h8.8')],
+        ['bathtub', '浴缸', '洗澡 泡澡 卫浴 水费',
+          A('M6.4 11.4h11.2v2.8H6.4z')
+          + S('M4 11.4h16a0 0 0 0 1 0 0v3.2a4.4 4.4 0 0 1-4.4 4.4H8.4A4.4 4.4 0 0 1 4 14.6v-3.2Z')
+          + S('M8 11.4V6.6h3.4')
+          + S('M7.4 19 6.6 20.8M16.6 19l.8 1.8')],
+        ['door', '门', '房门 防盗门 入户 门锁',
+          A('M6.6 3.6h10.8v16.8H6.6z')
+          + S('M6.6 3.6h10.8v16.8H6.6z')
+          + S('M4 20.4h16')
+          + S('M13.8 12.4h.01')],
+        ['kettle', '水壶', '电水壶 烧水 饮水 水费',
+          A('M7.4 10.4h9.2v6.8a2.4 2.4 0 0 1-2.4 2.4H9.8a2.4 2.4 0 0 1-2.4-2.4v-6.8Z')
+          + S('M7.4 10.4h9.2v6.8a2.4 2.4 0 0 1-2.4 2.4H9.8a2.4 2.4 0 0 1-2.4-2.4v-6.8Z')
+          + S('M9.4 10.4V8.6h5.2v1.8')
+          + S('M7.4 12.6H5.6a2 2 0 0 0 0 4h1.8')
+          + S('M16.6 11.4l2.6-1.4v4l-2.6-1.4')]
+      ]
+    },
+    {
+      key: 'fun', label: '娱乐', hint: '玩、看、听、运动',
+      items: [
+        ['music', '音乐', '听歌 演唱会 网易云 音乐会员',
+          A('M8.4 16.2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2ZM16 13.8a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z')
+          + S('M11 18.8V4.8l7.6-1.8v10.8')
+          + S('M11 8.4l7.6-1.8')],
+        ['clapper', '电影', '影院 场记板 观影 电影票',
+          A('M4.6 9.8h14.8v4H4.6z')
+          + S('M4.6 9.8 6.2 4.6h13.2l-1.6 5.2H4.6Z')
+          + S('M4.6 9.8h14.8v9a1.4 1.4 0 0 1-1.4 1.4H6a1.4 1.4 0 0 1-1.4-1.4v-9Z')
+          + S('M8.8 4.8 7.8 9.6M12.8 4.8 11.8 9.6M16.6 4.8 15.6 9.6')],
+        ['ktv', 'KTV', '唱歌 麦克风 麦霸 量贩',
+          A('M10.6 4.6a3.2 3.2 0 0 1 3.2 3.2v4.4a3.2 3.2 0 0 1-6.4 0V7.8a3.2 3.2 0 0 1 3.2-3.2Z')
+          + S('M10.6 4.6a3.2 3.2 0 0 1 3.2 3.2v4.4a3.2 3.2 0 0 1-6.4 0V7.8a3.2 3.2 0 0 1 3.2-3.2Z')
+          + S('M7.4 12.2a3.2 3.2 0 0 0 6.4 0')
+          + S('M10.6 15.4v2.2a3 3 0 0 0 6 0v-1.2')
+          + S('M17.4 13.8a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z')],
+        ['football', '足球', '球赛 看球 踢球 体育',
+          A('M12 8.2l3.4 2.5-1.3 4h-4.2l-1.3-4L12 8.2Z')
+          + S('M12 3.6a8.4 8.4 0 1 1 0 16.8 8.4 8.4 0 0 1 0-16.8Z')
+          + S('M12 8.2v-4.6') + S('M15.4 10.7l4.2-1.4') + S('M13.9 14.7l2.6 3.4')
+          + S('M10.1 14.7l-2.6 3.4') + S('M8.6 10.7 4.4 9.3')],
+        ['swim', '游泳', '泳池 游泳馆 泡温泉 水上乐园',
+          A('M6.6 7.4h4.4a1.8 1.8 0 0 1 0 3.6H6.6a1.8 1.8 0 0 1 0-3.6ZM13 7.4h4.4a1.8 1.8 0 0 1 0 3.6H13a1.8 1.8 0 0 1 0-3.6Z')
+          + S('M4.4 7.4h15.2')
+          + S('M3 14.6c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0 3-1.2 4.5 0 3 1.2 4.5 0')
+          + S('M3 18.4c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0 3-1.2 4.5 0 3 1.2 4.5 0')],
+        ['tent', '露营', '帐篷 野营 户外 营地',
+          A('M12 6.6 18.4 19.4H5.6L12 6.6Z')
+          + S('M12 6.6 18.4 19.4H5.6L12 6.6Z')
+          + S('M12 19.4v-4.6l-2.4 4.6')
+          + S('M3.4 19.4h17.2')],
+        ['fishing', '钓鱼', '垂钓 鱼竿 水库 海钓',
+          A('M8.6 11.4c1.4-1.8 3.2-2.6 5.4-2.6 2.4 0 4.4 1.2 5.4 2.6-1 1.4-3 2.6-5.4 2.6-2.2 0-4-.8-5.4-2.6Z')
+          + S('M3.4 3.6v9.8a3 3 0 0 0 6 0')
+          + S('M8.6 11.4c1.4-1.8 3.2-2.6 5.4-2.6 2.4 0 4.4 1.2 5.4 2.6-1 1.4-3 2.6-5.4 2.6-2.2 0-4-.8-5.4-2.6Z')
+          + S('M8.6 11.4 5.6 8.8v5.2l3-2.6Z')
+          + S('M15.4 10.4h.01')],
+        ['dslr', '相机', '摄影 拍照 单反 胶片',
+          A('M4.6 9.4h14.8v8.2H4.6z')
+          + S('M6 6.4h2.6l1.4-2h4l1.4 2H18a2 2 0 0 1 2 2v9.2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.4a2 2 0 0 1 2-2Z')
+          + S('M12 10.4a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z')],
+        ['board', '棋牌', '桌游 围棋 象棋 麻将',
+          A('M6.2 5.4h4.4v4.4H6.2zM14.4 5.4h4.4v4.4h-4.4zM10.2 10.2h4.4v4.4h-4.4zM6.2 14.6h4.4v4.4H6.2z')
+          + S('M5 3.6h14a1.4 1.4 0 0 1 1.4 1.4v14a1.4 1.4 0 0 1-1.4 1.4H5A1.4 1.4 0 0 1 3.6 19V5A1.4 1.4 0 0 1 5 3.6Z')],
+        ['bowling', '保龄球', '球道 保龄 击球 娱乐城',
+          A('M12 3.4c1.6 0 2.4 1.2 2.4 2.4 0 1-.6 1.6-.6 2.6s1 1.6 1 3c0 2-1.2 3.4-2.8 3.4S9.2 13.4 9.2 11.4c0-1.4 1-2 1-3s-.6-1.6-.6-2.6c0-1.2.8-2.4 2.4-2.4Z')
+          + S('M12 3.4c1.6 0 2.4 1.2 2.4 2.4 0 1-.6 1.6-.6 2.6s1 1.6 1 3c0 2-1.2 3.4-2.8 3.4S9.2 13.4 9.2 11.4c0-1.4 1-2 1-3s-.6-1.6-.6-2.6c0-1.2.8-2.4 2.4-2.4Z')
+          + S('M11 8.2h.01M13 8.2h.01M12 10.4h.01')
+          + S('M18.2 14.8a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8Z')],
+        ['skate', '滑板', '滑板车 街头 极限 板仔',
+          A('M4.4 12.6h15.2v2.2H4.4z')
+          + S('M3.6 12.6c0 1.6 1.2 2.6 2.8 2.6h11.2c1.6 0 2.8-1 2.8-2.6')
+          + S('M7.4 17.4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z')
+          + S('M16.6 17.4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z')],
+        ['fireworks', '烟花', '焰火 跨年 节日 爆竹',
+          A('m12 3.2 1.2 3.2 3.2 1.2-3.2 1.2L12 12l-1.2-3.2L7.6 7.6l3.2-1.2L12 3.2Z')
+          + S('m12 3.2 1.2 3.2 3.2 1.2-3.2 1.2L12 12l-1.2-3.2L7.6 7.6l3.2-1.2L12 3.2Z')
+          + S('M7.4 17.6 9.8 15.2M16.6 17.6 14.2 15.2M12 20.8v-3.2')
+          + S('M4.6 12.6 6.6 14.6M19.4 12.6l-2 2')]
+      ]
+    },
+    {
+      key: 'pet', label: '宠物', hint: '猫狗、粮、看病',
+      items: [
+        ['cat', '猫', '猫咪 猫粮 喵 布偶 狸花',
+          A('M9.4 13h5.2v3.6a2 2 0 0 1-2 2h-1.2a2 2 0 0 1-2-2V13Z')
+          + S('M12 5.8a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
+          + S('M9.4 7.4 8.6 4.2l2.8 1.4M14.6 7.4l.8-3.2-2.8 1.4')
+          + S('M10.8 8.4h.01M13.2 8.4h.01')
+          + S('M9.4 13h5.2v3.6a2 2 0 0 1-2 2h-1.2a2 2 0 0 1-2-2V13Z')
+          + S('M14.6 16.6c2.4.2 3.6-1.4 3-3.4')],
+        ['dog', '狗', '狗狗 狗粮 汪 柯基 金毛',
+          A('M6.6 11.4a5.4 5.4 0 0 1 10.8 0v2a4 4 0 0 1-4 4h-2.8a4 4 0 0 1-4-4v-2Z')
+          + S('M6.6 11.4a5.4 5.4 0 0 1 10.8 0v2a4 4 0 0 1-4 4h-2.8a4 4 0 0 1-4-4v-2Z')
+          + S('M6.6 10.2C4.4 9.8 3.4 8.2 4 6.4c1.8.2 3 1.4 3.4 3.2')
+          + S('M17.4 10.2c2.2-.4 3.2-2 2.6-3.8-1.8.2-3 1.4-3.4 3.2')
+          + S('M9.8 12.2h.01M14.2 12.2h.01') + S('M12 15.4v1M10.8 17.2h2.4')],
+        ['rabbit', '兔子', '兔兔 垂耳兔 兔粮 小白兔',
+          A('M12 9.6a4.6 4.6 0 1 1 0 9.2 4.6 4.6 0 0 1 0-9.2Z')
+          + S('M12 9.6a4.6 4.6 0 1 1 0 9.2 4.6 4.6 0 0 1 0-9.2Z')
+          + S('M9.8 9.8C8.6 6.2 8.8 4.2 10 4.2s1.6 2.4 1.4 5.4')
+          + S('M14.2 9.8c1.2-3.6 1-5.6-.2-5.6s-1.6 2.4-1.4 5.4')
+          + S('M10.6 13.6h.01M13.4 13.6h.01') + S('M11.2 16.2h1.6')],
+        ['hamster', '仓鼠', '仓鼠 龙猫 鼠粮 荷兰猪',
+          A('M12 8.6a5.4 5.4 0 1 1 0 10.8 5.4 5.4 0 0 1 0-10.8Z')
+          + S('M12 8.6a5.4 5.4 0 1 1 0 10.8 5.4 5.4 0 0 1 0-10.8Z')
+          + S('M7.4 9.6a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6Z')
+          + S('M16.6 9.6a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6Z')
+          + S('M10.4 12.6h.01M13.6 12.6h.01') + S('M12 14.6v1.2')],
+        ['fish', '鱼', '鱼缸 养鱼 观赏鱼 水族',
+          A('M6.4 12c1.8-2.6 4-3.8 6.6-3.8 2.8 0 5 1.6 6.2 3.8-1.2 2.2-3.4 3.8-6.2 3.8-2.6 0-4.8-1.2-6.6-3.8Z')
+          + S('M6.4 12c1.8-2.6 4-3.8 6.6-3.8 2.8 0 5 1.6 6.2 3.8-1.2 2.2-3.4 3.8-6.2 3.8-2.6 0-4.8-1.2-6.6-3.8Z')
+          + S('M6.4 12 3.4 9.4v5.2L6.4 12Z')
+          + S('M15.6 10.8h.01')],
+        ['bird', '鸟', '鹦鹉 鸟粮 养鸟 鹩哥',
+          A('M8.4 10.8h6.4a2.8 2.8 0 0 1 0 5.6H9.6a2.4 2.4 0 0 1-2.4-2.4c0-1.2.4-2 1.2-3.2Z')
+          + S('M8.4 10.8h6.4a2.8 2.8 0 0 1 0 5.6H9.6a2.4 2.4 0 0 1-2.4-2.4c0-1.2.4-2 1.2-3.2Z')
+          + S('M14.8 11l3.2-1.2-1.6 3')
+          + S('M6.8 12 4.6 9.2v5.2L6.8 12Z')
+          + S('M11.6 12.4h.01')
+          + S('M9.6 16.4v2.6M13 16.4v2.6')],
+        ['paw', '爪印', '脚印 宠物店 猫爪 狗爪',
+          A('M12 13.6c2 0 3.6 1.2 3.6 2.6 0 1.2-1.4 1.8-3.6 1.8s-3.6-.6-3.6-1.8c0-1.4 1.6-2.6 3.6-2.6Z')
+          + S('M7.3 10.1a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z')
+          + S('M16.7 10.1a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z')
+          + S('M10.6 7.4a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z')
+          + S('M13.4 7.4a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z')
+          + S('M12 13.6c2 0 3.6 1.2 3.6 2.6 0 1.2-1.4 1.8-3.6 1.8s-3.6-.6-3.6-1.8c0-1.4 1.6-2.6 3.6-2.6Z')],
+        ['vet', '宠物医院', '看病 打针 绝育 兽医',
+          A('M9.8 9h2.4v2.2H14v2.4h-1.8v2.2H9.8v-2.2H8V11.2h1.8z')
+          + S('M4 11.4 12 4.6l8 6.8v8.4H4v-8.4Z')
+          + S('M9.8 9h2.4v2.2H14v2.4h-1.8v2.2H9.8v-2.2H8V11.2h1.8z')],
+        ['litter', '猫砂', '铲屎 猫砂盆 猫厕所 除臭',
+          A('M4.6 12.4h14.8l-1 5.2a2 2 0 0 1-2 1.6H7.6a2 2 0 0 1-2-1.6l-1-5.2Z')
+          + S('M4.6 12.4h14.8l-1 5.2a2 2 0 0 1-2 1.6H7.6a2 2 0 0 1-2-1.6l-1-5.2Z')
+          + S('M3.6 12.4h16.8')
+          + S('M9 16.2h.01M12 16.8h.01M15 16.2h.01')
+          + S('M8.4 9.4 6.6 4.6h10.8l-1.8 4.8')],
+        ['bone', '骨头', '狗咬胶 磨牙棒 零食 骨',
+          A('M7.6 10.8h8.8v2.6H7.6z')
+          + S('M5.6 9.4a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z')
+          + S('M5.6 13a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z')
+          + S('M18.4 9.4a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z')
+          + S('M18.4 13a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z')
+          + S('M6 10.8h12v2.6H6z')],
+        ['vaccine', '疫苗', '打针 驱虫 免疫 针剂',
+          A('M10 12.4h4.4v4.2H10z')
+          + S('M14.4 3.6 20.4 9.6')
+          + S('M17.4 6.6l-9 9-3.4 1.2 1.2-3.4 9-9')
+          + S('M6.4 17.6 4 20')
+          + S('M12.2 15.2l3.4-3.4')],
+        ['groom', '美容', '梳毛 剃毛 洗澡 宠物美容',
+          A('M5.4 8.6h13.2v4H5.4z')
+          + S('M5.4 8.6h13.2v3.4H5.4z')
+          + S('M7 12v8M10 12v8M13 12v8M16 12v6')
+          + S('M7 8.6V6.4h10v2.2')]
+      ]
+    },
+    {
+      key: 'family', label: '家庭', hint: '孩子、父母、家人',
+      items: [
+        ['bottle', '奶瓶', '奶粉 喂奶 奶嘴 婴儿',
+          A('M9.4 8.6h5.2v9.6a2 2 0 0 1-2 2h-1.2a2 2 0 0 1-2-2V8.6Z')
+          + S('M9.4 8.6h5.2v9.6a2 2 0 0 1-2 2h-1.2a2 2 0 0 1-2-2V8.6Z')
+          + S('M10.6 8.6V6.4h2.8v2.2')
+          + S('M11 4.4h2v2')
+          + S('M9.4 12.4h5.2M9.4 15.4h5.2')],
+        ['toy', '玩具', '积木 儿童玩具 乐高 玩偶',
+          A('M5.4 13.4h6.2v6.2H5.4z')
+          + S('M5.4 13.4h6.2v6.2H5.4z')
+          + S('M12.4 8.4h6.2v6.2h-6.2z')
+          + S('M7.2 13.4v-1.6M9.8 13.4v-1.6')
+          + S('M14.2 8.4V6.8M16.8 8.4V6.8')],
+        ['boy', '男孩', '儿子 男孩 小男孩 娃',
+          A('M12 4.6a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z')
+          + S('M12 4.6a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z')
+          + S('M8.6 20.4v-3a3.4 3.4 0 0 1 6.8 0v3')
+          + S('M8.6 16.6 6.6 18.6M15.4 16.6l2 2')],
+        ['girl', '女孩', '女儿 小女孩 公主 娃',
+          A('M9 12.4h6l2 7.2H7l2-7.2Z')
+          + S('M12 5a2.4 2.4 0 1 1 0 4.8A2.4 2.4 0 0 1 12 5Z')
+          + S('M9 12.4h6l2 7.2H7l2-7.2Z')
+          + S('M10.4 19.6v1.4M13.6 19.6v1.4')],
+        ['mom', '妈妈', '母亲 妈 老妈 母子',
+          A('M6.6 20.4c.4-3.8 2.4-5.8 5.4-5.8s5 2 5.4 5.8H6.6Z')
+          + S('M12 5.8a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z')
+          + S('M8.8 12.2c-1 1.6-1 3.6-.6 5.8M15.2 12.2c1 1.6 1 3.6.6 5.8')
+          + S('M6.6 20.4c.4-3.8 2.4-5.8 5.4-5.8s5 2 5.4 5.8')],
+        ['dad', '爸爸', '父亲 爸 老爸 父子',
+          A('M6.2 20.4c.4-3.8 2.6-5.8 5.8-5.8s5.4 2 5.8 5.8H6.2Z')
+          + S('M12 5.8a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z')
+          + S('M8.8 6.6c.6-1.4 1.8-2.2 3.2-2.2s2.6.8 3.2 2.2')
+          + S('M6.2 20.4c.4-3.8 2.6-5.8 5.8-5.8s5.4 2 5.8 5.8')
+          + S('M12 13.4v6.4')],
+        ['album', '全家福', '合影 家庭照 照片 相册',
+          A('M4.6 15.4h14.8v3.6H4.6z')
+          + S('M3.4 4.4h17.2v15.2H3.4z')
+          + S('M8 12.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z')
+          + S('M16 12.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z')
+          + S('M12 11a1.8 1.8 0 1 1 0 3.6A1.8 1.8 0 0 1 12 11Z')],
+        ['stroller', '婴儿车', '推车 遛娃 童车 母婴',
+          A('M5.4 11.4h8.4l-1.6 4.4H7.4l-2-4.4Z')
+          + S('M5.4 11.4a6 6 0 0 1 2.4-4.8')
+          + S('M5.4 11.4 4 5.6h1.8')
+          + S('M5.4 11.4h8.4l-1.6 4.4H7.4l-2-4.4Z')
+          + S('M8.4 17.4 8.4 18.4M14 15.8 15.4 18.4')
+          + S('M7.6 19.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z')
+          + S('M15.4 19.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z')],
+        ['crib', '摇篮', '婴儿床 床铃 托儿 婴儿房',
+          A('M5.4 12.4h13.2v2.2H5.4z')
+          + S('M4.4 12.4h15.2v3.4a3.6 3.6 0 0 1-3.6 3.6H8a3.6 3.6 0 0 1-3.6-3.6v-3.4Z')
+          + S('M8 12.4v7M12 12.4v7M16 12.4v7')
+          + S('M4.4 12.4V9a1.6 1.6 0 0 1 1.6-1.6h1.4')
+          + S('M4.4 19.4v1.2M19.6 19.4v1.2')],
+        ['diaper', '尿不湿', '纸尿裤 尿布 拉拉裤 婴儿',
+          A('M6.4 9.4h11.2v3.6a5.6 5.6 0 0 1-11.2 0V9.4Z')
+          + S('M6.4 9.4h11.2v3.6a5.6 5.6 0 0 1-11.2 0V9.4Z')
+          + S('M6.4 9.4 4.4 7.4M17.6 9.4l2-2')
+          + S('M9.6 13.6h4.8')],
+        ['school', '学校', '学费 上学 校区 幼儿园',
+          A('M9.6 20.4V14h4.8v6.4z')
+          + S('M2.6 9.6 12 4.4l9.4 5.2')
+          + S('M4.6 9.6v10.8h14.8V9.6')
+          + S('M9.6 20.4V14h4.8v6.4')
+          + S('M15.6 12h2.2v2.2h-2.2z')],
+        ['birthday', '生日', '过生日 蛋糕 派对 寿星',
+          A('M5.4 13.8h13.2v5.8H5.4z')
+          + S('M5.4 13.8h13.2v5.8H5.4z')
+          + S('M4.4 19.6h15.2')
+          + S('M9.4 13.8v-2.4M14.6 13.8v-2.4')
+          + S('M9.4 9.4c.8.8.7 1.6 0 2.2M14.6 9.4c.8.8.7 1.6 0 2.2')]
+      ]
+    },
+    {
+      key: 'finance', label: '财务', hint: '存钱、投资、报销',
+      items: [
+        ['passbook', '存折', '存款 定期 储蓄 银行',
+          A('M12 10.4a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z')
+          + S('M5.4 4.6h13.2v15.4H5.4z')
+          + S('M8.4 8h7.2')
+          + S('M12 10.4a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z')
+          + S('M8.6 17.4h6.8')],
+        ['stock', '股票', '炒股 A股 持仓 证券',
+          A('M6.8 13.6h2.4v6.4H6.8zM11.4 10.4H14v9.6h-2.6zM16.4 6.4h2.4v13.6h-2.4z')
+          + S('M3.6 20.4h16.8') + S('M3.6 20.4V4')
+          + S('M6.8 13.6h2.4v6.4H6.8zM11.4 10.4H14v9.6h-2.6zM16.4 6.4h2.4v13.6h-2.4z')],
+        ['fund', '基金', '定投 理财 净值 ETF',
+          A('M12 3.8a8.2 8.2 0 0 1 8.2 8.2h-4a4.2 4.2 0 1 0-4.2 4.2V20.2A8.2 8.2 0 0 1 12 3.8Z')
+          + S('M12 3.8a8.2 8.2 0 1 1 0 16.4 8.2 8.2 0 0 1 0-16.4Z')
+          + S('M12 12V3.8M12 12h8.2')
+          + S('m15.6 8.4 4.6-4.6M20.2 3.8h-3.4M20.2 3.8v3.4')],
+        ['credit2', '信用卡', '刷卡 额度 还款 借贷',
+          A('M3.4 9.4h17.2v3H3.4z')
+          + S('M5.6 5.4h12.8a2.2 2.2 0 0 1 2.2 2.2v8.8a2.2 2.2 0 0 1-2.2 2.2H5.6a2.2 2.2 0 0 1-2.2-2.2V7.6a2.2 2.2 0 0 1 2.2-2.2Z')
+          + S('M3.4 9.4h17.2')
+          + S('M6 15h3.6')],
+        ['refund', '退款', '退货 返还 退钱 售后',
+          A('M3.4 8.4h17.2v7.2H3.4z')
+          + S('M4.6 6.4h14.8a1.8 1.8 0 0 1 1.8 1.8v7.6a1.8 1.8 0 0 1-1.8 1.8H4.6a1.8 1.8 0 0 1-1.8-1.8V8.2a1.8 1.8 0 0 1 1.8-1.8Z')
+          + S('M15.4 9.4a3.2 3.2 0 1 0 1.9 3') + S('M15.2 6.8v2.6h-2.6')],
+        ['reimburse', '报销', '公费 差旅 报销单 发票',
+          A('M7.4 5.4h9.2v15.2l-2.3-1.6-2.3 1.6-2.3-1.6-2.3 1.6V5.4Z')
+          + S('M7.4 5.4h9.2v15.2l-2.3-1.6-2.3 1.6-2.3-1.6-2.3 1.6V5.4Z')
+          + S('M9.4 11.4 11.4 13.4 14.6 9.6')],
+        ['cashier', '收银机', '收银 门店 结算 便利店',
+          A('M4.4 15.6h15.2v3.4H4.4z')
+          + S('M4.4 15.6h15.2v3.4a1.4 1.4 0 0 1-1.4 1.4H5.8a1.4 1.4 0 0 1-1.4-1.4v-3.4Z')
+          + S('M6.6 4.4h6.4a1.4 1.4 0 0 1 1.4 1.4v9.8H5.2V5.8a1.4 1.4 0 0 1 1.4-1.4Z')
+          + S('M15.4 8.4h3.2v7.2')
+          + S('M8 8.4h3.4')],
+        ['invoice', '发票', '开票 票据 报销凭证 税票',
+          A('M6.4 8.4h11.2v4.2H6.4z')
+          + S('M5.4 4.4h13.2v15.2H5.4z')
+          + S('M8.4 15.4h7.2M8.4 18h4.4')
+          + S('M8.4 8.4h3.2')],
+        ['tax', '税费', '缴税 个税 百分之 手续',
+          A('M8 16.4a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM16 3.6a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z')
+          + S('M6.4 20.4 17.6 3.6')
+          + S('M8 16.4a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z')
+          + S('M16 3.6a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z')],
+        ['installment', '分期', '花呗 分期付款 月供 借款',
+          A('M4.4 9.4h5.2v4.2H4.4zM14.4 9.4h5.2v4.2h-5.2z')
+          + S('M3.4 6.4h17.2v11.2H3.4z')
+          + S('M12 7.4v9.2')
+          + S('M9.6 5.2 12 2.6l2.4 2.6')],
+        ['exchange', '汇率', '换汇 外币 美元 结汇',
+          A('M12 3.6a8.4 8.4 0 0 1 8.4 8.4h-3.2A5.2 5.2 0 0 0 12 6.8V3.6Z')
+          + S('M12 3.6a8.4 8.4 0 1 0 8.4 8.4')
+          + S('M20.4 12h-3.2M17.2 12l2.2-2.2')
+          + S('M8.8 9.4 10.6 12l1.8-2.6M10.6 12v4.4M8.8 13.6h3.6')],
+        ['safe', '保险箱', '存钱 保险柜 储蓄 应急金',
+          A('M12 8.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
+          + S('M5.6 4.4h12.8a2.2 2.2 0 0 1 2.2 2.2v11.2a2.2 2.2 0 0 1-2.2 2.2H5.6a2.2 2.2 0 0 1-2.2-2.2V6.6a2.2 2.2 0 0 1 2.2-2.2Z')
+          + S('M12 8.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
+          + S('M15.4 12h3.8')]
+      ]
+    },
+    {
+      key: 'mood', label: '个性', hint: '标签、心愿、自定义',
+      items: [
+        ['spark', '星星', '星标 闪耀 愿望 收藏',
+          A('m12 3.4 2.4 5.4 5.4 2.4-5.4 2.4L12 19l-2.4-5.4L4.2 11.2l5.4-2.4L12 3.4Z')
+          + S('m12 3.4 2.4 5.4 5.4 2.4-5.4 2.4L12 19l-2.4-5.4L4.2 11.2l5.4-2.4L12 3.4Z')],
+        ['zap', '闪电', '电费 充电 快速 能量',
+          A('M13.6 2.6 5.4 13h5.2L10.4 21.4 18.6 11h-5.2l.2-8.4Z')
+          + S('M13.6 2.6 5.4 13h5.2L10.4 21.4 18.6 11h-5.2l.2-8.4Z')],
+        ['love', '爱心', '喜欢 心愿 恋爱 表白',
+          A('M12 18.6s-5.8-3.5-5.8-7.4A3.4 3.4 0 0 1 12 8.9a3.4 3.4 0 0 1 5.8 2.3c0 3.9-5.8 7.4-5.8 7.4Z')
+          + S('M12 20.4s-7.6-4.6-7.6-9.7A4.5 4.5 0 0 1 12 7.4a4.5 4.5 0 0 1 7.6 3.3c0 5.1-7.6 9.7-7.6 9.7Z')],
+        ['tiara', '皇冠', '会员 VIP 尊享 头衔',
+          A('M3.4 8.4 7 13.2 12 6.4l5 6.8 3.6-4.8v9.2H3.4V8.4Z')
+          + S('M3.4 8.4 7 13.2 12 6.4l5 6.8 3.6-4.8v9.2H3.4V8.4Z')
+          + S('M3.4 17.6h17.2')],
+        ['gem', '钻石', '珠宝 首饰 贵重 奢侈',
+          A('M7.6 4.4h8.8l4 4.6-8.4 10.6L3.6 9l4-4.6Z')
+          + S('M7.6 4.4h8.8l4 4.6-8.4 10.6L3.6 9l4-4.6Z')
+          + S('M3.6 9h16.8M7.6 4.4 12 19.6 16.4 4.4')],
+        ['rocket', '火箭', '目标 冲刺 起飞 加速',
+          A('M12 3.4c2.6 2 4 4.8 4 8.2 0 2-.6 3.8-1.8 5.4h-4.4A8.6 8.6 0 0 1 8 11.6c0-3.4 1.4-6.2 4-8.2Z')
+          + S('M12 3.4c2.6 2 4 4.8 4 8.2 0 2-.6 3.8-1.8 5.4h-4.4A8.6 8.6 0 0 1 8 11.6c0-3.4 1.4-6.2 4-8.2Z')
+          + S('M8.4 13.4 6 17.2l3.4-.8M15.6 13.4l2.4 3.8-3.4-.8')
+          + S('M12 17.6v3.4')
+          + S('M12 7.6h.01')],
+        ['clover', '四叶草', '幸运 好运 抽奖 祈福',
+          A('M12 12c-1.6-1.6-2.4-2.8-2.4-4.2a2.4 2.4 0 0 1 4.8 0c0 1.4-.8 2.6-2.4 4.2ZM12 12c1.6-1.6 2.8-2.4 4.2-2.4a2.4 2.4 0 0 1 0 4.8c-1.4 0-2.6-.8-4.2-2.4ZM12 12c1.6 1.6 2.4 2.8 2.4 4.2a2.4 2.4 0 0 1-4.8 0c0-1.4.8-2.6 2.4-4.2ZM12 12c-1.6 1.6-2.8 2.4-4.2 2.4a2.4 2.4 0 0 1 0-4.8c1.4 0 2.6.8 4.2 2.4Z')
+          + S('M12 12c-1.6-1.6-2.4-2.8-2.4-4.2a2.4 2.4 0 0 1 4.8 0c0 1.4-.8 2.6-2.4 4.2ZM12 12c1.6-1.6 2.8-2.4 4.2-2.4a2.4 2.4 0 0 1 0 4.8c-1.4 0-2.6-.8-4.2-2.4ZM12 12c1.6 1.6 2.4 2.8 2.4 4.2a2.4 2.4 0 0 1-4.8 0c0-1.4.8-2.6 2.4-4.2ZM12 12c-1.6 1.6-2.8 2.4-4.2 2.4a2.4 2.4 0 0 1 0-4.8c1.4 0 2.6.8 4.2 2.4Z')],
+        ['smiley', '笑脸', '开心 娱乐 聚会 好心情',
+          A('M12 3.6a8.4 8.4 0 1 1 0 16.8 8.4 8.4 0 0 1 0-16.8Z')
+          + S('M12 3.6a8.4 8.4 0 1 1 0 16.8 8.4 8.4 0 0 1 0-16.8Z')
+          + S('M9 10h.01M15 10h.01')
+          + S('M8.6 13.6c.9 1.6 2 2.4 3.4 2.4s2.5-.8 3.4-2.4')],
+        ['sunburst', '太阳', '晴天 日出 阳光 日光',
+          A('M12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z')
+          + S('M12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z')
+          + S('M12 2.6v2.4M12 19v2.4M2.6 12h2.4M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7')],
+        ['rainbow', '彩虹', '彩色 好运 雨天 童话',
+          A('M3.4 17.6a8.6 8.6 0 0 1 17.2 0h-3.2a5.4 5.4 0 0 0-10.8 0H3.4Z')
+          + S('M3.4 17.6a8.6 8.6 0 0 1 17.2 0')
+          + S('M6.6 17.6a5.4 5.4 0 0 1 10.8 0')
+          + S('M3.4 20.6h4M16.6 20.6h4')],
+        ['anchor', '锚', '稳定 压舱 出海 港口',
+          A('M12 4.4a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4Z')
+          + S('M12 4.4a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4Z')
+          + S('M12 8.8v11.6')
+          + S('M8.2 11.8h7.6')
+          + S('M4.6 14.4a7.4 7.4 0 0 0 14.8 0')],
+        ['compass', '指南针', '方向 旅行 探索 定位',
+          A('m15.6 8.4-2 5.2-5.2 2 2-5.2 5.2-2Z')
+          + S('M12 3.6a8.4 8.4 0 1 1 0 16.8 8.4 8.4 0 0 1 0-16.8Z')
+          + S('m15.6 8.4-2 5.2-5.2 2 2-5.2 5.2-2Z')]
+      ]
+    }
+  ];
 
   /* 兼容命名：旧契约、分类种子、任务书里的近义词都指向同一份路径。 */
   var ALIASES = {
@@ -20810,6 +21951,117 @@ textarea::selection {
 
   /* 单色几何图标：闪电（水电） */
   PATHS['bolt'] = '<path d="M13.5 2.5 5 13.2h5.3L10.5 21.5 19 10.8h-5.3l-.2-8.3Z"/>';
+
+  /* ---------------- 自定义图标库落地 ----------------
+   * 把 8 组 × 12 枚写进 PATHS，同时建一份元数据表：
+   *   META[key] = { key, label, group, keywords, custom }
+   * 分组 / 中文名 / 搜索词只活在这里，数据库仍然只存 icon 字符串。
+   * 与已存在的 key 重名的一律跳过 —— 这是「自定义候选 ∩ 系统分类 = 0」的运行时兜底。 */
+  var META = Object.create(null);
+  var CUSTOM_KEYS = [];
+
+  (function registerCustom() {
+    for (var g = 0; g < CUSTOM_ICON_GROUPS.length; g += 1) {
+      var group = CUSTOM_ICON_GROUPS[g];
+      for (var i = 0; i < group.items.length; i += 1) {
+        var item = group.items[i];
+        var key = item[0];
+        if (!key || PATHS[key]) { continue; }
+        PATHS[key] = item[3];
+        CATEGORY_KEYS[key] = 1;
+        CUSTOM_KEYS.push(key);
+        META[key] = {
+          key: key,
+          label: String(item[1] || key),
+          keywords: String(item[2] || ''),
+          group: group.key,
+          custom: true
+        };
+      }
+    }
+  }());
+
+  /* 系统分类正在用的图标（分组、标签保持线性风格，不进自定义候选） */
+  var SYSTEM_CATEGORY_KEYS = [
+    'food', 'bus', 'bag', 'house', 'fun', 'health', 'book', 'phone', 'gift', 'ellipsis',
+    'daily', 'carrot', 'fruit', 'snack', 'sport', 'shirt', 'beauty', 'sofa', 'baby', 'elder',
+    'chat', 'plane', 'glass', 'plug', 'car', 'pet', 'briefcase', 'hammer', 'heart', 'ticket',
+    'gamepad', 'wrench', 'washer', 'family', 'salary', 'bonus', 'invest', 'parttime',
+    'redpacket', 'coins', 'kit', 'cap', 'box', 'dots'
+  ];
+
+  /* 系统分类图标的中文名：设置页的 aria-label 和候选格标签都从这里来，
+   * 不再维护第二份 CAT_ICON_LABELS（改图标只改一处）。 */
+  var SYSTEM_LABELS = {
+    food: '餐饮', bus: '交通', bag: '购物', house: '住房', fun: '娱乐', health: '医疗',
+    book: '书籍', phone: '通讯', gift: '礼物', ellipsis: '更多', dots: '其他',
+    daily: '日用', carrot: '蔬菜', fruit: '水果', snack: '零食', sport: '运动',
+    shirt: '服饰', beauty: '美容', sofa: '居家', baby: '孩子', elder: '长辈',
+    chat: '社交', plane: '旅行', glass: '烟酒', plug: '数码', car: '汽车', pet: '宠物',
+    briefcase: '办公', hammer: '维修', heart: '捐赠', ticket: '彩票', gamepad: '游戏',
+    wrench: '工具', washer: '电器', family: '亲友', salary: '工资', bonus: '奖金',
+    invest: '理财', parttime: '兼职', redpacket: '红包', coins: '硬币', kit: '医疗箱',
+    cap: '学习', box: '其他'
+  };
+
+  (function registerSystemMeta() {
+    for (var key in SYSTEM_LABELS) {
+      if (!Object.prototype.hasOwnProperty.call(SYSTEM_LABELS, key)) { continue; }
+      if (!META[key]) {
+        META[key] = { key: key, label: SYSTEM_LABELS[key], keywords: '', group: 'system', custom: false };
+      }
+    }
+  }());
+
+  function customGroups() {
+    var out = [];
+    for (var i = 0; i < CUSTOM_ICON_GROUPS.length; i += 1) {
+      var group = CUSTOM_ICON_GROUPS[i];
+      var keys = [];
+      for (var j = 0; j < group.items.length; j += 1) {
+        if (META[group.items[j][0]]) { keys.push(group.items[j][0]); }
+      }
+      out.push({ key: group.key, label: group.label, hint: group.hint || '', keys: keys });
+    }
+    return out;
+  }
+
+  function labelOf(name) {
+    var key = resolveName(name);
+    var meta = META[key];
+    if (meta) { return meta.label; }
+    var alias = ALIASES[String(name || '')];
+    if (alias && META[alias]) { return META[alias].label; }
+    return String(name || '');
+  }
+
+  function categoryIconKeys() {
+    var out = [];
+    for (var i = 0; i < SYSTEM_CATEGORY_KEYS.length; i += 1) {
+      if (PATHS[SYSTEM_CATEGORY_KEYS[i]]) { out.push(SYSTEM_CATEGORY_KEYS[i]); }
+    }
+    return out;
+  }
+
+  /* 自定义候选：只有专属库，绝不含系统分类那批 key */
+  function customIconKeys() {
+    return CUSTOM_KEYS.slice();
+  }
+
+  /* 搜索：中文名 / 关键词 / key 三路命中，空词返回整组 */
+  function searchIcons(keyword, groupKey) {
+    var q = String(keyword || '').trim().toLowerCase();
+    var out = [];
+    for (var i = 0; i < CUSTOM_KEYS.length; i += 1) {
+      var key = CUSTOM_KEYS[i];
+      var meta = META[key];
+      if (groupKey && meta.group !== groupKey) { continue; }
+      if (!q) { out.push(key); continue; }
+      var hay = (meta.label + ' ' + meta.keywords + ' ' + meta.key).toLowerCase();
+      if (hay.indexOf(q) >= 0) { out.push(key); }
+    }
+    return out;
+  }
 
   function escapeAttr(value) {
     return String(value).replace(/[&<>"']/g, function (ch) {
@@ -20916,7 +22168,16 @@ textarea::selection {
     names: names,
     count: Object.keys(PATHS).length,
     defaultSize: DEFAULT_SIZE,
-    defaultStroke: DEFAULT_STROKE
+    defaultStroke: DEFAULT_STROKE,
+    categoryStroke: CATEGORY_STROKE,
+    /* 2.6 新增：自定义图标库与元数据 */
+    groups: customGroups,
+    customKeys: customIconKeys,
+    systemCategoryKeys: categoryIconKeys,
+    search: searchIcons,
+    labelOf: labelOf,
+    meta: function (name) { return META[resolveName(name)] || null; },
+    isCategory: function (name) { return !!CATEGORY_KEYS[resolveName(name)]; }
   });
 
   UI.icons = api;
@@ -20925,6 +22186,280 @@ textarea::selection {
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
+  }
+})(
+  typeof window !== 'undefined'
+    ? window
+    : (typeof globalThis !== 'undefined' ? globalThis : this)
+);
+
+</script>
+  <script>
+/* 小账本 2.0 · js/ui/icon-picker.js · 分类图标选择器（2.6 新增）
+ * ------------------------------------------------------------------
+ * 自定义分类的图标从 40 个膨胀到 96 个（8 组 × 12 枚）之后，不能再一整片堆在
+ * 面板里。这里做成一个可复用组件：搜索 + 分组横向标签 + 最近使用 + 当前图标，
+ * 手机端 6 列，只渲染当前分组。
+ *
+ * 公开：XZB.ui.iconPicker
+ *   mount(container, options) -> controller { value(), setValue(), destroy() }
+ *
+ * options：
+ *   value     当前选中的 icon key（旧图标也能原样保留）
+ *   kind      'expense' | 'income'，只影响「推荐」这一栏的排序，不限制选择范围
+ *   recents   最近使用的 key 数组（调用方负责持久化）
+ *   onPick    function(key, label) —— 选中即回调，由调用方同步 model
+ *   onRecent  function(key) —— 想把「最近使用」落盘的调用方在这里收
+ *   columns   列数，默认 6
+ *
+ * 约束：全部本地内联 SVG，无 Emoji、无图标 CDN、无网络请求。
+ */
+(function (global) {
+  'use strict';
+
+  var XZB = global.XZB || (global.XZB = {});
+  var UI = XZB.UI || (XZB.UI = {});
+  var doc = global.document;
+
+  function iconsApi() {
+    var group = XZB.ui || XZB.UI || null;
+    return group ? group.icons : null;
+  }
+
+  function el(tag, className, text) {
+    var node = doc.createElement(tag);
+    if (className) { node.className = className; }
+    if (text !== undefined && text !== null) { node.textContent = String(text); }
+    return node;
+  }
+
+  function clear(node) {
+    if (!node) { return node; }
+    while (node.firstChild) { node.removeChild(node.firstChild); }
+    return node;
+  }
+
+  /* 推荐位：新建支出更常落到吃 / 行 / 家，收入更常落到财务与个性。
+   * 只是排序建议，用户随时可以切到别的分组。 */
+  var RECOMMEND = {
+    expense: [
+      'hotpot', 'latte', 'milktea', 'burger', 'noodles', 'sushi', 'cake', 'juice',
+      'taxi', 'subway', 'bike', 'gas', 'parking',
+      'key', 'lamp', 'fridge', 'detergent', 'bin',
+      'clapper', 'dslr', 'music', 'football', 'tent',
+      'cat', 'dog', 'bottle', 'school', 'birthday', 'spark', 'love'
+    ],
+    income: [
+      'passbook', 'stock', 'fund', 'safe', 'cashier', 'invoice', 'refund', 'reimburse',
+      'installment', 'exchange', 'tax',
+      'tiara', 'gem', 'rocket', 'clover', 'spark', 'love', 'smiley',
+      'clapper', 'dslr', 'football', 'cat', 'bike'
+    ]
+  };
+
+  /* 分组配色：只用于「选择器里的预览」，让 96 枚图标一眼看出是彩色的；
+   * 真正落到分类上的颜色，仍然由分类自己的色槽（categoryTone）决定。 */
+  var GROUP_TONE = {
+    food: 1, travel: 2, home: 4, fun: 5, pet: 8, family: 3, finance: 10, mood: 11
+  };
+
+  function mount(container, options) {
+    var opt = options || {};
+    var icons = iconsApi();
+    if (!container || !icons || typeof icons.node !== 'function') {
+      return { value: function () { return opt.value || ''; }, setValue: function () {}, destroy: function () {} };
+    }
+
+    var state = {
+      value: String(opt.value || ''),
+      group: 'recommend',
+      keyword: '',
+      recents: Array.isArray(opt.recents) ? opt.recents.slice(0, 12) : []
+    };
+
+    var root = el('div', 's-icon-picker');
+    var searchWrap = el('div', 's-icon-picker__search');
+    var input = el('input', 's-icon-picker__input');
+    input.type = 'search';
+    input.placeholder = '搜索图标（拼音或中文）';
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('aria-label', '搜索分类图标');
+    searchWrap.appendChild(input);
+    root.appendChild(searchWrap);
+
+    var tabs = el('div', 's-icon-picker__tabs');
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', '图标分组');
+    root.appendChild(tabs);
+
+    var grid = el('div', 's-icon-picker__grid');
+    if (opt.columns) { root.style.setProperty('--s-icon-cols', String(opt.columns)); }
+    root.appendChild(grid);
+
+    var hint = el('p', 's-icon-picker__hint', '');
+    root.appendChild(hint);
+    container.appendChild(root);
+
+    var groups = icons.groups();
+
+    /* 当前图标不在专属库里（老数据 / 系统图标）时，单独给一个「当前」页，
+     * 免得用户点开面板发现自己的图标"丢了"。 */
+    function valueInLibrary() {
+      if (!state.value) { return true; }
+      return icons.customKeys().indexOf(state.value) >= 0;
+    }
+
+    function tabDefs() {
+      var defs = [{ key: 'recommend', label: '推荐' }];
+      if (state.recents.length) { defs.push({ key: 'recent', label: '最近' }); }
+      if (!valueInLibrary()) { defs.push({ key: 'current', label: '当前' }); }
+      for (var i = 0; i < groups.length; i += 1) {
+        defs.push({ key: groups[i].key, label: groups[i].label });
+      }
+      return defs;
+    }
+
+    function keysOfGroup(groupKey) {
+      if (groupKey === 'recent') {
+        return state.recents.filter(function (key) { return icons.has(key); });
+      }
+      if (groupKey === 'current') {
+        return state.value ? [state.value] : [];
+      }
+      if (groupKey === 'recommend') {
+        var list = RECOMMEND[opt.kind === 'income' ? 'income' : 'expense'] || [];
+        var out = [];
+        for (var i = 0; i < list.length; i += 1) {
+          if (icons.has(list[i])) { out.push(list[i]); }
+        }
+        return out;
+      }
+      var found = icons.search('', groupKey);
+      return found;
+    }
+
+    function paintTabs() {
+      clear(tabs);
+      var defs = tabDefs();
+      /* 当前分组被搜没了就回落到推荐，避免标签全部取消高亮 */
+      var exists = false;
+      for (var d = 0; d < defs.length; d += 1) {
+        if (defs[d].key === state.group) { exists = true; }
+      }
+      if (!exists) { state.group = 'recommend'; }
+      for (var i = 0; i < defs.length; i += 1) {
+        (function (def) {
+          var tab = el('button', 's-icon-picker__tab' + (state.group === def.key ? ' is-active' : ''), def.label);
+          tab.type = 'button';
+          tab.setAttribute('role', 'tab');
+          tab.setAttribute('aria-selected', state.group === def.key ? 'true' : 'false');
+          tab.addEventListener('click', function () {
+            state.group = def.key;
+            state.keyword = '';
+            input.value = '';
+            paintTabs();
+            paintGrid();
+          });
+          tabs.appendChild(tab);
+        }(defs[i]));
+      }
+    }
+
+    function iconTile(key, size) {
+      var tile = el('span', 's-icon-picker__tile');
+      var meta = typeof icons.meta === 'function' ? icons.meta(key) : null;
+      var tone = meta && meta.group ? GROUP_TONE[meta.group] : 0;
+      if (tone) {
+        tile.style.setProperty('--ico-a', 'var(--cat-' + tone + '-accent)');
+        tile.style.setProperty('--ico-a-o', '1');
+        tile.style.color = 'var(--cat-' + tone + ')';
+      }
+      var svg = icons.node(key, { size: size || 22 });
+      if (svg) { tile.appendChild(svg); }
+      return tile;
+    }
+
+    function paintGrid() {
+      clear(grid);
+      var keys = state.keyword
+        ? icons.search(state.keyword, null)
+        : keysOfGroup(state.group);
+
+      if (!keys.length) {
+        grid.appendChild(el('p', 's-icon-picker__empty',
+          state.keyword ? '没有叫「' + state.keyword + '」的图标' : '这个分组还没有图标'));
+        hint.textContent = '';
+        return;
+      }
+
+      for (var i = 0; i < keys.length; i += 1) {
+        (function (key) {
+          var label = icons.labelOf(key);
+          var item = el('button', 's-icon-picker__item' + (state.value === key ? ' is-active' : ''));
+          item.type = 'button';
+          item.setAttribute('data-icon', key);
+          item.setAttribute('aria-label', label);
+          item.setAttribute('aria-pressed', state.value === key ? 'true' : 'false');
+          item.appendChild(iconTile(key));
+          item.appendChild(el('span', 's-icon-picker__cap', label));
+          item.addEventListener('click', function () { pick(key); });
+          grid.appendChild(item);
+        }(keys[i]));
+      }
+
+      hint.textContent = state.keyword
+        ? '找到 ' + keys.length + ' 个图标'
+        : (state.group === 'recent' ? '最近用过的 ' + keys.length + ' 个' :
+          (state.group === 'recommend' ? '常用推荐，点分组标签还能看更多' : '共 ' + keys.length + ' 个'));
+    }
+
+    function pick(key) {
+      state.value = key;
+      if (state.recents.indexOf(key) >= 0) { state.recents.splice(state.recents.indexOf(key), 1); }
+      state.recents.unshift(key);
+      if (state.recents.length > 12) { state.recents.length = 12; }
+      var items = grid.querySelectorAll('[data-icon]');
+      for (var i = 0; i < items.length; i += 1) {
+        var active = items[i].getAttribute('data-icon') === key;
+        items[i].classList.toggle('is-active', active);
+        items[i].setAttribute('aria-pressed', active ? 'true' : 'false');
+      }
+      if (typeof opt.onRecent === 'function') { opt.onRecent(key); }
+      if (typeof opt.onPick === 'function') { opt.onPick(key, icons.labelOf(key)); }
+    }
+
+    input.addEventListener('input', function () {
+      state.keyword = String(input.value || '').trim();
+      paintGrid();
+    });
+    input.addEventListener('search', function () {
+      state.keyword = String(input.value || '').trim();
+      paintGrid();
+    });
+
+    paintTabs();
+    paintGrid();
+
+    return {
+      value: function () { return state.value; },
+      setValue: function (key) {
+        state.value = String(key || '');
+        paintTabs();
+        paintGrid();
+      },
+      destroy: function () {
+        if (root.parentNode) { root.parentNode.removeChild(root); }
+      },
+      root: root
+    };
+  }
+
+  UI.iconPicker = { mount: mount, recommend: RECOMMEND };
+  var lower = XZB.ui || (XZB.ui = {});
+  if (!lower.iconPicker) { lower.iconPicker = UI.iconPicker; }
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = UI.iconPicker;
   }
 })(
   typeof window !== 'undefined'
@@ -21788,12 +23323,92 @@ textarea::selection {
     savings: 'acc-savings'
   };
 
+  /* ---------------- 分类色槽（2.6：稳定着色） ----------------
+   * 2.5 及以前是 `'cat-' + ((index % 12) + 1)`，颜色跟着列表位置走 ——
+   * 搜索、排序、收藏一改动，同一个分类就换色，用户看到的"粉色购物"下次变成蓝色。
+   * 现在按「分类身份」定色，三条稳定的依据，顺序如下：
+   *   1. 出厂系统分类：SEED_TONE 里写死的语义色槽（餐饮橙、交通蓝、购物粉……）；
+   *      只在颜色仍是出厂值时才生效，用户自己改过色就尊重用户的颜色。
+   *   2. 分类自己的 color：按 RGB 最近匹配到 12 个色槽之一。
+   *   3. 兜底：id 的稳定哈希（同一台设备上永远同一个色，不受顺序影响）。
+   */
+  var CAT_SLOT_RGB = [
+    [194, 65, 12], [29, 78, 216], [190, 24, 93], [15, 118, 110],
+    [124, 58, 237], [185, 28, 28], [3, 105, 161], [161, 98, 7],
+    [14, 116, 144], [21, 128, 61], [67, 56, 202], [82, 82, 91]
+  ];
+
+  /* 系统默认分类的出厂色（schema.seedData 里的 Apple 调色板） */
+  var SEED_COLORS = {
+    '#FF9500': 1, '#007AFF': 1, '#FF2D55': 1, '#8E8E93': 1,
+    '#AF52DE': 1, '#FF3B30': 1, '#5856D6': 1, '#34C759': 1
+  };
+
+  var SEED_TONE = {
+    ca_food: 1, ca_transport: 2, ca_shopping: 3, ca_home: 4, ca_fun: 5,
+    ca_health: 6, ca_study: 11, ca_comm: 10, ca_social: 8, ca_other_expense: 12,
+    ca_daily: 9, ca_veggie: 10, ca_fruit: 1, ca_snack: 3, ca_sports: 11,
+    ca_clothes: 2, ca_beauty: 3, ca_household: 4, ca_kids: 1, ca_elder: 11,
+    ca_socialize: 10, ca_travel: 7, ca_smoke: 12, ca_digital: 5, ca_auto: 7,
+    ca_pet: 8, ca_office: 11, ca_repair: 8, ca_donate: 6, ca_lottery: 3,
+    ca_game: 5, ca_tools: 12, ca_appliance: 2, ca_family: 10,
+    ca_salary: 10, ca_bonus: 8, ca_invest: 2, ca_parttime: 11,
+    ca_redpacket: 6, ca_other_income: 4
+  };
+
+  function parseHexRgb(value) {
+    var hex = String(value || '').trim().replace(/^#/, '');
+    if (hex.length === 3) { hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]; }
+    if (!/^[0-9a-fA-F]{6}$/.test(hex)) { return null; }
+    return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+  }
+
+  function nearestTone(color) {
+    var rgb = parseHexRgb(color);
+    if (!rgb) { return 0; }
+    var best = 0;
+    var bestDistance = Infinity;
+    for (var i = 0; i < CAT_SLOT_RGB.length; i += 1) {
+      var slot = CAT_SLOT_RGB[i];
+      var dr = slot[0] - rgb[0];
+      var dg = slot[1] - rgb[1];
+      var db = slot[2] - rgb[2];
+      /* 绿通道权重高一点，避免暖色互相串（人眼对绿最敏感） */
+      var distance = dr * dr * 2 + dg * dg * 4 + db * db * 3;
+      if (distance < bestDistance) { bestDistance = distance; best = i + 1; }
+    }
+    return best;
+  }
+
+  function hashTone(id) {
+    var text = String(id || '');
+    var hash = 0;
+    for (var i = 0; i < text.length; i += 1) {
+      hash = (hash * 31 + text.charCodeAt(i)) % 100000007;
+    }
+    return (hash % 12) + 1;
+  }
+
+  /* 传入分类对象（或分类 id），返回 1~12 的稳定色槽 */
+  function categoryTone(category) {
+    if (category && typeof category === 'object') {
+      var id = String(category.id || '');
+      var color = String(category.color || '').toUpperCase();
+      if (id && SEED_TONE[id] && SEED_COLORS[color]) { return SEED_TONE[id]; }
+      var byColor = nearestTone(color);
+      if (byColor) { return byColor; }
+      return hashTone(id);
+    }
+    return hashTone(category);
+  }
+
+  /* 首页流水要的是 categoryId → 'cat-N' 的查表，key 换成稳定色槽即可 */
   function categoryTones(categories) {
     var map = Object.create(null);
     for (var i = 0; i < (categories || []).length; i += 1) {
       var category = categories[i];
       if (category && typeof category.id === 'string') {
-        map[category.id] = 'cat-' + ((i % 12) + 1);
+        map[category.id] = 'cat-' + categoryTone(category);
       }
     }
     return map;
@@ -21943,6 +23558,8 @@ textarea::selection {
     delta: delta,
     bar: bar,
     categoryTones: categoryTones,
+    categoryTone: categoryTone,
+    nearestTone: nearestTone,
     accountTone: accountTone,
     row: row,
     empty: empty,
@@ -26503,7 +28120,7 @@ textarea::selection {
     ca_fun: 'fun', ca_health: 'health', ca_study: 'book', ca_comm: 'phone',
     ca_social: 'gift', ca_other_expense: 'dots', ca_salary: 'salary',
     ca_bonus: 'bonus', ca_invest: 'invest', ca_parttime: 'briefcase',
-    ca_redpacket: 'redpacket', ca_other_income: 'dots',
+    ca_redpacket: 'redpacket', ca_other_income: 'coins',
     /* 2.5 扩充分类（与 schema 种子一一对应；旧库分类 icon 字段优先于此表） */
     ca_daily: 'daily', ca_veggie: 'carrot', ca_fruit: 'fruit', ca_snack: 'snack',
     ca_sports: 'sport', ca_clothes: 'shirt', ca_beauty: 'beauty', ca_household: 'sofa',
@@ -26609,6 +28226,20 @@ textarea::selection {
     node.type = 'button';
     if (ariaLabel) node.setAttribute('aria-label', ariaLabel);
     return node;
+  }
+  /* 分类着色：与首页、明细、统计共用 kit.categoryTone —— 同一分类在哪都是同一个色槽。
+   * kit 缺失时退化成「按 id 稳定哈希」，绝不再用列表下标。 */
+  function toneOf(category) {
+    var kit = ui('kit');
+    if (kit && typeof kit.categoryTone === 'function') {
+      return kit.categoryTone(category);
+    }
+    var text = String((category && category.id) || '');
+    var hash = 0;
+    for (var i = 0; i < text.length; i += 1) {
+      hash = (hash * 31 + text.charCodeAt(i)) % 100000007;
+    }
+    return (hash % 12) + 1;
   }
   function centsToText(cents) {
     var n = Number(cents);
@@ -27269,10 +28900,15 @@ textarea::selection {
     function gridCell(category, index) {
       var cell = button('s-add-cat');
       cell.setAttribute('data-category', category.id);
-      cell.setAttribute('data-tone', String(((index % 12) + 1)));
+      /* 颜色跟分类走，不跟位置走：同屏顺序变了也不会串色 */
+      cell.setAttribute('data-tone', String(toneOf(category)));
       cell.setAttribute('aria-pressed', 'false');
       var ico = make('span', 's-add-cat__ico');
-      ico.appendChild(iconNode(category.icon || CAT_ICON[category.id] || 'tag', 24));
+      ico.appendChild(iconNode(category.icon || CAT_ICON[category.id] || 'tag', 26));
+      var badge = make('span', 's-add-cat__badge');
+      badge.setAttribute('aria-hidden', 'true');
+      badge.appendChild(iconNode('check', 12));
+      ico.appendChild(badge);
       var label = make('span', 's-add-cat__name', category.name || '未命名');
       cell.appendChild(ico);
       cell.appendChild(label);
@@ -27393,10 +29029,14 @@ textarea::selection {
       function allCell(category, index) {
         var cell = button('s-add-cat s-add-cat--sm');
         cell.setAttribute('data-category', category.id);
-        cell.setAttribute('data-tone', String((index % 12) + 1));
+        cell.setAttribute('data-tone', String(toneOf(category)));
         cell.setAttribute('aria-label', '选择分类 ' + (category.name || ''));
         var ico = make('span', 's-add-cat__ico');
-        ico.appendChild(iconNode(category.icon || CAT_ICON[category.id] || 'tag', 22));
+        ico.appendChild(iconNode(category.icon || CAT_ICON[category.id] || 'tag', 24));
+        var badge = make('span', 's-add-cat__badge');
+        badge.setAttribute('aria-hidden', 'true');
+        badge.appendChild(iconNode('check', 11));
+        ico.appendChild(badge);
         cell.appendChild(ico);
         cell.appendChild(make('span', 's-add-cat__name', category.name || '未命名'));
         cell.addEventListener('click', function () {
@@ -27551,13 +29191,37 @@ textarea::selection {
      * 在这里新建的分类永久挂在宫格末尾（maxSort+10），以后记账直接点它。
      * 删除沿用设置页的 applyCategoryDelete：存量流水自动归到「其他」。
      */
+    /* ---------- 自定义分类（宫格「管理」格的面板） ----------
+     * 在这里新建的分类永久挂在宫格末尾（maxSort+10），以后记账直接点它。
+     * 删除沿用设置页的 applyCategoryDelete：存量流水自动归到「其他」。
+     *
+     * 2.6：图标候选换成专属库（8 组 × 12 枚，与系统分类零交集），
+     * 选择器与设置页共用 XZB.ui.iconPicker；颜色也给用户自己选，不再自动轮换。
+     */
     var CAT_PALETTE = ['#C2410C', '#1D4ED8', '#BE185D', '#0F766E', '#7C3AED', '#B91C1C',
       '#0369A1', '#A16207', '#0E7490', '#15803D', '#4338CA', '#52525B'];
-    var QUICK_ICONS = ['food', 'bag', 'daily', 'bus', 'carrot', 'fruit', 'snack', 'sport',
-      'fun', 'phone', 'shirt', 'beauty', 'house', 'sofa', 'baby', 'elder', 'chat', 'plane',
-      'glass', 'plug', 'car', 'book', 'cap', 'pet', 'envelope', 'gift', 'briefcase',
-      'hammer', 'heart', 'ticket', 'family', 'gamepad', 'wrench', 'washer', 'salary',
-      'bonus', 'invest', 'parttime', 'redpacket', 'ellipsis'];
+    var TONE_LABELS = ['橙', '蓝', '粉', '青', '紫', '红', '蓝绿', '金', '湖蓝', '绿', '靛', '灰'];
+    var RECENT_ICON_PREF = 'recentCategoryIcons';
+
+    function iconPickerApi() {
+      return ui('iconPicker');
+    }
+
+    function recentIcons() {
+      var prefs = prefApi();
+      if (!prefs || typeof prefs.get !== 'function') return [];
+      return arr(prefs.get(RECENT_ICON_PREF, [])).map(function (key) {
+        return String(key);
+      });
+    }
+
+    function rememberIcon(key) {
+      var prefs = prefApi();
+      if (!prefs || typeof prefs.set !== 'function') return;
+      var list = recentIcons().filter(function (item) { return item !== key; });
+      list.unshift(String(key));
+      prefs.set(RECENT_ICON_PREF, list.slice(0, 12));
+    }
 
     /* 屏幕层统一走 commit 兜底链（与 attemptSave 同款）：router ctx 可能不带 commit */
     function quickCommit(mutator, options) {
@@ -27607,6 +29271,7 @@ textarea::selection {
       function customRow(category) {
         var row = make('div', 's-quick__row');
         var tile = make('span', 'c-tile c-tile--lg');
+        tile.classList.add('c-tile--cat-' + toneOf(category));
         tile.appendChild(iconNode(category.icon || 'tag', 22));
         row.appendChild(tile);
         var main = make('span', 's-quick__main');
@@ -27650,8 +29315,20 @@ textarea::selection {
 
       function paintForm() {
         clear(holder);
-        var draft = { name: '', icon: QUICK_ICONS[0], kind: state.type === 'income' ? 'income' : 'expense' };
+        var picker = iconPickerApi();
+        var draft = {
+          name: '',
+          icon: '',
+          kind: state.type === 'income' ? 'income' : 'expense',
+          tone: state.type === 'income' ? 10 : 1
+        };
         var KINDS = [['expense', '支出分类'], ['income', '收入分类']];
+
+        function defaultIcon(kind) {
+          var group = picker && picker.recommend ? picker.recommend[kind] : [];
+          return (group && group[0]) || 'food';
+        }
+        draft.icon = defaultIcon(draft.kind);
 
         var kindRow = make('div', 's-quick__chips');
         holder.appendChild(kindRow);
@@ -27661,8 +29338,10 @@ textarea::selection {
             (function (pair) {
               var chip = button('c-chip' + (draft.kind === pair[0] ? ' is-active' : ''), pair[1]);
               chip.addEventListener('click', function () {
+                if (draft.kind === pair[0]) return;
                 draft.kind = pair[0];
                 paintKindChips();
+                remountPicker();
               });
               kindRow.appendChild(chip);
             }(KINDS[k]));
@@ -27679,24 +29358,44 @@ textarea::selection {
         holder.appendChild(nameInput);
 
         holder.appendChild(make('span', 's-quick__label', '图标'));
-        var iconRow = make('div', 's-quick__chips s-quick__icons');
-        holder.appendChild(iconRow);
-        function paintIconChips() {
-          clear(iconRow);
-          for (var i = 0; i < QUICK_ICONS.length; i += 1) {
-            (function (name) {
-              var chip = button('s-quick__icon' + (draft.icon === name ? ' is-active' : ''));
-              chip.setAttribute('aria-label', '图标 ' + name);
-              chip.appendChild(iconNode(name, 20));
-              chip.addEventListener('click', function () {
-                draft.icon = name;
-                paintIconChips();
+        var pickerHost = make('div', 's-quick__picker');
+        holder.appendChild(pickerHost);
+        var pickerCtl = null;
+        function remountPicker() {
+          clear(pickerHost);
+          pickerCtl = null;
+          if (!picker) { return; }
+          pickerCtl = picker.mount(pickerHost, {
+            value: draft.icon,
+            kind: draft.kind,
+            recents: recentIcons(),
+            onPick: function (key) { draft.icon = key; },
+            onRecent: function (key) { rememberIcon(key); }
+          });
+        }
+        remountPicker();
+
+        holder.appendChild(make('span', 's-quick__label', '颜色'));
+        var swatchRow = make('div', 's-quick__swatches');
+        holder.appendChild(swatchRow);
+        function paintSwatches() {
+          clear(swatchRow);
+          for (var i = 0; i < CAT_PALETTE.length; i += 1) {
+            (function (index) {
+              var tone = index + 1;
+              var dot = button('s-quick__swatch' + (draft.tone === tone ? ' is-active' : ''));
+              dot.classList.add('s-quick__swatch--' + tone);
+              dot.setAttribute('aria-label', '颜色 ' + (TONE_LABELS[index] || tone));
+              dot.setAttribute('aria-pressed', draft.tone === tone ? 'true' : 'false');
+              dot.addEventListener('click', function () {
+                draft.tone = tone;
+                paintSwatches();
               });
-              iconRow.appendChild(chip);
-            }(QUICK_ICONS[i]));
+              swatchRow.appendChild(dot);
+            }(i));
           }
         }
-        paintIconChips();
+        paintSwatches();
 
         var saveBtn = button('c-btn c-btn--primary c-btn--block s-quick__new', '创建分类');
         saveBtn.addEventListener('click', createCategory);
@@ -27708,6 +29407,7 @@ textarea::selection {
             showToast('先给分类起个名字', { type: 'warning' });
             return;
           }
+          var icon = (pickerCtl && pickerCtl.value && pickerCtl.value()) || draft.icon;
           quickCommit(function (working) {
             var list = Array.isArray(working.categories) ? working.categories : [];
             for (var i = 0; i < list.length; i += 1) {
@@ -27722,15 +29422,11 @@ textarea::selection {
                 if (isFinite(value) && value > maxSort) { maxSort = value; }
               }
             }
-            var customCount = 0;
-            for (var c = 0; c < list.length; c += 1) {
-              if (list[c] && list[c].system !== true) { customCount += 1; }
-            }
             var created = schema.createCategory({
               kind: draft.kind,
               name: name,
-              icon: draft.icon,
-              color: CAT_PALETTE[customCount % CAT_PALETTE.length],
+              icon: icon,
+              color: CAT_PALETTE[draft.tone - 1] || CAT_PALETTE[0],
               sort: maxSort + 10,
               hidden: false,
               system: false,
@@ -27748,6 +29444,7 @@ textarea::selection {
               showToast(messageOf(res.code, res.message || '保存失败，请重试'), { type: 'danger' });
               return;
             }
+            rememberIcon(icon);
             showToast('分类已加到宫格最后', { type: 'success' });
             sheet.close('created');
           });
@@ -30848,6 +32545,23 @@ textarea::selection {
     return {};
   }
 
+  /* 分类 id → 稳定色槽：统计排行原本用 `(i % 12) + 1` 按名次上色，
+   * 排行一变颜色就跟着变，和首页/记账对不上。这里统一走 kit.categoryTone。 */
+  function categoryToneMap() {
+    var map = Object.create(null);
+    var kit = XZB.ui && XZB.ui.kit ? XZB.ui.kit : null;
+    var db = readDb(null);
+    var list = Array.isArray(db.categories) ? db.categories : [];
+    for (var i = 0; i < list.length; i += 1) {
+      var c = list[i];
+      if (!c || typeof c.id !== 'string') { continue; }
+      map[c.id] = (kit && typeof kit.categoryTone === 'function')
+        ? kit.categoryTone(c)
+        : ((i % 12) + 1);
+    }
+    return map;
+  }
+
   function rows(db, key) {
     if (!db) { return []; }
     return Array.isArray(db[key]) ? db[key] : [];
@@ -31492,6 +33206,7 @@ textarea::selection {
     for (var m = 0; m < items.length; m += 1) {
       maxAmount = Math.max(maxAmount, Number(items[m].amountCents) || 0);
     }
+    var toneMap = categoryToneMap();
 
     /* M6：默认只显示前 5，展开后再看全部 */
     var shown = S.rankOpen ? items : items.slice(0, RANK_FOLDED);
@@ -31501,7 +33216,7 @@ textarea::selection {
       var pct = Number(item.pct) || 0;
       var width = Math.max(0, Math.min(100, amount / maxAmount * 100));
       var momInfo = rankMomText(amount, prevMap[item.categoryId]);
-      var slot = item.slot || (i % 12) + 1;
+      var slot = item.slot || toneMap[item.categoryId] || ((i % 12) + 1);
 
       var row = el('a', {
         className: 's-stats-rank__row',
@@ -36451,6 +38166,10 @@ textarea::selection {
   var CONFIRM_CLEAR = '清空';
   var SNAP_PAGE = 10;
   var TONE_COUNT = 12;
+  /* 写回数据库的色值用固定表（不读主题变量），否则深色模式下保存会把 #C2410C
+     写成 #FB923C，同一分类在两种主题间反复保存就会慢慢漂色。 */
+  var CAT_HEX = ['#C2410C', '#1D4ED8', '#BE185D', '#0F766E', '#7C3AED', '#B91C1C',
+    '#0369A1', '#A16207', '#0E7490', '#15803D', '#4338CA', '#52525B'];
 
   /* 惰性读取：settings.js 先于 app.js 执行，此刻 XZB.version 还没就位，
      必须等渲染时再取，否则「关于」页会一直读到空版本。
@@ -36501,31 +38220,41 @@ textarea::selection {
     E_MIGRATE_INVALID: '旧版数据格式不对，无法迁移'
   };
 
-  /* 分类图标：2.2 换成一整套细线图标，按「吃穿住行 → 人 → 杂项 → 收入」排。
-     key 与 icons.js 的 PATHS 一一对应；labels 只用于读屏与提示，不参与存储。 */
-  var CAT_ICON_CHOICES = [
-    'food', 'bag', 'daily', 'bus', 'carrot', 'fruit', 'snack', 'sport',
-    'fun', 'phone', 'shirt', 'beauty', 'house', 'sofa', 'baby', 'elder',
-    'chat', 'plane', 'glass', 'plug', 'car', 'kit', 'book', 'cap',
-    'pet', 'envelope', 'gift', 'briefcase', 'hammer', 'heart', 'ticket', 'family',
-    'gamepad', 'wrench', 'washer', 'box',
-    'salary', 'bonus', 'invest', 'parttime', 'redpacket',
-    'target', 'tag', 'piggy', 'wallet', 'ellipsis'
+  /* 分类图标候选（2.6）：
+   *   系统分类 → 只能在系统那套双色图标里换（保持全站风格一致）；
+   *   自定义分类 → 走专属图标库（8 组 × 12 枚，与系统 key 零交集）。
+   * 两份清单都从 XZB.ui.icons 的注册表读，本文件不再维护第二份 key 列表；
+   * 中文名统一用 icons.labelOf()，避免 CAT_ICON_LABELS 和实际图标对不上。 */
+  function iconRegistry() {
+    return XZB.ui && XZB.ui.icons ? XZB.ui.icons : null;
+  }
+
+  var FALLBACK_SYSTEM_ICONS = [
+    'food', 'bus', 'bag', 'house', 'fun', 'health', 'book', 'phone', 'gift',
+    'daily', 'carrot', 'fruit', 'snack', 'sport', 'shirt', 'beauty', 'sofa',
+    'baby', 'elder', 'chat', 'plane', 'glass', 'plug', 'car', 'pet',
+    'briefcase', 'hammer', 'heart', 'ticket', 'gamepad', 'wrench', 'washer',
+    'family', 'salary', 'bonus', 'invest', 'parttime', 'redpacket',
+    'coins', 'dots', 'ellipsis'
   ];
 
-  var CAT_ICON_LABELS = {
-    food: '餐饮', bag: '购物', daily: '日用', bus: '交通', carrot: '蔬菜',
-    fruit: '水果', snack: '零食', sport: '运动', fun: '娱乐', phone: '通讯',
-    shirt: '服饰', beauty: '美容', house: '住房', sofa: '居家', baby: '孩子',
-    elder: '长辈', chat: '社交', plane: '旅行', glass: '烟酒', plug: '数码',
-    car: '汽车', kit: '医疗', book: '书籍', cap: '学习', pet: '宠物',
-    envelope: '礼金', gift: '礼物', briefcase: '办公', hammer: '维修',
-    heart: '捐赠', ticket: '彩票', family: '亲友', gamepad: '游戏',
-    wrench: '工具', washer: '电器', box: '其他',
-    salary: '工资', bonus: '奖金', invest: '理财', parttime: '兼职',
-    redpacket: '红包', target: '目标', tag: '标签', piggy: '存钱',
-    wallet: '钱包', ellipsis: '更多'
-  };
+  function systemIconChoices() {
+    var api = iconRegistry();
+    if (api && typeof api.systemCategoryKeys === 'function') {
+      var list = api.systemCategoryKeys();
+      if (list && list.length) { return list; }
+    }
+    return FALLBACK_SYSTEM_ICONS;
+  }
+
+  function iconLabelOf(name) {
+    var api = iconRegistry();
+    if (api && typeof api.labelOf === 'function') {
+      var label = api.labelOf(name);
+      if (label && label !== name) { return label; }
+    }
+    return String(name || '');
+  }
 
   /* 当前挂载的根与上下文，供文件选择器与异步回调使用 */
   var live = { root: null, ctx: null, busy: false };
@@ -37893,21 +39622,28 @@ textarea::selection {
     };
   }
 
-  /* 分类色 → --cat-N 槽位：先精确匹配，再按 RGB 距离取最近槽位。
-     系统默认分类的色值来自 schema 的旧调色板，和 tokens 的槽位不完全一致，
-     只做精确匹配会让它们全部落到灰色，所以这里补一层最近色映射。 */
-  function toneIndexOf(color) {
+  /* 分类色 → --cat-N 槽位：2.6 起统一走 kit.nearestTone（固定色表，
+     不随主题变化），保证同一分类在浅色/深色下都是同一个槽位。 */
+  function toneIndexOf(color, category) {
+    var kitApi = XZB.ui && XZB.ui.kit ? XZB.ui.kit : null;
+    if (kitApi && typeof kitApi.categoryTone === 'function' && category) {
+      return kitApi.categoryTone(category);
+    }
+    if (kitApi && typeof kitApi.nearestTone === 'function') {
+      var slot = kitApi.nearestTone(color);
+      if (slot) { return slot; }
+    }
     var target = parseHex(color);
     if (!target) { return 0; }
     var best = 0;
     var bestDistance = Infinity;
     for (var i = 1; i <= TONE_COUNT; i += 1) {
-      var slot = parseHex(cssVar('--cat-' + i));
-      if (!slot) { continue; }
-      if (slot.r === target.r && slot.g === target.g && slot.b === target.b) { return i; }
-      var dr = slot.r - target.r;
-      var dg = slot.g - target.g;
-      var db = slot.b - target.b;
+      var slot2 = parseHex(cssVar('--cat-' + i));
+      if (!slot2) { continue; }
+      if (slot2.r === target.r && slot2.g === target.g && slot2.b === target.b) { return i; }
+      var dr = slot2.r - target.r;
+      var dg = slot2.g - target.g;
+      var db = slot2.b - target.b;
       var distance = dr * dr * 2 + dg * dg * 4 + db * db * 3;
       if (distance < bestDistance) { bestDistance = distance; best = i; }
     }
@@ -37918,8 +39654,19 @@ textarea::selection {
     return tone > 0 ? 's-settings-tone-' + tone : 's-settings-tone-none';
   }
 
-  function favoriteIdsOf(ctx) {
-    var raw = prefsGet(ctx, 'favoriteCategoryIds', []);
+  /* 图标选择器的「最近使用」：与记账页共用同一个偏好键，两边看到的是同一份记录 */
+  function recentIconsOf(ctx) {
+    var raw = prefsGet(ctx, 'recentCategoryIcons', []);
+    return Array.isArray(raw) ? raw.map(function (key) { return String(key); }).slice(0, 12) : [];
+  }
+
+  function pushRecentIcon(ctx, key) {
+    var list = recentIconsOf(ctx).filter(function (item) { return item !== String(key); });
+    list.unshift(String(key));
+    prefsSet(ctx, 'recentCategoryIcons', list.slice(0, 12));
+  }
+
+  function favoriteIdsOf(ctx) {    var raw = prefsGet(ctx, 'favoriteCategoryIds', []);
     return Array.isArray(raw) ? raw.map(function (id) { return String(id); }) : [];
   }
 
@@ -38080,7 +39827,7 @@ textarea::selection {
   }
 
   function categoryRow(ctx, cat, kind, favs, useCount, repaint) {
-    var tone = toneIndexOf(cat.color);
+    var tone = toneIndexOf(cat.color, cat);
     var isFav = favs.indexOf(String(cat.id)) >= 0;
     var node = h('div', {
       className: 'c-row c-row--icon c-row--two-line c-row--tappable s-settings-cat-row',
@@ -38121,7 +39868,7 @@ textarea::selection {
   }
 
   function openCategorySheet(ctx, kind, existing) {
-    var initialTone = existing ? toneIndexOf(existing.color) : (kind === 'income' ? 11 : 1);
+    var initialTone = existing ? toneIndexOf(existing.color, existing) : (kind === 'income' ? 10 : 1);
     if (!initialTone) { initialTone = kind === 'income' ? 11 : 1; }
     var model = {
       icon: existing ? (existing.icon || 'tag') : (kind === 'income' ? 'salary' : 'food'),
@@ -38150,31 +39897,54 @@ textarea::selection {
     field.appendChild(input);
     body.appendChild(field);
 
+    var isSystem = !!(existing && existing.system === true);
     body.appendChild(t('p', 's-settings-sheet__label', '图标'));
-    var iconGrid = h('div', { className: 's-settings-icon-grid', role: 'group', aria: { label: '分类图标' } });
-    var iconButtons = [];
-    for (var i = 0; i < CAT_ICON_CHOICES.length; i += 1) {
-      (function (name) {
-        var btn = h('button', {
-          className: 's-settings-icon-btn' + (model.icon === name ? ' is-active' : ''),
-          type: 'button',
-          aria: { label: CAT_ICON_LABELS[name] || name, pressed: model.icon === name ? 'true' : 'false' }
+    if (isSystem) {
+      /* 系统分类：只在系统那套双色图标里换，别让它挂上"火锅""猫爪"这种专属造型 */
+      body.appendChild(t('p', 's-settings-sheet__hint',
+        '系统分类用系统这套图标，这样它和记账宫格、首页流水里的样子一致。'));
+      var iconGrid = h('div', { className: 's-settings-icon-grid', role: 'group', aria: { label: '分类图标' } });
+      var iconButtons = [];
+      var choices = systemIconChoices();
+      for (var i = 0; i < choices.length; i += 1) {
+        (function (name) {
+          var btn = h('button', {
+            className: 's-settings-icon-btn' + (model.icon === name ? ' is-active' : ''),
+            type: 'button',
+            aria: { label: iconLabelOf(name), pressed: model.icon === name ? 'true' : 'false' }
+          });
+          btn.appendChild(iconEl(name, 22));
+          btn.addEventListener('click', function () {
+            model.icon = name;
+            for (var b = 0; b < iconButtons.length; b += 1) {
+              var isActive = iconButtons[b].getAttribute('data-icon') === name;
+              iconButtons[b].classList.toggle('is-active', isActive);
+              iconButtons[b].setAttribute('aria-pressed', isActive ? 'true' : 'false');
+            }
+          });
+          btn.setAttribute('data-icon', name);
+          iconButtons.push(btn);
+          iconGrid.appendChild(btn);
+        }(choices[i]));
+      }
+      body.appendChild(iconGrid);
+    } else {
+      /* 自定义分类 / 新增：专属图标库（搜索 + 分组 + 最近使用），与记账面板同一个组件 */
+      body.appendChild(t('p', 's-settings-sheet__hint',
+        '这 96 枚是给自定义分类留的专属图标，系统分类里不会出现，所以不会跟系统图标撞脸。'));
+      var pickerHost = h('div', { className: 's-settings-picker' });
+      body.appendChild(pickerHost);
+      var pickerApi = XZB.ui && XZB.ui.iconPicker;
+      if (pickerApi && typeof pickerApi.mount === 'function') {
+        pickerApi.mount(pickerHost, {
+          value: model.icon,
+          kind: kind === 'income' ? 'income' : 'expense',
+          recents: recentIconsOf(ctx),
+          onPick: function (key) { model.icon = key; },
+          onRecent: function (key) { pushRecentIcon(ctx, key); }
         });
-        btn.appendChild(iconEl(name, 20));
-        btn.addEventListener('click', function () {
-          model.icon = name;
-          for (var b = 0; b < iconButtons.length; b += 1) {
-            var isActive = iconButtons[b].getAttribute('data-icon') === name;
-            iconButtons[b].classList.toggle('is-active', isActive);
-            iconButtons[b].setAttribute('aria-pressed', isActive ? 'true' : 'false');
-          }
-        });
-        btn.setAttribute('data-icon', name);
-        iconButtons.push(btn);
-        iconGrid.appendChild(btn);
-      }(CAT_ICON_CHOICES[i]));
+      }
     }
-    body.appendChild(iconGrid);
 
     body.appendChild(t('p', 's-settings-sheet__label', '颜色'));
     var swatches = h('div', { className: 's-settings-swatches', role: 'group', aria: { label: '分类颜色' } });
@@ -38252,7 +40022,7 @@ textarea::selection {
 
     var hex = existing && model.tone === model.originalTone && existing.color
       ? existing.color
-      : cssVar('--cat-' + model.tone);
+      : (CAT_HEX[model.tone - 1] || cssVar('--cat-' + model.tone));
     if (!hex && existing) { hex = existing.color; }
     if (!hex) {
       errorEl.textContent = MESSAGES.E_INVALID_INPUT;
@@ -38694,7 +40464,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.10.0';
+  XZB.version = '2.11.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};

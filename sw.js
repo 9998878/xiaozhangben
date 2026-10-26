@@ -10,7 +10,7 @@
   /* 人类可读的缓存版本标签，仅用于日志与排查 */
   var CACHE_LABEL = '小账本2-v2.10.0';
   /* 真正的 Cache Storage 键：换版本号即触发本应用旧缓存清除（activate 时 cleanupCaches） */
-  var CACHE_NAME = 'xzb2-v2.10.0';
+  var CACHE_NAME = 'xzb2-v2.11.0';
   /* 导航请求的网络等待上限：超过即回退缓存，避免弱网白屏 */
   var NAV_TIMEOUT_MS = 3000;
   /* install 预缓存清单：入口与壳资源；css/js 为外链，由运行时 cacheFirst 兜底 */
