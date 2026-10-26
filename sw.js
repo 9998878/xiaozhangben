@@ -1,6 +1,6 @@
 /* ============================================================
    小账本 2.9 · Service Worker（鲨鱼风改版）
-   缓存名：小账本2-v2.9.1（英文缓存键 xzb2-v2.9.1）
+   缓存名：小账本2-v2.9.2（英文缓存键 xzb2-v2.9.2）
    策略：导航请求网络优先（3 秒超时）→ 缓存；其余静态资源缓存优先。
    约束：只处理 GET；只处理 http(s) 同源请求；不缓存 chrome-extension 等协议。
    ============================================================ */
@@ -8,9 +8,9 @@
   'use strict';
 
   /* 人类可读的缓存版本标签，仅用于日志与排查 */
-  var CACHE_LABEL = '小账本2-v2.9.1';
+  var CACHE_LABEL = '小账本2-v2.9.2';
   /* 真正的 Cache Storage 键：换版本号即触发旧缓存全量清除（activate 时 cleanupCaches） */
-  var CACHE_NAME = 'xzb2-v2.9.1';
+  var CACHE_NAME = 'xzb2-v2.9.2';
   /* 导航请求的网络等待上限：超过即回退缓存，避免弱网白屏 */
   var NAV_TIMEOUT_MS = 3000;
   /* install 预缓存清单：入口与壳资源；css/js 为外链，由运行时 cacheFirst 兜底 */
@@ -20,7 +20,15 @@
     './manifest.webmanifest',
     './icons/icon-180.png',
     './icons/icon-192.png',
-    './icons/icon-512.png'
+    './icons/icon-512.png',
+    './splash/splash-1170x2532.png',
+    './splash/splash-1284x2778.png',
+    './splash/splash-1179x2556.png',
+    './splash/splash-1290x2796.png',
+    './splash/splash-1125x2436.png',
+    './splash/splash-828x1792.png',
+    './splash/splash-1242x2688.png',
+    './splash/splash-1242x2208.png'
   ];
 
   /* 判断是否为可接管的 http(s) 地址：chrome-extension:/file:/data: 一律放行给浏览器 */
