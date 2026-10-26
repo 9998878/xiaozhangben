@@ -1,6 +1,6 @@
 /* ============================================================
-   小账本 2.9 · Service Worker（鲨鱼风改版）
-   缓存名：小账本2-v2.9.2（英文缓存键 xzb2-v2.9.2）
+   小账本 2.10 · Service Worker（鲨鱼风改版）
+   缓存名：小账本2-v2.10.0（英文缓存键 xzb2-v2.10.0）
    策略：导航请求网络优先（3 秒超时）→ 缓存；其余静态资源缓存优先。
    约束：只处理 GET；只处理 http(s) 同源请求；不缓存 chrome-extension 等协议。
    ============================================================ */
@@ -8,9 +8,9 @@
   'use strict';
 
   /* 人类可读的缓存版本标签，仅用于日志与排查 */
-  var CACHE_LABEL = '小账本2-v2.9.2';
-  /* 真正的 Cache Storage 键：换版本号即触发旧缓存全量清除（activate 时 cleanupCaches） */
-  var CACHE_NAME = 'xzb2-v2.9.2';
+  var CACHE_LABEL = '小账本2-v2.10.0';
+  /* 真正的 Cache Storage 键：换版本号即触发本应用旧缓存清除（activate 时 cleanupCaches） */
+  var CACHE_NAME = 'xzb2-v2.10.0';
   /* 导航请求的网络等待上限：超过即回退缓存，避免弱网白屏 */
   var NAV_TIMEOUT_MS = 3000;
   /* install 预缓存清单：入口与壳资源；css/js 为外链，由运行时 cacheFirst 兜底 */
@@ -87,6 +87,9 @@
     return caches.keys().then(function (keys) {
       return Promise.all(keys.map(function (key) {
         if (key === CACHE_NAME) return Promise.resolve(false);
+        /* Cache Storage 是按 origin 共享的：同一域名下可能还装着别的应用，
+           只删本应用前缀的旧版本，绝不能把别人的离线缓存一起清掉。 */
+        if (key.indexOf('xzb2-') !== 0) return Promise.resolve(false);
         return caches.delete(key);
       }));
     });

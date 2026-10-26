@@ -58,8 +58,9 @@
   --c-hairline: #C6C6C840;
   --c-text: #1A1A1A;
   --c-text-2: #48484A;
-  --c-text-3: #9A9A9A;
-  --c-text-4: #B5B5B5;
+  /* 二级/三级说明文字：白底对比度门槛 4.5:1（原 #9A9A9A=2.81、#B5B5B5=2.05 均不达标） */
+  --c-text-3: #6E6E73;          /* 白底 5.07:1，页面底 #F6F6F6 上 4.69:1 */
+  --c-text-4: #767676;          /* 白底 4.54:1（仅用于卡片白底上的最弱说明，不要再放到灰底） */
   --c-tint: #FFCE00;
   --c-tint-press: #F5C400;
   --c-tint-pressed: var(--c-tint-press);
@@ -312,7 +313,9 @@
 /* ============================================================
    深色：用户手动选择（设置 → 外观 → 深）
    ============================================================ */
-[data-theme="dark"] {
+/* 必须限定 :root —— 设置页「外观」的三个选项按钮自带 data-theme="dark"，
+   不限定的选择器会把整段深色变量套到按钮自己身上（浅色下变成浅字浅底，实测 1.47:1）。 */
+:root[data-theme="dark"] {
   color-scheme: dark;
 
   /* 鲨鱼夜：纯黑底 + 中性深灰卡 + 黄色主色不变 */
@@ -328,7 +331,8 @@
   --c-text: #FFFFFF;
   --c-text-2: #C6C6C8;
   --c-text-3: #9A9A9A;
-  --c-text-4: #6D6D70;
+  /* 原 #6D6D70 黑底仅 4.07:1；提到 #8E8E93（黑底 6.44、深灰卡 5.22） */
+  --c-text-4: #8E8E93;
   --c-tint: #FFCE00;
   --c-tint-press: #F5C400;
   --c-tint-pressed: var(--c-tint-press);
@@ -425,7 +429,7 @@
     --c-text: #FFFFFF;
     --c-text-2: #C6C6C8;
     --c-text-3: #9A9A9A;
-    --c-text-4: #6D6D70;
+    --c-text-4: #8E8E93;
     --c-tint: #FFCE00;
     --c-tint-press: #F5C400;
     --c-tint-pressed: var(--c-tint-press);
@@ -512,8 +516,8 @@
   }
 }
 
-/* 用户手动选择浅色时，即使系统是深色也保持浅色 */
-[data-theme="light"] {
+/* 用户手动选择浅色时，即使系统是深色也保持浅色；同样只作用于根元素 */
+:root[data-theme="light"] {
   color-scheme: light;
 }
 
@@ -1195,14 +1199,29 @@ textarea::selection {
   white-space: nowrap;
 }
 
+/* 次级说明：最多两行，第二行末省略。原来单行 nowrap 会把长说明（账户/账本副标题）
+   整段吃掉；两行后行高由内容撑开，.c-row 只有 min-height，不会挤压右侧数值/箭头 */
 .c-row__sub {
+  display: -webkit-box;
   overflow: hidden;
   margin-top: var(--sp-1);
   color: var(--c-text-2);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: break-word;
+  white-space: normal;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* 窄屏（≤360px）时右侧数值列会再挤掉一截宽度，两行放不下说明文字，放宽到三行 */
+@media (max-width: 360px) {
+  .c-row__sub {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
 }
 
 .c-row__value {
@@ -3472,6 +3491,18 @@ textarea::selection {
 .s-add-seg-row .c-segmented {
   width: 240px;
   max-width: 100%;
+  /* 32px 视觉 × 44px 命中：外扩命中区画在 item 的 ::after 上，
+     但组件本身 overflow:hidden 会把它裁回容器高度，本屏这一处放开纵向裁切。
+     item 背景是 28px + 容器 2px padding（圆角同心 8<10-2），放开后不会露出圆角。 */
+  overflow: visible;
+}
+
+/* 28px → 44px 命中（上下各扩 8px）；横向不外扩，避免压到相邻分段与右侧删除按钮 */
+.s-add-seg-row .c-segmented__item::after {
+  content: '';
+  position: absolute;
+  inset: -8px 0;
+  border-radius: var(--r-sm);
 }
 
 .s-add-del {
@@ -3937,7 +3968,8 @@ textarea::selection {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-1) var(--page-x);
+  /* 上下留 6px：收起键的 ::after 要向外扩 4px，padding 只有 4px 时会被裁在边界上 */
+  padding: 6px var(--page-x);
 }
 .s-add-dock__ctx-text {
   flex: 1 1 auto;
@@ -3953,6 +3985,7 @@ textarea::selection {
   font-weight: var(--fw-semibold);
 }
 .s-add-dock__collapse {
+  position: relative;
   flex: 0 0 auto;
   min-height: 36px;
   padding: 0 var(--sp-2);
@@ -3964,6 +3997,15 @@ textarea::selection {
   font-family: var(--font-sans);
   transition: transform var(--dur-press-out) var(--ease-spring),
     background-color var(--dur-1) var(--ease-out);
+}
+
+/* 34×36 视觉 × 44×46 命中：上下各扩 5px、左右各扩 5px。
+   左右邻居是非交互的上下文文字，横向外扩不会和可点控件抢命中。 */
+.s-add-dock__collapse::after {
+  content: '';
+  position: absolute;
+  inset: -5px -5px;
+  border-radius: var(--r-md);
 }
 .s-add-dock__collapse:active,
 .s-add-dock__collapse.is-pressed {
@@ -3977,7 +4019,8 @@ textarea::selection {
 .s-add-props {
   display: flex;
   gap: var(--sp-2);
-  padding: var(--sp-1) var(--page-x) var(--sp-2);
+  /* 上下各留 8px：chip 的 ::after 向外扩 6px，padding 不足会被 overflow-y:hidden 裁掉 */
+  padding: 8px var(--page-x);
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
@@ -3987,6 +4030,7 @@ textarea::selection {
   display: none;
 }
 .s-add-props__chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -4002,6 +4046,15 @@ textarea::selection {
   white-space: nowrap;
   transition: transform var(--dur-press-out) var(--ease-spring),
     background-color var(--dur-1) var(--ease-out);
+}
+
+/* 36px 视觉 × 48px 命中：上下各扩 6px（padding 留 8px，外扩不会被 overflow 裁掉）。
+   横向不外扩 —— 相邻 chip 间距只有 4px，横向扩展会让两枚命中区重叠 */
+.s-add-props__chip::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+  border-radius: var(--r-full);
 }
 .s-add-props__chip:active,
 .s-add-props__chip.is-pressed {
@@ -4384,6 +4437,30 @@ textarea::selection {
   text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
+}
+
+/* 窄屏（≤360px）：月份行放不下「支 ¥x · 收 ¥y」一整行，原来后半段被省略号吃掉。
+   这里改成两行右对齐（「支 ¥x ·」/「收 ¥y」），月份按钮让位但不拆字。
+   min-height 仍是 44，两行合计 26px，行高不变。 */
+@media (max-width: 360px) {
+  .s-ledger-month {
+    flex: 0 0 auto;
+  }
+  .s-ledger-month__text {
+    white-space: nowrap;
+  }
+  .s-ledger-stats-link {
+    flex: 0 1 auto;
+    max-width: 58%;
+    min-width: 0;
+  }
+  .s-ledger-stats-link__text {
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-overflow: clip;
+    text-align: right;
+    line-height: var(--lh-caption-2);
+  }
 }
 
 /* 搜索框：默认收起（M4），点搜索图标或已有查询时展开 */
@@ -5731,8 +5808,12 @@ textarea::selection {
   text-align: center;
 }
 
+/* 本月无流水时的主空状态。.c-empty 自带 320px 最小高度和 64px 顶部留白，
+   统计页空态只有标题/说明/按钮三行，这里收掉固定高度，避免页面底部再留一大块空白。 */
 .s-stats-empty-block {
   margin: 0 var(--page-x);
+  min-height: 0;
+  padding: var(--sp-8) var(--sp-4) 0;
 }
 
 .s-stats-hint {
@@ -6707,6 +6788,37 @@ textarea::selection {
 
 .s-books-row.is-current {
   background: var(--c-tint-soft);
+}
+
+/* 行内主按钮：视觉上等于原来的整行内容区（图标 + 名称 + 摘要） */
+.s-books-row__action {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  align-self: stretch;
+  gap: var(--sp-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-books-row__action:focus-visible,
+.s-books-more:focus-visible,
+.s-books-restore:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: calc(var(--focus-offset) * -1);
+}
+
+.s-books-row__action:focus-visible {
+  border-radius: var(--r-sm);
 }
 
 .s-books-row__title {
@@ -8458,7 +8570,8 @@ textarea::selection {
 }
 
 .s-settings-foot__line--quiet {
-  color: var(--c-text-4);
+  /* 页脚底色是 #F6F6F6，--c-text-4 在这层灰上只有 4.20:1，达不到 4.5:1，这里升一档 */
+  color: var(--c-text-3);
 }
 
 /* ---------------- 加入主屏幕步骤 ---------------- */
@@ -9550,7 +9663,11 @@ textarea::selection {
   }
 
   var SCHEMA_VERSION = 3;
-  var APP_VERSION = '2.2.0';
+  /* 应用版本唯一真源是 app.js 里的 XZB.version（加载链最后一环无条件赋值）。
+     这里不再写死常量：旧版写死 '2.2.0'，导致新建的库 appVersion 永远停在 2.2.0。 */
+  function appVersion() {
+    return (XZB && XZB.version) || '0.0.0';
+  }
 
   var ID_PREFIXES = ['bk', 'ac', 'ca', 'tx', 'bg', 'cb', 'rc', 'gl', 'gd', 'sn', 'qi'];
   /* 后缀允许下划线：种子 ID 如 ca_other_expense 必须通过 */
@@ -10755,7 +10872,7 @@ textarea::selection {
     var seeds = seedData(at);
     return {
       schemaVersion: SCHEMA_VERSION,
-      appVersion: APP_VERSION,
+      appVersion: appVersion(),
       createdAt: at,
       updatedAt: at,
       books: seeds.books,
@@ -10789,7 +10906,7 @@ textarea::selection {
     var seeds = seedData(at);
     var db = {
       schemaVersion: SCHEMA_VERSION,
-      appVersion: str(raw.appVersion, APP_VERSION) || APP_VERSION,
+      appVersion: str(raw.appVersion, appVersion()) || appVersion(),
       createdAt: dates.isValidIsoStr(raw.createdAt) ? raw.createdAt : at,
       updatedAt: dates.isValidIsoStr(raw.updatedAt) ? raw.updatedAt : at,
       books: toArray(raw.books).map(function (book) { return normalizeBook(book, at); }),
@@ -11095,7 +11212,7 @@ textarea::selection {
 
   var api = Object.freeze({
     SCHEMA_VERSION: SCHEMA_VERSION,
-    APP_VERSION: APP_VERSION,
+    appVersion: appVersion,
     LIMITS: LIMITS,
     REIMBURSE_STATES: REIMBURSE_STATES,
     ID_PREFIXES: ID_PREFIXES,
@@ -11229,6 +11346,7 @@ textarea::selection {
     E_STORAGE_QUOTA: '存储空间不足，请先导出备份并清理旧快照',
     E_STORAGE_FALLBACK: '当前使用临时存储，关闭页面后数据会丢失',
     E_STORE_BUSY: '正在保存，请稍后',
+    E_STORE_CONFLICT: '另一个页面正在同时修改数据，请刷新后重试',
     E_STORE_TX: '操作失败，请重试',
     E_STORE_TX_ASYNC: '内部错误：事务不能异步',
     E_STORE_ABORT: '操作已取消',
@@ -11276,6 +11394,7 @@ textarea::selection {
   var state = 'closed';        // closed | opening | ready | memory
   var rawDb = null;            // IDBDatabase
   var cache = null;            // 内存中的 Db 真源
+  var persisted = null;        // 最近一次确认写入磁盘的 Db（与 cache 同引用时视为无未落盘改动）
   var savedAt = null;          // 最近一次成功写入时间（IsoStr）
   var bytes = 0;               // 最近一次写入的 UTF-8 字节数
   var rev = 0;                 // 每次成功写入 +1，供 UI 判断是否需要重渲染
@@ -11293,6 +11412,10 @@ textarea::selection {
   var dbName = DB_NAME;        // 测试钩子：允许换库名跑隔离用例
   var openTimeout = OPEN_TIMEOUT_MS;
   var persistedOnce = false;
+  /* 跨标签页协同：pageId 用来忽略自己发出的广播；channel 不可用时整条链路静默降级 */
+  var pageId = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  var channel = null;
+  var channelTried = false;
 
   /* ============================== 基础工具 ============================== */
 
@@ -11468,6 +11591,10 @@ textarea::selection {
           try { database.close(); } catch (error) { /* 忽略 */ }
           rawDb = null;
           state = 'closed';
+          /* 必须同时清掉缓存的 open/load Promise，否则 open() 会直接返回旧的已决结果，
+             后续写入永远拿不到 rawDb，表现为「保存一直失败」。 */
+          openPromise = null;
+          loadPromise = null;
         };
         finish(resolve, database);
       };
@@ -11513,6 +11640,7 @@ textarea::selection {
     state = 'closed';
     openPromise = null;
     loadPromise = null;
+    persisted = null;
   }
 
   /* ============================== 底层读写 ============================== */
@@ -11724,6 +11852,7 @@ textarea::selection {
 
   function installCache(db, savedAtValue) {
     cache = clone(db);
+    persisted = cache;
     savedAt = savedAtValue || null;
     rev += 1;
     bytes = utf8Bytes(JSON.stringify(cache));
@@ -11732,6 +11861,7 @@ textarea::selection {
 
   function loadInternal() {
     return open().then(function () {
+      ensureChannel();
       if (state === 'memory') {
         var seed = schema.createDb();
         installCache(seed, null);
@@ -11920,6 +12050,16 @@ textarea::selection {
     });
   }
 
+  /* 写路径专用：连接被其他标签页的 versionchange 关掉后，下一次写要能自己重开 */
+  function ensureDbOpen() {
+    if (mode === 'memory' || state === 'memory') { return Promise.resolve(true); }
+    if (rawDb) { return Promise.resolve(true); }
+    state = 'closed';
+    openPromise = null;
+    loadPromise = null;
+    return open().then(function () { return !!rawDb; }, function () { return false; });
+  }
+
   /* ============================== 提交管线（§3.4 / §3.5） ============================== */
 
   function dropOldestAutoSnapshot() {
@@ -11931,8 +12071,195 @@ textarea::selection {
     }, function () { return false; });
   }
 
-  function writeWithQuotaRetry(record) {
-    return writeStateRecord(record).then(function (result) {
+  /* ============================== 跨标签页三方合并 ============================== */
+  /* 背景：每个标签页各自持有一份整库缓存。若直接整库回写，后写的一方会把对方刚落盘的
+     流水整段覆盖掉（实测：A 记 10 元、B 记 20 元，库里只剩 20 元）。
+     这里的做法是在同一个读写事务里 get → 比版本 → 三方合并 → put，让 IDB 自己保证原子性，
+     不依赖 Web Locks（iOS 上可用性不稳定）。 */
+
+  function own(obj, key) {
+    return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
+  }
+
+  function sameJson(a, b) {
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch (error) { return false; }
+  }
+
+  function indexById(list) {
+    var map = Object.create(null);
+    if (!Array.isArray(list)) { return map; }
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (item && typeof item.id === 'string') { map[item.id] = item; }
+    }
+    return map;
+  }
+
+  function newerOf(a, b) {
+    var at = a && typeof a.updatedAt === 'string' ? a.updatedAt : '';
+    var bt = b && typeof b.updatedAt === 'string' ? b.updatedAt : '';
+    return bt > at ? b : a;
+  }
+
+  /* base = 上次落盘时我们看到的版本；mine = 本次想写的版本；remote = 磁盘上的最新版本 */
+  function mergeList(baseArr, mineArr, remoteArr) {
+    var base = Array.isArray(baseArr) ? baseArr : [];
+    var mine = Array.isArray(mineArr) ? mineArr : [];
+    var remote = Array.isArray(remoteArr) ? remoteArr : [];
+    var baseById = indexById(base);
+    var mineById = indexById(mine);
+    var remoteById = indexById(remote);
+    var out = [];
+    var conflicts = 0;
+    var i;
+    var id;
+
+    for (i = 0; i < remote.length; i++) {
+      var r = remote[i];
+      id = r && r.id;
+      if (typeof id !== 'string') { out.push(r); continue; }
+      var b = baseById[id];
+      var m = mineById[id];
+      if (!b) { out.push(r); continue; }                       /* 对方新增：保留 */
+      if (!m) {                                                 /* 我方删除 */
+        if (sameJson(r, b)) { continue; }                       /* 对方没动过 → 删除生效 */
+        out.push(r);                                            /* 对方改过 → 保留对方的 */
+        continue;
+      }
+      if (sameJson(m, b)) { out.push(r); continue; }            /* 我方没动 → 用对方的 */
+      if (sameJson(r, b)) { out.push(m); continue; }            /* 对方没动 → 用我方的 */
+      conflicts += 1;                                           /* 双方都改 → 新者胜 */
+      out.push(newerOf(r, m));
+    }
+
+    for (i = 0; i < mine.length; i++) {                         /* 我方新增 */
+      var add = mine[i];
+      if (!add || typeof add.id !== 'string') { continue; }
+      if (baseById[add.id] || remoteById[add.id]) { continue; }
+      out.push(add);
+    }
+
+    return { list: out, conflicts: conflicts };
+  }
+
+  function mergeSettings(baseS, mineS, remoteS) {
+    var base = isObject(baseS) ? baseS : {};
+    var mine = isObject(mineS) ? mineS : {};
+    var remote = isObject(remoteS) ? remoteS : {};
+    var out = {};
+    var key;
+    for (key in remote) { if (own(remote, key)) { out[key] = remote[key]; } }
+    var conflicts = 0;
+    for (key in mine) {
+      if (!own(mine, key)) { continue; }
+      if (!own(base, key)) { out[key] = mine[key]; continue; }        /* 我方新增 */
+      if (sameJson(mine[key], base[key])) { continue; }               /* 我方没改 */
+      if (!own(remote, key) || sameJson(remote[key], base[key])) {    /* 对方没改 */
+        out[key] = mine[key];
+        continue;
+      }
+      conflicts += 1;                                                 /* 双方都改 → 以我方为准 */
+      out[key] = mine[key];
+    }
+    return { settings: out, conflicts: conflicts };
+  }
+
+  function mergeDb(remote, base, mine) {
+    if (!isObject(remote) || !isObject(base) || !isObject(mine)) {
+      return { ok: false, code: 'E_STORE_CONFLICT' };
+    }
+    if (Number(remote.schemaVersion) !== Number(mine.schemaVersion)) {
+      /* 结构版本不一致时不做猜测，交给上层提示用户刷新（宁可报错也不写坏数据） */
+      return { ok: false, code: 'E_STORE_CONFLICT' };
+    }
+    var merged = {
+      schemaVersion: mine.schemaVersion,
+      appVersion: mine.appVersion,
+      createdAt: remote.createdAt || mine.createdAt,
+      updatedAt: mine.updatedAt
+    };
+    var conflicts = 0;
+    for (var i = 0; i < TABLES.length; i++) {
+      var table = TABLES[i];
+      var result = mergeList(base[table], mine[table], remote[table]);
+      merged[table] = result.list;
+      conflicts += result.conflicts;
+    }
+    var settingsResult = mergeSettings(base.settings, mine.settings, remote.settings);
+    merged.settings = settingsResult.settings;
+    conflicts += settingsResult.conflicts;
+
+    var checked = schema.validateDb(merged);
+    if (!checked.ok) { return { ok: false, code: checked.code || 'E_SCHEMA_INVALID', path: checked.path }; }
+    return { ok: true, db: merged, conflicts: conflicts };
+  }
+
+  /* 原子读改写：返回 { ok, savedAt, value, merged, conflicts } */
+  function writeStateRecordCas(record, baseDb) {
+    if (mode === 'memory' || state === 'memory') {
+      memRecord = clone(record);
+      return Promise.resolve({ ok: true, savedAt: record.savedAt, value: record.value, merged: false, conflicts: 0 });
+    }
+    if (!rawDb) { return Promise.reject(new Error('数据库未打开')); }
+    return new Promise(function (resolve, reject) {
+      var tx;
+      try {
+        tx = rawDb.transaction([STORE_STATE], 'readwrite');
+      } catch (error) { reject(error); return; }
+      var store;
+      try { store = tx.objectStore(STORE_STATE); } catch (error) { reject(error); return; }
+      var request;
+      try { request = store.get(STATE_KEY); } catch (error) { reject(error); return; }
+
+      var outcome = {
+        ok: true,
+        savedAt: record.savedAt,
+        value: record.value,
+        merged: false,
+        conflicts: 0
+      };
+
+      request.onsuccess = function () {
+        var current = request.result || null;
+        var nextValue = record.value;
+        try {
+          var remoteChanged = !!(current && current.savedAt && savedAt && current.savedAt !== savedAt);
+          if (remoteChanged && isObject(current.value) && isObject(baseDb)) {
+            var merged = mergeDb(current.value, baseDb, record.value);
+            if (!merged.ok) {
+              outcome = { ok: false, code: merged.code || 'E_STORE_CONFLICT', path: merged.path };
+              try { tx.abort(); } catch (abortError) { /* 已结束 */ }
+              return;
+            }
+            nextValue = merged.db;
+            outcome.value = merged.db;
+            outcome.merged = true;
+            outcome.conflicts = merged.conflicts;
+          }
+          store.put({ key: STATE_KEY, value: nextValue, savedAt: record.savedAt });
+        } catch (error) {
+          outcome = { ok: false, code: 'E_STORAGE_WRITE', cause: error && error.message };
+          try { tx.abort(); } catch (abortError) { /* 已结束 */ }
+        }
+      };
+
+      tx.oncomplete = function () { resolve(outcome); };
+      tx.onerror = function () {
+        var error = tx.error || new Error('写入失败');
+        if (error && error.name === 'QuotaExceededError') { error.idbReason = 'quota'; }
+        reject(error);
+      };
+      tx.onabort = function () {
+        var error = tx.error;
+        if (error && error.name === 'QuotaExceededError') { error.idbReason = 'quota'; reject(error); return; }
+        if (outcome.ok === false) { resolve(outcome); return; }
+        reject(error || new Error('写入中止'));
+      };
+    });
+  }
+
+  function writeWithQuotaRetry(record, baseDb) {
+    return writeStateRecordCas(record, baseDb).then(function (result) {
       return result;
     }, function (error) {
       if (!error || error.idbReason !== 'quota') {
@@ -11941,7 +12268,7 @@ textarea::selection {
       /* §3.4：配额失败允许删最旧 1 条 auto 快照后重试一次 */
       return dropOldestAutoSnapshot().then(function (removed) {
         if (!removed) { return fail('E_STORAGE_QUOTA'); }
-        return writeStateRecord(record).then(function (result) {
+        return writeStateRecordCas(record, baseDb).then(function (result) {
           return result;
         }, function () {
           return fail('E_STORAGE_QUOTA');
@@ -11961,18 +12288,25 @@ textarea::selection {
     if (!validated.ok) {
       return Promise.resolve(fail(validated.code || 'E_SCHEMA_INVALID', { path: validated.path }));
     }
-    var text = JSON.stringify(draft);
-    var size = utf8Bytes(text);
-    var record = { key: STATE_KEY, value: clone(draft), savedAt: iso };
-    return writeWithQuotaRetry(record).then(function (result) {
-      if (!result.ok) { return result; }
-      cache = draft;
+    var size = utf8Bytes(JSON.stringify(draft));
+    var record = { key: STATE_KEY, value: draft, savedAt: iso };
+    var baseDb = persisted || cache;
+
+    return ensureDbOpen().then(function (opened) {
+      if (!opened) { return fail('E_STORAGE_WRITE', { cause: '数据库未打开' }); }
+      return writeWithQuotaRetry(record, baseDb);
+    }).then(function (result) {
+      if (!result || !result.ok) { return result || fail('E_STORAGE_WRITE'); }
+      var finalValue = result.value || draft;
+      cache = finalValue;
+      persisted = finalValue;
       savedAt = iso;
-      bytes = size;
+      bytes = result.merged ? utf8Bytes(JSON.stringify(finalValue)) : size;
       rev += 1;
-      notify(type || 'save');
+      notify(result.merged ? 'merge' : (type || 'save'));
       noteWriteForBackup();
-      return { ok: true, savedAt: iso, bytes: size };
+      announceWrite();
+      return { ok: true, savedAt: iso, bytes: bytes, merged: !!result.merged, conflicts: result.conflicts || 0 };
     });
   }
 
@@ -12068,17 +12402,78 @@ textarea::selection {
     return enqueue(function () {
       return ensureLoaded().then(function (ready) {
         if (!ready.ok) { return ready; }
+        /* 关键：没有未落盘改动就什么都不做。
+           旧实现会在 visibilitychange/pagehide 时无条件把整份内存缓存写回，
+           导致「旧标签页切到后台」就能把另一个页面刚记的流水整段覆盖。 */
+        if (!cache || cache === persisted) {
+          return { ok: true, skipped: true, savedAt: savedAt };
+        }
         var iso = nowIso();
-        return writeStateRecord({
-          key: STATE_KEY,
-          value: clone(cache),
-          savedAt: savedAt || iso
+        var baseDb = persisted || cache;
+        return ensureDbOpen().then(function (opened) {
+          if (!opened) { return fail('E_STORAGE_WRITE', { cause: '数据库未打开' }); }
+          return writeWithQuotaRetry({ key: STATE_KEY, value: cache, savedAt: savedAt || iso }, baseDb);
         }).then(function (result) {
-          if (!result.ok) { return fail('E_STORAGE_WRITE'); }
-          return { ok: true, savedAt: savedAt || iso };
+          if (!result || !result.ok) { return result || fail('E_STORAGE_WRITE'); }
+          var finalValue = result.value || cache;
+          cache = finalValue;
+          persisted = finalValue;
+          savedAt = savedAt || iso;
+          if (result.merged) { announceWrite(); }
+          return { ok: true, savedAt: savedAt, merged: !!result.merged };
         }, function (error) {
           return fail('E_STORAGE_WRITE', { cause: error && error.message });
         });
+      });
+    });
+  }
+
+  /* ============================== 跨标签页同步 ============================== */
+
+  function ensureChannel() {
+    if (channelTried) { return channel; }
+    channelTried = true;
+    try {
+      if (typeof BroadcastChannel === 'function') {
+        channel = new BroadcastChannel('xzb2-sync');
+        channel.onmessage = function (event) {
+          var data = event && event.data;
+          if (!data || data.src === pageId) { return; }
+          if (data.type !== 'write') { return; }
+          syncFromDisk();
+        };
+      }
+    } catch (error) {
+      channel = null;
+    }
+    return channel;
+  }
+
+  function announceWrite() {
+    var ch = ensureChannel();
+    if (!ch) { return; }
+    try { ch.postMessage({ type: 'write', src: pageId, savedAt: savedAt }); } catch (error) { /* 忽略 */ }
+  }
+
+  /* 其他页面写入后，把最新记录读进内存并通知 UI 重渲染；本身绝不写库，避免互相触发 */
+  function syncFromDisk() {
+    if (state !== 'ready' || !cache) { return Promise.resolve(false); }
+    return enqueue(function () {
+      return ensureDbOpen().then(function (opened) {
+        if (!opened) { return false; }
+        return readStateRecord().then(function (record) {
+          if (!record || !record.value) { return false; }
+          if (record.savedAt && record.savedAt === savedAt) { return false; }
+          var candidate = record.value;
+          if (typeof candidate === 'string') {
+            try { candidate = JSON.parse(candidate); } catch (error) { return false; }
+          }
+          var checked = schema.validateDb(candidate);
+          if (!checked.ok) { return false; }
+          installCache(candidate, record.savedAt || null);
+          notify('external');
+          return true;
+        }, function () { return false; });
       });
     });
   }
@@ -12266,6 +12661,98 @@ textarea::selection {
     };
     if (inTx) { return Promise.resolve(fail('E_STORE_BUSY')); }
     return enqueue(task);
+  }
+
+  /* ============================== 启动失败自救 ============================== */
+  /* load() 失败时 cache 一直是 null，正常 API（restore/reset/export）全都走 ensureLoaded
+     而卡死。这里三个方法刻意绕开 ensureLoaded，只依赖底层读写，保证「数据打不开」时还有出口。 */
+
+  function recoveryRestore(snapshotId) {
+    return open().then(function () {
+      return readSnapshotRecords();
+    }).then(function (records) {
+      if (!records.length) { return fail('E_SNAPSHOT_NOT_FOUND'); }
+      var found = null;
+      if (typeof snapshotId === 'string' && snapshotId !== '') {
+        for (var i = 0; i < records.length; i++) {
+          if (records[i].id === snapshotId) { found = records[i]; break; }
+        }
+      } else {
+        found = records.slice().sort(function (a, b) { return cmpStr(b.at, a.at); })[0];
+      }
+      if (!found || !isObject(found.payload)) { return fail('E_SNAPSHOT_NOT_FOUND'); }
+      var payload = found.payload;
+      if (payload.schemaVersion > SCHEMA_VERSION) { return fail('E_STORAGE_VERSION'); }
+      var restored = payload;
+      if (payload.schemaVersion < SCHEMA_VERSION) {
+        var migrate = Core.migrate;
+        var upgraded = migrate && typeof migrate.upgrade === 'function' ? migrate.upgrade(payload) : { ok: false };
+        if (!upgraded.ok) { return fail('E_STORAGE_CORRUPT'); }
+        restored = upgraded.db;
+      }
+      var checked = schema.validateDb(restored);
+      if (!checked.ok) { return fail('E_STORAGE_CORRUPT'); }
+      var stamp = touchIso(restored.updatedAt);
+      restored.updatedAt = stamp;
+      restored.schemaVersion = SCHEMA_VERSION;
+      restored.appVersion = XZB.version;
+      return writeStateRecord({ key: STATE_KEY, value: clone(restored), savedAt: stamp }).then(function () {
+        installCache(restored, stamp);
+        notify('restore');
+        return { ok: true, savedAt: stamp, snapshotId: found.id };
+      }, function () {
+        return fail('E_STORAGE_WRITE');
+      });
+    }, function () {
+      return fail('E_STORAGE_WRITE');
+    });
+  }
+
+  /* 把磁盘上那份原始记录原样吐出来，供用户先留个底再决定怎么处理 */
+  function recoveryRaw() {
+    return open().then(function () {
+      return readStateRecord();
+    }).then(function (record) {
+      if (!record) { return fail('E_SNAPSHOT_NOT_FOUND'); }
+      var text;
+      try { text = JSON.stringify(record, null, 2); } catch (error) { return fail('E_EXPORT_FAILED'); }
+      return { ok: true, text: text, savedAt: record.savedAt || null };
+    }, function () {
+      return fail('E_EXPORT_FAILED');
+    });
+  }
+
+  /* 清空重建：写回一个全新种子库（会先尝试留一份「清空前快照」） */
+  function recoveryReset() {
+    return open().then(function () {
+      return readStateRecord().then(function (record) {
+        if (!record || !isObject(record.value)) { return { ok: true }; }
+        var text = '';
+        try { text = JSON.stringify(record.value); } catch (error) { text = ''; }
+        if (!text || utf8Bytes(text) > SNAPSHOT_MAX_BYTES) { return { ok: true }; }
+        return putSnapshotRecord({
+          id: schema.newId('sn') || ('sn_' + Date.now().toString(36)),
+          at: nowIso(),
+          reason: 'manual',
+          schemaVersion: SCHEMA_VERSION,
+          appVersion: XZB.version,
+          bytes: utf8Bytes(text),
+          counts: snapshotCounts(record.value),
+          payload: clone(record.value)
+        }).then(function () { return { ok: true }; }, function () { return { ok: true }; });
+      });
+    }).then(function () {
+      var seed = schema.createDb();
+      var stamp = nowIso();
+      seed.updatedAt = stamp;
+      return writeStateRecord({ key: STATE_KEY, value: clone(seed), savedAt: stamp }).then(function () {
+        installCache(seed, stamp);
+        notify('reset');
+        return { ok: true, savedAt: stamp };
+      }, function () {
+        return fail('E_STORAGE_WRITE');
+      });
+    });
   }
 
   /* ============================== reset ============================== */
@@ -12859,6 +13346,7 @@ textarea::selection {
     save: save,
     transaction: transaction,
     flush: flush,
+    syncFromDisk: syncFromDisk,
     reset: reset,
     updateSettings: updateSettings,
 
@@ -12873,6 +13361,14 @@ textarea::selection {
     listSnapshots: listSnapshots,
     restore: restore,
     removeSnapshot: removeSnapshot,
+
+    /* 启动失败自救（不依赖 load，只在「数据打不开」时用） */
+    recovery: {
+      restore: recoveryRestore,
+      raw: recoveryRaw,
+      reset: recoveryReset,
+      list: listSnapshots
+    },
 
     /* 导入导出（实现见 backup.js） */
     export: exportData,
@@ -12893,6 +13389,7 @@ textarea::selection {
       resetRuntime: function () {
         close();
         cache = null;
+        persisted = null;
         savedAt = null;
         bytes = 0;
         rev = 0;
@@ -13011,6 +13508,22 @@ textarea::selection {
 
   function isObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  /* 内容指纹：两条 FNV-1a（不同种子）拼成 64 位，用于缺 id 老数据的幂等去重。
+     只做去重键，不参与任何校验或展示，因此不需要密码学强度。 */
+  function hashText(text) {
+    var source = String(text === undefined || text === null ? '' : text);
+    var h1 = 2166136261;
+    var h2 = 16777619;
+    for (var i = 0; i < source.length; i++) {
+      var code = source.charCodeAt(i);
+      h1 ^= code;
+      h1 = (h1 * 16777619) >>> 0;
+      h2 ^= code + i;
+      h2 = (h2 * 2166136261) >>> 0;
+    }
+    return h1.toString(36) + '-' + h2.toString(36);
   }
 
   function emptyReport(mode, sourceVersion) {
@@ -13286,6 +13799,8 @@ textarea::selection {
 
     /* 已存在的 importRef（幂等去重） */
     var seenRefs = Object.create(null);
+    /* 同一份文件里「内容完全相同」的多条流水，用出现序号区分，避免被当成同一条 */
+    var contentSeq = Object.create(null);
     for (var t = 0; t < base.transactions.length; t++) {
       var existingRef = base.transactions[t] && base.transactions[t].importRef;
       if (typeof existingRef === 'string' && existingRef !== '') { seenRefs[existingRef] = true; }
@@ -13305,7 +13820,27 @@ textarea::selection {
         continue;
       }
       var type = item.type === 'income' ? 'income' : (item.type === 'transfer' ? 'transfer' : 'expense');
-      var ref = 'v1:' + String(item.id === undefined || item.id === null ? '' : item.id);
+      /* 去重键：有 id 用 id；没有 id 的老数据用内容指纹 + 同内容出现序号。
+         旧实现缺 id 时统一退化成 'v1:'，导致同一份文件里除第一条外全被判成重复
+         （实测 5 条只导入 1 条），这里必须保留序号才能既幂等又不吞数据。 */
+      var ref;
+      var rawId = item.id;
+      if (rawId !== undefined && rawId !== null && String(rawId) !== '') {
+        ref = 'v1:' + String(rawId);
+      } else {
+        var fingerprint = [
+          String(item.date === undefined || item.date === null ? '' : item.date),
+          String(item.type === undefined || item.type === null ? '' : item.type),
+          String(amount),
+          String(item.account === undefined || item.account === null ? '' : item.account),
+          String(item.category === undefined || item.category === null ? '' : item.category),
+          String(item.note === undefined || item.note === null ? (item.remark || '') : item.note)
+        ].join('\u0001');
+        var contentKey = 'v1c:' + hashText(fingerprint);
+        var seq = (contentSeq[contentKey] || 0) + 1;
+        contentSeq[contentKey] = seq;
+        ref = contentKey + '#' + seq;
+      }
       if (mode === 'merge' && seenRefs[ref]) { report.skipped += 1; continue; }
       seenRefs[ref] = true;
 
@@ -24321,7 +24856,7 @@ textarea::selection {
   /* ---------- 注册 ---------- */
 
   var API = Object.freeze({
-    version: '2.2.0',
+    /* 这里曾经写死 '2.2.0'，是版本号第 4 个来源；图表 API 与发布版本无关，不再跟随应用版本 */
     donut: donut,
     line: line,
     bars: bars,
@@ -24644,6 +25179,43 @@ textarea::selection {
     }
   }
 
+  /* ---------------- 底部浮层协作 ----------------
+     浮层是挂在 #sheet-root 上的全局单例，不属于任何屏幕；
+     切页时必须由路由侧收起，否则会出现「页面变了、浮层还浮着」的残留。
+     sheet.js 缺失、接口被替换、调用抛错时，这里一律降级为空操作。 */
+
+  function sheetApi() {
+    var upper = XZB.ui;
+    if (upper && upper.sheet && typeof upper.sheet.isOpen === 'function') return upper.sheet;
+    var mirror = XZB.UI;
+    if (mirror && mirror.sheet && typeof mirror.sheet.isOpen === 'function') return mirror.sheet;
+    return null;
+  }
+
+  function sheetIsOpen() {
+    var sheet = sheetApi();
+    if (!sheet) return false;
+    try {
+      return sheet.isOpen() === true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /* 返回 true 表示本次调用真正发起了关闭。
+     sheet.close() 在「已关闭」或「正在播关闭动画」时返回 false，
+     这里原样透出，调用方据此判断是否需要等待，不会重复触发。 */
+  function closeSheet(reason) {
+    var sheet = sheetApi();
+    if (!sheet || typeof sheet.close !== 'function') return false;
+    try {
+      return sheet.close(reason || 'route') === true;
+    } catch (error) {
+      if (global.console && console.warn) console.warn('[小账本] 收起浮层失败', error);
+      return false;
+    }
+  }
+
   function isTabRoot(route) {
     return !!route && !route.sub && TAB_ROOTS.indexOf(route.view) >= 0;
   }
@@ -24848,6 +25420,9 @@ textarea::selection {
       if (el) el.scrollTop = 0;
       return true;
     }
+    /* 真正换页（含点底部 Tab、页内 #/ 链接）：浮层属于上一屏，先收起。
+       同一路由的重复进入已在上面 return，不受影响。 */
+    if (sheetIsOpen()) closeSheet('route');
     if (isTabRoot(route)) {
       replaceRoute(route, memoryFor(route), true);
     } else {
@@ -24864,6 +25439,13 @@ textarea::selection {
   }
 
   function back() {
+    /* 浮层打开时，「返回」的第一优先级是收起浮层：
+       这里直接 return，不调用 history.back()，也不在 popstate 之后补关，
+       否则一次返回会既关浮层又退一层历史（或重复关两次）。 */
+    if (sheetIsOpen()) {
+      closeSheet('route');
+      return true;
+    }
     if (currentRoute && !isTabRoot(currentRoute) && stack.length > 1 && index > 0) {
       try {
         global.history.back();
@@ -25156,6 +25738,10 @@ textarea::selection {
       return;
     }
     if (currentRoute && route.key === currentRoute.key) return;
+
+    /* 地址真的变了（浏览器硬件返回 / 手势返回 / 手改地址栏都会走到这里，
+       这些路径不经过 back()）：浮层留下来只会压在新页面上，先统一收起。 */
+    if (sheetIsOpen()) closeSheet('route');
 
     saveCurrentScroll();
     var targetIndex = -1;
@@ -31125,15 +31711,24 @@ textarea::selection {
 
   /* ---------------- 空态 ---------------- */
 
-  function buildGlobalEmpty() {
+  /* 本月没有任何流水时，整屏只保留这一个空状态：
+     一句标题 + 一句说明 + 一个主按钮。合计卡、趋势、排行、热力图及其空骨架一律不渲染，
+     避免首屏出现「金额全是 0」和好几处「这个月还没有支出」。 */
+  function buildMonthEmpty(month, currentMonth) {
+    var isCurrent = !currentMonth || month === currentMonth;
     var box = el('div', { className: 'c-empty s-stats-empty-block' });
     var iconBox = el('div', { className: 'c-empty__icon' });
     iconBox.appendChild(iconNode('chart-line', 44));
     box.appendChild(iconBox);
-    box.appendChild(el('p', { className: 'c-empty__title', text: '还没有可以统计的数据' }));
+    box.appendChild(el('p', {
+      className: 'c-empty__title',
+      text: (isCurrent ? '这个月' : monthShort(month)) + '还没有记账'
+    }));
     box.appendChild(el('p', {
       className: 'c-empty__desc',
-      text: '记下第一笔以后，这里会按月展示收支趋势、分类排行和每日节奏。'
+      text: isCurrent
+        ? '记一笔之后，这里会出现收支趋势和分类占比。'
+        : '这个月没有记录，可以往前后翻翻有记录的月份。'
     }));
     var action = el('div', { className: 'c-empty__action' });
     action.appendChild(el('a', {
@@ -31193,41 +31788,55 @@ textarea::selection {
     clearNode(root);
     var inner = el('div', { className: 's-stats-inner' });
 
+    /* 本月是否有流水：转账不算收支，所以 count 之外还要看 transferCount */
+    var hasFlow = (Number(summary.count) || 0) > 0 || (Number(summary.transferCount) || 0) > 0;
+    var hasExpense = (Number(summary.expenseCents) || 0) > 0;
+
     var topBar = el('div', { className: 's-stats-top' });
-    topBar.appendChild(buildKindSeg());
+    /* 空月份里支出/收入两种口径都没有内容可切，只保留月份切换让用户翻月份 */
+    if (hasFlow) { topBar.appendChild(buildKindSeg()); }
     topBar.appendChild(buildMonthBar(month, currentMonth));
     inner.appendChild(topBar);
 
-    /* M6：合计 → （小结紧随合计）→ 趋势 → 排行 → 热力图 */
-    inner.appendChild(buildSummary(summary, mom, S.kind, month, today));
+    var painters = [];
 
-    var noteCard = buildMonthNote(summary, mom, rank);
-    if (noteCard) { inner.appendChild(noteCard); }
+    if (!hasFlow) {
+      /* 本月无流水：只给一个主空状态，不铺合计卡、趋势、排行、热力图 */
+      inner.appendChild(buildMonthEmpty(month, currentMonth));
+    } else {
+      /* M6：合计 → （小结紧随合计）→ 趋势 → 排行 → 热力图 */
+      inner.appendChild(buildSummary(summary, mom, S.kind, month, today));
 
-    var reimburseCard = buildReimburseCard(db, month, bookId);
-    if (reimburseCard) { inner.appendChild(reimburseCard); }
+      var noteCard = buildMonthNote(summary, mom, rank);
+      if (noteCard) { inner.appendChild(noteCard); }
 
-    var trendCard = buildTrendCard(db, month, bookId);
-    inner.appendChild(trendCard);
+      var reimburseCard = buildReimburseCard(db, month, bookId);
+      if (reimburseCard) { inner.appendChild(reimburseCard); }
 
-    inner.appendChild(buildRankCard(rank, prevRank, S.kind));
+      var trendCard = buildTrendCard(db, month, bookId);
+      inner.appendChild(trendCard);
+      painters.push(trendCard);
 
-    var heatCard = buildHeatCard(db, month, bookId, today);
-    inner.appendChild(heatCard);
+      inner.appendChild(buildRankCard(rank, prevRank, S.kind));
 
-    if (!Number(summary.count)) {
-      inner.appendChild(buildGlobalEmpty());
+      /* 热力图只画支出：本月没有支出（例如只记了收入）时整块是空的，不渲染卡片 */
+      if (hasExpense) {
+        var heatCard = buildHeatCard(db, month, bookId, today);
+        if (heatCard) {
+          inner.appendChild(heatCard);
+          painters.push(heatCard);
+        }
+      }
+
+      inner.appendChild(el('p', {
+        className: 's-stats-hint',
+        text: '数据按当前账本统计，点分类可跳到明细。'
+      }));
     }
-
-    inner.appendChild(el('p', {
-      className: 's-stats-hint',
-      text: '数据按当前账本统计，点分类可跳到明细。'
-    }));
 
     root.appendChild(inner);
 
     /* 图表必须等容器进入 DOM 且拿到宽度后再画 */
-    var painters = [trendCard, heatCard];
     for (var p = 0; p < painters.length; p += 1) {
       if (painters[p] && typeof painters[p].__paint === 'function') {
         try { painters[p].__paint(); } catch (error) { /* 单图失败不影响整屏 */ }
@@ -33285,24 +33894,32 @@ textarea::selection {
   function bookRow(ctx, db, book, opts) {
     var options = opts || {};
     var current = options.current === true;
+    var bookName = book.name || '账本';
 
+    /* 外层只做布局：不带 role / tabindex，行内是两个并列的真实按钮 */
     var row = h('div', {
-      className: 'c-row c-row--icon c-row--two-line c-row--tappable s-books-row' + (current ? ' is-current' : ''),
-      role: 'button',
-      tabindex: '0',
+      className: 'c-row c-row--icon c-row--two-line c-row--tappable s-books-row' + (current ? ' is-current' : '')
+    });
+
+    /* 主按钮：图标 + 名称 + 金额摘要，点击 = 原来的整行动作 */
+    var switchBtn = h('button', {
+      className: 's-books-row__action',
+      type: 'button',
+      'aria-label': (options.archived ? '已归档账本「' + bookName + '」' : '切换到账本「' + bookName + '」'),
       'aria-current': current ? 'true' : 'false'
     });
 
-    row.appendChild(avatar(book, 20));
+    switchBtn.appendChild(avatar(book, 20));
 
     var main = h('span', { className: 'c-row__main' });
     var title = h('span', { className: 'c-row__title s-books-row__title' });
-    title.appendChild(t('span', 's-books-row__name', book.name || '账本'));
+    title.appendChild(t('span', 's-books-row__name', bookName));
     title.appendChild(t('span', 's-books-row__count',
       (options.count || 0) > 0 ? (options.count || 0) + ' 笔流水' : '还没有流水'));
     main.appendChild(title);
     main.appendChild(t('span', 'c-row__sub s-books-row__sub', rowSub(db, book, options.count || 0, options.month)));
-    row.appendChild(main);
+    switchBtn.appendChild(main);
+    row.appendChild(switchBtn);
 
     var trail = h('span', { className: 'c-row__trail s-books-row__trail' });
     if (current) {
@@ -33337,24 +33954,12 @@ textarea::selection {
     }
     row.appendChild(trail);
 
-    dom.on(row, 'click', function () {
+    dom.on(switchBtn, 'click', function () {
       if (options.archived) {
         toast(ctx, '这个账本已归档，可点「恢复」重新启用', { type: 'info' });
         return;
       }
       switchBook(ctx, book);
-    });
-
-    dom.on(row, 'keydown', function (event) {
-      if (!event) { return; }
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        if (options.archived) {
-          toast(ctx, '这个账本已归档，可点「恢复」重新启用', { type: 'info' });
-          return;
-        }
-        switchBook(ctx, book);
-      }
     });
 
     return row;
@@ -35848,9 +36453,10 @@ textarea::selection {
   var TONE_COUNT = 12;
 
   /* 惰性读取：settings.js 先于 app.js 执行，此刻 XZB.version 还没就位，
-     必须等渲染时再取，否则「关于」页永远显示兜底旧版本 */
+     必须等渲染时再取，否则「关于」页会一直读到空版本。
+     版本号只在 app.js 里定义一处，这里不留硬编码兜底。 */
   function appVersion() {
-    return XZB.version || '2.7.0';
+    return XZB.version || '';
   }
 
   var THEMES = [
@@ -36355,33 +36961,37 @@ textarea::selection {
     });
 
     var buttons = [];
-    function select(value, button) {
+    /* 外观是「多选一」的即时偏好，不切换内容面板，所以用 aria-pressed 表达
+       当前选中项，视觉态沿用 .is-active（与分类筛选、图标/颜色选择一致） */
+    function paint(activeValue) {
       for (var i = 0; i < buttons.length; i += 1) {
-        buttons[i].setAttribute('aria-selected', buttons[i] === button ? 'true' : 'false');
+        var on = buttons[i].getAttribute('data-theme') === activeValue;
+        buttons[i].classList.toggle('is-active', on);
+        buttons[i].setAttribute('aria-pressed', on ? 'true' : 'false');
       }
+    }
+    function select(value) {
+      paint(value);
       var ok = prefsSet(ctx, 'theme', value);
       if (!ok && XZB.app && typeof XZB.app.setTheme === 'function') {
         try { XZB.app.setTheme(value); ok = true; } catch (error) { ok = false; }
       }
       if (!ok) {
         toast(ctx, '主题切换失败，请重试', { type: 'danger' });
-        var fallback = prefsGet(ctx, 'theme', 'auto');
-        for (var j = 0; j < buttons.length; j += 1) {
-          buttons[j].setAttribute('aria-selected', buttons[j].getAttribute('data-theme') === fallback ? 'true' : 'false');
-        }
+        paint(prefsGet(ctx, 'theme', 'auto'));
       }
     }
 
     for (var i = 0; i < THEMES.length; i += 1) {
       (function (item) {
         var button = h('button', {
-          className: 'c-segmented__item',
+          className: 'c-segmented__item' + (current === item.value ? ' is-active' : ''),
           type: 'button',
           text: item.label,
-          aria: { selected: current === item.value ? 'true' : 'false' },
+          aria: { pressed: current === item.value ? 'true' : 'false' },
           dataset: { theme: item.value }
         });
-        button.addEventListener('click', function () { select(item.value, button); });
+        button.addEventListener('click', function () { select(item.value); });
         buttons.push(button);
         seg.appendChild(button);
       }(THEMES[i]));
@@ -36677,7 +37287,13 @@ textarea::selection {
       statList.appendChild(row({ title: '时间范围', value: range, chevron: false }));
     }
     if (report.skipped > 0) {
-      statList.appendChild(row({ title: '跳过', value: report.skipped + ' 行', valueClass: 'c-row__value--expense', chevron: false }));
+      statList.appendChild(row({
+        title: '跳过',
+        sub: '与已有记录重复，或数据缺少唯一标识',
+        value: report.skipped + ' 行',
+        valueClass: 'c-row__value--expense',
+        chevron: false
+      }));
     }
     body.appendChild(statList);
 
@@ -36688,19 +37304,22 @@ textarea::selection {
       aria: { label: '导入方式' }
     });
     var mergeBtn = h('button', {
-      className: 'c-segmented__item', type: 'button', text: '合并',
-      aria: { selected: 'true' }
+      className: 'c-segmented__item is-active', type: 'button', text: '合并',
+      aria: { pressed: 'true' }
     });
     var replaceBtn = h('button', {
       className: 'c-segmented__item', type: 'button', text: '整份替换',
-      aria: { selected: 'false' }
+      aria: { pressed: 'false' }
     });
     var modeNote = t('p', 's-settings-sheet__note', '');
 
     function setMode(next) {
       mode = next;
-      mergeBtn.setAttribute('aria-selected', next === 'merge' ? 'true' : 'false');
-      replaceBtn.setAttribute('aria-selected', next === 'replace' ? 'true' : 'false');
+      var isMerge = next === 'merge';
+      mergeBtn.setAttribute('aria-pressed', isMerge ? 'true' : 'false');
+      replaceBtn.setAttribute('aria-pressed', isMerge ? 'false' : 'true');
+      mergeBtn.classList.toggle('is-active', isMerge);
+      replaceBtn.classList.toggle('is-active', !isMerge);
       modeNote.textContent = next === 'replace'
         ? '整份替换：当前全部数据会被清空，只保留备份内容。导入前仍会自动保存一份快照。'
         : '合并：保留现有数据，相同 ID 的记录以备份为准。';
@@ -36744,14 +37363,17 @@ textarea::selection {
       var report = result.report || {};
       var count = report.transactions || 0;
       var skipped = report.skipped || 0;
+      /* 「跳过」里有一部分是被判成重复的真实流水（v1 数据缺 id 时尤其常见），
+         所以有跳过就不能报成全部成功，提示里要说明这些记录没进来。 */
+      var missed = '有 ' + skipped + ' 条未导入（与已有记录重复，或数据缺少唯一标识）';
       var message;
       if (result.sourceVersion === 1) {
-        message = '迁移 ' + count + ' 条，跳过 ' + skipped + ' 条';
+        message = '迁移 ' + count + ' 条' + (skipped > 0 ? '，' + missed : '');
       } else {
-        message = '已导入 ' + count + ' 笔流水' + (skipped > 0 ? '，跳过 ' + skipped + ' 条' : '');
+        message = '已导入 ' + count + ' 笔流水' + (skipped > 0 ? '，' + missed : '');
       }
       refreshData(ctx).then(function () {
-        toast(ctx, message, { type: 'success' });
+        toast(ctx, message, { type: skipped > 0 ? 'warning' : 'success' });
       });
     }, function () {
       live.busy = false;
@@ -36872,7 +37494,11 @@ textarea::selection {
         }
         if (handle) { handle.close(); }
         var report = result.report || {};
-        toast(ctx, '迁移 ' + (report.transactions || 0) + ' 条，跳过 ' + (report.skipped || 0) + ' 条', { type: 'success' });
+        var migrated = report.transactions || 0;
+        var dropped = report.skipped || 0;
+        toast(ctx, '迁移 ' + migrated + ' 条' + (dropped > 0
+          ? '，有 ' + dropped + ' 条未导入（与已有记录重复，或数据缺少唯一标识）'
+          : ''), { type: dropped > 0 ? 'warning' : 'success' });
       });
     }, function () {
       live.busy = false;
@@ -37045,7 +37671,7 @@ textarea::selection {
   function renderSnapshots(root, ctx) {
     deferTitle(ctx, '快照');
     var page = h('div', { className: 's-settings-page' });
-    page.appendChild(noteBlock('自动快照在每天首次打开、导入、恢复和清空前生成，最多保留 10 份。', 's-settings-page__lead'));
+    page.appendChild(noteBlock('每天首次打开时生成自动快照，导入、恢复、清空前也会先存一份。最多保留 30 份：自动 12 份、手动 8 份、导入/恢复前 10 份；超出后先删最旧的自动快照。', 's-settings-page__lead'));
 
     var listWrap = h('div', { className: 's-settings-snaps' });
     page.appendChild(listWrap);
@@ -37352,10 +37978,10 @@ textarea::selection {
     for (var k = 0; k < kinds.length; k += 1) {
       (function (item) {
         var btn = h('button', {
-          className: 'c-segmented__item',
+          className: 'c-segmented__item' + (kind === item.value ? ' is-active' : ''),
           type: 'button',
           text: item.label,
-          aria: { selected: kind === item.value ? 'true' : 'false' }
+          aria: { pressed: kind === item.value ? 'true' : 'false' }
         });
         btn.addEventListener('click', function () {
           if (kind === item.value) { return; }
@@ -37855,7 +38481,8 @@ textarea::selection {
     var counts = countsOf(db);
     var info = storageInfo();
     var settings = settingsOf(db);
-    var version = (db && db.appVersion) || appVersion();
+    /* 版本号唯一来源是 app.js 的 XZB.version；db.appVersion 只在旧库里兜底 */
+    var version = appVersion() || (db && db.appVersion) || '';
 
     var page = h('div', { className: 's-settings-page' });
 
@@ -37865,7 +38492,8 @@ textarea::selection {
     mark.appendChild(iconEl('book-ledger', 24, 's-settings-glyph'));
     heroBody.appendChild(mark);
     heroBody.appendChild(t('h2', 's-settings-about__title', '小账本'));
-    heroBody.appendChild(t('p', 's-settings-about__version', '版本 ' + version + ' · 本地优先'));
+    heroBody.appendChild(t('p', 's-settings-about__version',
+      version ? '版本 ' + version + ' · 本地优先' : '本地优先'));
     heroBody.appendChild(t('p', 's-settings-about__p', 'iPhone 上的轻量记账。没有账号，没有服务器，打开就能记。'));
     hero.appendChild(heroBody);
     page.appendChild(hero);
@@ -37876,10 +38504,10 @@ textarea::selection {
     privacyBody.appendChild(t('p', 's-settings-about__p s-settings-about__p--strong', '数据只存在这台设备上，无账号、无服务器、不上传。'));
     var guarantees = h('ul', { className: 's-settings-about__list' });
     var items = [
-      '没有网络请求，断网也能记账',
+      '不上传账目等个人数据；首次加载后支持离线记账',
       '导出 JSON 就是完整备份，可在新设备还原',
       '卸载应用或清除网站数据会一并删除',
-      '快照也只保存在本机，最多 10 份'
+      '快照也只保存在本机，最多 30 份'
     ];
     for (var i = 0; i < items.length; i += 1) {
       var li = h('li', { className: 's-settings-about__item' });
@@ -37940,7 +38568,7 @@ textarea::selection {
 
     var foot = h('div', { className: 's-settings-foot' });
     foot.appendChild(t('p', 's-settings-foot__line', '小账本 2.0 · 本地优先 · 无账号 · 无服务器'));
-    foot.appendChild(t('p', 's-settings-foot__line s-settings-foot__line--quiet', '预算提醒阈值 ' + (settings.budgetAlertPct || 80) + '% · 快照最多 10 份'));
+    foot.appendChild(t('p', 's-settings-foot__line s-settings-foot__line--quiet', '预算提醒阈值 ' + (settings.budgetAlertPct || 80) + '% · 快照最多 30 份'));
     page.appendChild(foot);
 
     if (store && typeof store.listSnapshots === 'function' && snapRow) {
@@ -37983,7 +38611,7 @@ textarea::selection {
       row({
         icon: 'info',
         title: '版本',
-        value: appVersion(),
+        value: appVersion() || '—',
         chevron: false,
         className: 's-settings-version'
       })
@@ -38066,7 +38694,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.9.2';
+  XZB.version = '2.10.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -38776,6 +39404,8 @@ textarea::selection {
     if (app) app.classList.add('is-subpage');
     if (!root) return;
 
+    var code = error && error.code ? String(error.code) : '';
+
     while (root.firstChild) root.removeChild(root.firstChild);
     var box = document.createElement('div');
     box.className = 'app-fatal';
@@ -38783,9 +39413,22 @@ textarea::selection {
     var title = document.createElement('h1');
     title.className = 'app-fatal__title';
     title.textContent = '本地数据暂时打不开';
+
     var text = document.createElement('p');
     text.className = 'app-fatal__text';
-    text.textContent = '可以重新加载试试。如果同时开着多个小账本页面，请先关闭其他页面。';
+    if (code === 'E_STORAGE_CORRUPT') {
+      text.textContent = '本地数据没有通过完整性校验。可以先从快照恢复到最近一次可用状态，恢复前建议先导出一份原始数据留底。';
+    } else if (code === 'E_STORAGE_VERSION') {
+      text.textContent = '这份数据来自更新版本的小账本，当前页面还是旧版本。请关闭所有小账本页面后重新打开，让应用更新到最新版本。';
+    } else if (code === 'E_STORAGE_BLOCKED') {
+      text.textContent = '另一个小账本页面正占用本地数据库。请关闭其他页面后重新加载。';
+    } else {
+      text.textContent = '可以重新加载试试。如果同时开着多个小账本页面，请先关闭其他页面。';
+    }
+
+    var actions = document.createElement('div');
+    actions.style.cssText = 'display:grid;gap:8px;margin-top:16px';
+
     var retry = document.createElement('button');
     retry.className = 'app-fatal__btn';
     retry.type = 'button';
@@ -38793,10 +39436,123 @@ textarea::selection {
     retry.addEventListener('click', function () {
       try { global.location.reload(); } catch (error2) { /* 忽略 */ }
     });
+    actions.appendChild(retry);
+
+    var core = XZB.core || {};
+    var storeApi = core.store;
+    var recovery = storeApi && storeApi.recovery;
+
+    function recoverReload() {
+      try { global.location.reload(); } catch (error2) { /* 忽略 */ }
+    }
+
+    function makeAction(label, onClick, isDanger) {
+      var btn = document.createElement('button');
+      btn.className = 'app-fatal__btn';
+      btn.type = 'button';
+      btn.textContent = label;
+      if (isDanger) {
+        btn.style.color = 'var(--c-danger, #D93025)';
+        btn.style.background = 'transparent';
+        btn.style.border = '1px solid currentColor';
+      }
+      btn.addEventListener('click', function () { onClick(btn); });
+      return btn;
+    }
+
+    if (recovery) {
+      var restoreBtn = makeAction('从快照恢复', function (btn) {
+        if (btn.getAttribute('data-busy') === '1') { return; }
+        btn.setAttribute('data-busy', '1');
+        btn.textContent = '正在恢复…';
+        recovery.restore(null).then(function (result) {
+          if (result && result.ok) { recoverReload(); return; }
+          btn.removeAttribute('data-busy');
+          btn.textContent = '从快照恢复';
+          if (UI.toast) { UI.toast.show('恢复失败：' + ((result && result.message) || '没有可用快照'), { type: 'danger' }); }
+        }, function () {
+          btn.removeAttribute('data-busy');
+          btn.textContent = '从快照恢复';
+          if (UI.toast) { UI.toast.show('恢复失败，请重试', { type: 'danger' }); }
+        });
+      });
+      restoreBtn.setAttribute('data-busy', '0');
+      actions.appendChild(restoreBtn);
+
+      var exportBtn = makeAction('导出原始数据', function (btn) {
+        if (btn.getAttribute('data-busy') === '1') { return; }
+        btn.setAttribute('data-busy', '1');
+        recovery.raw().then(function (result) {
+          if (!result || !result.ok) {
+            btn.removeAttribute('data-busy');
+            if (UI.toast) { UI.toast.show('导出失败', { type: 'danger' }); }
+            return;
+          }
+          try {
+            var stamp = new Date();
+            var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+            var name = '小账本-原始数据-' + stamp.getFullYear() + pad(stamp.getMonth() + 1) + pad(stamp.getDate()) +
+              '-' + pad(stamp.getHours()) + pad(stamp.getMinutes()) + '.json';
+            var blob = new Blob([result.text], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var link = document.createElement('a');
+            link.href = url;
+            link.download = name;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+            btn.textContent = '已导出';
+          } catch (error2) {
+            if (UI.toast) { UI.toast.show('导出失败', { type: 'danger' }); }
+          }
+          btn.setAttribute('data-busy', '0');
+        });
+      });
+      exportBtn.setAttribute('data-busy', '0');
+      actions.appendChild(exportBtn);
+
+      var armed = false;
+      var armTimer = null;
+      var resetBtn = makeAction('清空并重建', function (btn) {
+        if (!armed) {
+          armed = true;
+          btn.textContent = '再点一次，确认清空';
+          if (armTimer) { global.clearTimeout(armTimer); }
+          armTimer = global.setTimeout(function () {
+            armed = false;
+            btn.textContent = '清空并重建';
+          }, 5000);
+          return;
+        }
+        if (armTimer) { global.clearTimeout(armTimer); }
+        btn.disabled = true;
+        btn.textContent = '正在清空…';
+        recovery.reset().then(function (result) {
+          if (result && result.ok) { recoverReload(); return; }
+          btn.disabled = false;
+          btn.textContent = '清空并重建';
+          if (UI.toast) { UI.toast.show('清空失败，请重试', { type: 'danger' }); }
+        });
+      }, true);
+      actions.appendChild(resetBtn);
+
+      if (recovery.list) {
+        recovery.list().then(function (result) {
+          var items = (result && result.items) || [];
+          if (!items.length) {
+            restoreBtn.disabled = true;
+            restoreBtn.textContent = '从快照恢复（暂无快照）';
+            return;
+          }
+          restoreBtn.textContent = '从快照恢复（' + items.length + ' 份，最近 ' + String(items[0].at || '').replace('T', ' ').slice(0, 16) + '）';
+        }, function () { /* 忽略 */ });
+      }
+    }
 
     box.appendChild(title);
     box.appendChild(text);
-    box.appendChild(retry);
+    box.appendChild(actions);
 
     if (error && (error.code || error.message)) {
       var detail = document.createElement('p');
@@ -38832,6 +39588,26 @@ textarea::selection {
     } catch (error) {
       /* 忽略 */
     }
+  }
+
+  /* 其他标签页写库后刷新当前页。add 页不刷新，避免清掉正在填的表单。 */
+  var externalTimer = null;
+  var lastExternalToastAt = 0;
+  function scheduleExternalRefresh(showToast) {
+    if (externalTimer) { global.clearTimeout(externalTimer); }
+    externalTimer = global.setTimeout(function () {
+      externalTimer = null;
+      var current = XZB.router && typeof XZB.router.current === 'function' ? XZB.router.current() : null;
+      if (current && current.view === 'add') { return; }
+      if (XZB.router && typeof XZB.router.rerender === 'function') {
+        try { XZB.router.rerender(); } catch (error) { /* 渲染失败不影响数据 */ }
+      }
+      var now = Date.now();
+      if (showToast && UI.toast && typeof UI.toast.show === 'function' && now - lastExternalToastAt > 8000) {
+        lastExternalToastAt = now;
+        UI.toast.show('已同步其他页面的改动');
+      }
+    }, 150);
   }
 
   function boot() {
@@ -38871,9 +39647,19 @@ textarea::selection {
       reconcileActiveBook();
 
       if (typeof store.subscribe === 'function') {
-        store.subscribe(function () {
+        store.subscribe(function (event) {
           state.rev = typeof store.getRev === 'function' ? store.getRev() : state.rev;
           state.storage.lastSavedAt = typeof store.getSavedAt === 'function' ? store.getSavedAt() : state.storage.lastSavedAt;
+          if (!event) { return; }
+          /* 其他标签页写库后，本页已把最新数据读进 cache；这里负责让界面跟上。
+             add 页正在输入，重渲染会把用户刚填的表单清掉，所以跳过它。 */
+          if (event.type === 'external') {
+            state.db = store.get();
+            scheduleExternalRefresh(true);
+          } else if (event.type === 'merge') {
+            state.db = store.get();
+            scheduleExternalRefresh(false);
+          }
         });
       }
 
@@ -38970,7 +39756,14 @@ textarea::selection {
   }
 
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'hidden') flushPending();
+    if (document.visibilityState === 'hidden') { flushPending(); return; }
+    /* 回到前台时主动对齐磁盘：另一个页面可能已经写过库 */
+    if (store && typeof store.syncFromDisk === 'function') {
+      try {
+        var synced = store.syncFromDisk();
+        if (synced && typeof synced.catch === 'function') { synced.catch(function () {}); }
+      } catch (error) { /* 忽略 */ }
+    }
   });
   global.addEventListener('pagehide', flushPending);
 
