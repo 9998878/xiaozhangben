@@ -4137,8 +4137,7 @@ textarea::selection {
 .s-add-extras__body .s-add-nl,
 .s-add-extras__body .s-add-note,
 .s-add-extras__body .s-add-reimburse,
-.s-add-extras__body .s-add-tags,
-.s-add-extras__body .s-add-photos {
+.s-add-extras__body .s-add-tags {
   margin-top: var(--sp-3);
 }
 .s-add-extras__body .s-add-nl {
@@ -4774,6 +4773,53 @@ textarea::selection {
   color: var(--c-text-3);
   font-size: var(--fs-caption);
   font-variant-numeric: tabular-nums;
+}
+/* ---------- 备注弹层里的照片区（2026-10-27：照片入口并入「备注」） ----------
+   归属：add.css —— s-add-notesheet__photos* 只写这里；照片条目本体仍复用 .s-add-photos*。 */
+.s-add-notesheet__photos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: var(--hairline) dashed var(--c-hairline);
+}
+.s-add-notesheet__photos-title {
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+}
+/* 取照入口：真机必须命中 ≥ 44px，且必须是 label[for]（iOS 只认原生激活） */
+.s-add-notesheet__picks {
+  display: flex;
+  gap: var(--sp-2);
+}
+.s-add-notesheet__pick {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: var(--h-btn-lg);
+  padding: 0 var(--sp-3);
+  box-sizing: border-box;
+  border-radius: var(--r-lg);
+  background: var(--c-fill);
+  color: var(--c-text);
+  font-size: var(--fs-body);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.s-add-notesheet__pick:active {
+  background: var(--c-fill-2);
+}
+.s-add-notesheet__pick-text {
+  white-space: nowrap;
+}
+/* 嵌入备注弹层后：旧的「添加照片」空态行与块头都不再需要（入口已变成上面两枚 label）。 */
+.s-add-photos--embedded .s-add-photos__empty,
+.s-add-photos--embedded .s-add-photos__head {
+  display: none;
 }
 .s-add-accsheet__row {
   width: 100%;
@@ -33100,8 +33146,9 @@ textarea::selection {
     wrap.appendChild(segWrap);
     wrap.appendChild(draftBar);
     wrap.appendChild(gridBlock);
-    /* 照片块常驻主流程（2026-10-27 修：原先塞在「补充信息」折叠区里，手机上默认看不见 ⇒ 用户以为没这功能） */
-    wrap.appendChild(photoBlock);
+    /* 照片入口并入「备注」弹层（2026-10-27 用户要求：把拍照放进备注里面）。
+       photoBlock 只在构建期创建一次，打开备注时 appendChild 移动进去（移动不产生副本），
+       关闭后节点仍留在弹层 DOM 里，下次打开被重新移动复用。 */
     extrasBody.appendChild(nlBlock);
     extrasBody.appendChild(reimburseBlock);
     extrasBody.appendChild(tagBlock);
@@ -33436,10 +33483,21 @@ textarea::selection {
       }
       setChipLabel(dateChip, dates.formatHuman(state.date));
       var noteText = String(state.note || '');
-      setChipLabel(noteChip, noteText
-        ? '备注 ' + noteText.slice(0, 6) + (noteText.length > 6 ? '…' : '')
-        : '备注…');
-      noteChip.classList.toggle('is-set', !!noteText);
+      var photoCount = livePhotoItems().length;
+      var chipText;
+      if (noteText) {
+        chipText = '备注 ' + noteText.slice(0, 6) + (noteText.length > 6 ? '…' : '');
+      } else if (photoCount > 0) {
+        chipText = '照片 ' + photoCount + ' 张';
+      } else {
+        chipText = '备注…';
+      }
+      if (noteText && photoCount > 0) { chipText += ' ·' + photoCount + '图'; }
+      setChipLabel(noteChip, chipText);
+      noteChip.classList.toggle('is-set', !!noteText || photoCount > 0);
+      noteChip.setAttribute('aria-label', photoCount > 0
+        ? '备注与照片，已选 ' + photoCount + ' 张'
+        : '添加备注');
     }
 
     function setAccount(id) {
@@ -34241,6 +34299,28 @@ textarea::selection {
       });
       holder.appendChild(input);
       holder.appendChild(count);
+      /* 照片并入备注弹层：同一个 sheet 里既写备注也加图（用户 2026-10-27 要求）。
+         photoBlock 是构建期就建好的活节点，这里 appendChild 是移动，监听器与状态全部沿用。 */
+      var photoSection = make('div', 's-add-notesheet__photos');
+      photoSection.appendChild(make('span', 's-add-notesheet__photos-title', '照片 · 最多 ' + photoLimit() + ' 张'));
+      /* 取照入口直接常驻在备注弹层里：只有 label[for] 才能真正触发 iOS 的系统选择器；
+         不再用「添加照片」二次浮层（第二个 sheet 会把当前备注弹层顶掉，真机上等于点不动）。 */
+      photoBlock.classList.add('s-add-photos--embedded');
+      var picks = make('div', 's-add-notesheet__picks');
+      var camPick = make('label', 's-add-notesheet__pick');
+      camPick.setAttribute('for', 'xzb-photo-camera');
+      camPick.appendChild(iconNode('camera', 20));
+      camPick.appendChild(make('span', 's-add-notesheet__pick-text', '拍照'));
+      var albPick = make('label', 's-add-notesheet__pick');
+      albPick.setAttribute('for', 'xzb-photo-album');
+      albPick.appendChild(iconNode('image', 20));
+      albPick.appendChild(make('span', 's-add-notesheet__pick-text', '从相册选择'));
+      picks.appendChild(camPick);
+      picks.appendChild(albPick);
+      photoSection.appendChild(picks);
+      photoSection.appendChild(photoBlock);
+      holder.appendChild(photoSection);
+      paintPhotoStrip();
       var sheetHandle = sheet.open({
         title: '备注',
         content: holder,
@@ -46908,7 +46988,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.12.1';
+  XZB.version = '2.12.2';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
