@@ -3312,9 +3312,14 @@ textarea::selection {
 }
 
 /* 手势期 JS 往 img 写 inline transform（translate3d + scale）；
-   打开动效用**独立属性** scale（不写 transform），两者不会互相覆盖。 */
+   打开动效用**独立属性** scale（不写 transform），两者不会互相覆盖。
+   2.13.0：显式 width/height 100% + object-fit: contain ⇒ 图片**永远铺满整个舞台**（等比留边），
+   而不是按 intrinsic 尺寸摆在黑幕正中。改前 img 只有 max-width/max-height，喂进来 320px 缩略图时
+   就只显示 320px 宽的小图 —— 用户实测的「点击照片不是全屏打开」。 */
 .c-photoviewer__img {
   display: block;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -10961,9 +10966,10 @@ textarea::selection {
     interval: 99,
     thresholdMin: 50,
     thresholdMax: 100,
-    /* 每笔流水最多引用 3 张照片（PLAN §2 · XZB.Core.schema.LIMITS.txPhotos = 3，const 冻结值）。
-       必须与 XZB.Core.photos.PARAMS.maxItemsPerTx 同值；validateTransaction 超限回 E_TX_PHOTO。 */
-    txPhotos: 3
+    /* 每笔流水最多引用 999 张照片（2.13.0 用户需求：不限张数；3 → 99 → 999）。
+       999 是**校验安全上界**，不是产品限制：界面上不设任何张数上限，正常记账永远碰不到。
+       与 XZB.Core.photos.PARAMS.maxItemsPerTx 同值；validateTransaction 超限才回 E_TX_PHOTO。 */
+    txPhotos: 999
   });
 
   function isObj(value) {
@@ -12699,7 +12705,7 @@ textarea::selection {
     E_GOAL_TARGET: '目标金额必须大于 0',
     E_GOAL_DEPOSIT_AMOUNT: '存入金额必须大于 0',
     /* 照片（PLAN §7 逐字，冻结文案：E_PHOTO_EXPORT_TOO_LARGE 不含数值） */
-    E_TX_PHOTO: '每笔最多 3 张照片',
+    E_TX_PHOTO: '每笔最多 999 张照片',
     E_PHOTO_TYPE: '只能选图片',
     E_PHOTO_EMPTY: '这张图片读不出来',
     E_PHOTO_INPUT: '没有选择照片',
@@ -14661,11 +14667,11 @@ textarea::selection {
   var PHOTO_MIME_FALLBACK = 'application/octet-stream';
   var PHOTO_ORPHAN_REFS_MAX = 3;
 
-  /* 单笔流水最多几张照片：真源在 schema.LIMITS.txPhotos（§2 PARAMS.maxItemsPerTx），缺失时 3 */
+  /* 单笔流水最多几张照片：真源在 schema.LIMITS.txPhotos（§2 PARAMS.maxItemsPerTx），缺失时 999（不限张数） */
   function photoMaxPerTx() {
     var limits = schema ? schema.LIMITS : null;
     var value = limits ? limits.txPhotos : null;
-    return Number.isInteger(value) && value > 0 ? value : 3;
+    return Number.isInteger(value) && value > 0 ? value : 999;
   }
 
   function isBlobLike(value) {
@@ -22618,7 +22624,7 @@ textarea::selection {
   function photosPerCall() {
     var limits = schema ? schema.LIMITS : null;
     var value = limits ? limits.txPhotos : null;
-    return Number.isInteger(value) && value > 0 ? value : 3;
+    return Number.isInteger(value) && value > 0 ? value : 999;
   }
 
   function writeImportedPhotos(records) {
@@ -23188,10 +23194,17 @@ textarea::selection {
     quality: 0.75,
     thumbQuality: 0.72,
     targetMaxBytes: 307200,
-    maxItemsPerTx: 3,
+    /* 【2.13.0 用户需求】不限张数：单笔引用上限 3 → 999（与 schema.LIMITS.txPhotos 同值）。
+       999 只是**校验安全上界**，不是产品限制：界面上不设任何张数上限。仍是有限值——
+       无上限会让 photoIds 数组、备份体积与详情栅格失去上界。 */
+    maxItemsPerTx: 999,
     maxCanvasPixels: 16777216,
     maxSourcePixels: 33554432,
-    maxSourceBytes: 268435456
+    maxSourceBytes: 268435456,
+    /* 【2.13.0 用户需求】原图保真：true = 主图**零重编码**，直接把原始 File 交给 store，
+       画质与手机相册一致，只另生成 320px 缩略图供列表；体积代价由 store 配额 + 设置页
+       「照片占用 / 清理照片」兜底。false = 回到 1600px / q0.75 压缩链路（两套代码都在）。 */
+    keepOriginal: true
   });
 
   /* PARAMS 是 `const` 冻结对象（JSON Schema 逐值比对）⇒ 压缩策略的私有常数一律留在模块内，不进 PARAMS。 */
@@ -23207,6 +23220,12 @@ textarea::selection {
   var TAIL_QUALITY = Q_LADDER[Q_LADDER.length - 1];
   /* 解码看门狗：解码不回调时收敛为「解码失败」⇒ 走原图兜底，绝不把记账卡死。 */
   var DECODE_TIMEOUT_MS = 20000;
+
+  /* 【测试接缝，业务代码不得依赖】已发布契约是 PARAMS.keepOriginal = true（原图保真），
+     但压缩阶梯（质量 0.75→0.5 / 边长 1600→1024 / 300KB 软目标）仍是 keepOriginal=false
+     时的备用路径、也是必须继续被自检覆盖的真代码。只有 __test.setForceCompressed(true)
+     能把它打开，持久状态不进 PARAMS、不影响业务（PARAMS 仍 10 键冻结）。 */
+  var FORCE_COMPRESS = false;
 
   var MIME_JPEG = 'image/jpeg';
   var MIME_FALLBACK = 'application/octet-stream';
@@ -23530,6 +23549,40 @@ textarea::selection {
 
       var sw = decoded.width;
       var sh = decoded.height;
+      /* 【原图保真】keepOriginal=true：主图**一次都不重编码**，直接把原始 File 交给 store，
+         画质与手机相册完全一致；只单独画一张 320px 缩略图给列表/角标用。
+         必须放在 maxSourcePixels 复判**之前**——4800 万像素原图也照样保真。 */
+      if (PARAMS.keepOriginal && !FORCE_COMPRESS) {
+        var kThumb = null;
+        try {
+          var kSize = targetSize(sw, sh, PARAMS.thumbEdge);
+          thumbCanvas = createCanvas(kSize.width, kSize.height);
+          if (thumbCanvas) {
+            var kCtx = context2d(thumbCanvas);
+            if (kCtx) {
+              paint(kCtx, img, kSize.width, kSize.height);
+              kThumb = await encodeCanvas(thumbCanvas, MIME_JPEG, PARAMS.thumbQuality);
+            }
+          }
+        } catch (eKeep) {
+          kThumb = null;
+        }
+        return {
+          ok: true,
+          kind: 'original',
+          compressed: false,
+          full: file,
+          thumb: kThumb,
+          bytes: file.size > 0 ? file.size : 1,
+          thumbBytes: kThumb ? kThumb.size : 0,
+          width: sw,
+          height: sh,
+          mime: normalizeMime(file.type),
+          oversizeTarget: false,
+          retryable: false
+        };
+      }
+
       /* 【PH-PERF-2】解码后按 naturalWidth*naturalHeight 复判源图上界。 */
       if (sw * sh > PARAMS.maxSourcePixels) { return originalResult(file, sw, sh); }
 
@@ -23678,7 +23731,11 @@ textarea::selection {
       edgeLadder: function () { return EDGE_LADDER.slice(); },
       maxEncodeAttempts: function () { return MAX_ENCODE_ATTEMPTS; },
       decodeTimeoutMs: function () { return DECODE_TIMEOUT_MS; },
-      strictEncodeFailure: function () { return STRICT_ENCODE_FAILURE; }
+      strictEncodeFailure: function () { return STRICT_ENCODE_FAILURE; },
+      /* 原图保真开关的实测值 + 压缩阶梯的强制开关（见 FORCE_COMPRESS 注释）。 */
+      keepOriginal: function () { return PARAMS.keepOriginal === true; },
+      forceCompressed: function () { return FORCE_COMPRESS; },
+      setForceCompressed: function (on) { FORCE_COMPRESS = on === true; }
     })
   });
 
@@ -29829,7 +29886,8 @@ textarea::selection {
   /* ============================================================
      常量：逐条对应 UI.md §2.5.2 的数值规格
      ============================================================ */
-  var MAX_ITEMS = 3;              /* schema maxItems 3；PHOTO_MAX 同值 */
+  var MAX_ITEMS = 999;                /* schema.LIMITS.txPhotos 999（2.13.0 不限张数）；与 ledger PHOTO_MAX 同源 */
+  var PRELOAD_SPAN = 2;               /* 预载前后各 2 张（共 ≤4 张），张数不限也不会一次解满内存 */
   var OPEN_MS = 200;              /* 遮罩 opacity 0→1（CSS --dur-exit） */
   var SWITCH_MS = 260;            /* 左右切换 / 双击放大（--dur-2、--ease-ios） */
   var SETTLE_MS = 200;            /* 越界回弹、缩放下限回弹（--dur-exit、--ease-out） */
@@ -29867,7 +29925,7 @@ textarea::selection {
 
   /* 消息文案：与 add.js/ledger.js 同一套 E_* 字典，键取不到就用兜底中文（本文件不引入新文案）。 */
   var CODE_TEXT = {
-    E_TX_PHOTO: '单笔最多 3 张照片',
+    E_TX_PHOTO: '单笔最多 999 张照片',
     E_PHOTO_NOT_FOUND: '照片不存在或已被清理',
     E_PHOTO_TYPE: '仅支持 JPEG / PNG / WebP 图片',
     E_PHOTO_BIG: '图片过大，请换一张',
@@ -30318,12 +30376,17 @@ textarea::selection {
   }
 
   /* 预载：UI.md §2.5.2 预载行要求「打开时一次性把 ≤3 个 url 交给 img，滑动过程中禁止
-     createObjectURL」。这里用游离 Image 把另外几张预热（blob: 全本地、零网络），
-     节点不进 DOM，故不违反「单张 __img」的 DOM 树。 */
+     createObjectURL」。这里用游离 Image 把相邻几张预热（blob: 全本地、零网络），
+     节点不进 DOM，故不违反「单张 __img」的 DOM 树。
+     2.13.0 不限张数后改为**只预载前后 PRELOAD_SPAN 张**：一整笔 999 张时，
+     旧实现会一次性 new 出 999 个 Image 并全部解码 ⇒ 真机直接 OOM 白屏。 */
   function preloadOthers() {
     if (typeof global.Image !== 'function') { return; }
     state.preload = [];
-    for (var i = 0; i < state.items.length; i += 1) {
+    var from = state.index - PRELOAD_SPAN;
+    var to = state.index + PRELOAD_SPAN;
+    for (var i = from; i <= to; i += 1) {
+      if (i < 0 || i >= state.items.length) { continue; }
       if (i === state.index) { continue; }
       var url = state.items[i].url;
       if (!url) { continue; }
@@ -32653,7 +32716,7 @@ textarea::selection {
    * PLAN §1.5 裁决 14（编辑态合并）+ §3 数据流 7/9/10/14（保存顺序与补偿决策）。
    * 无 DOM、无存储、无副作用：Node 自检（tools/_t19_selfcheck.cjs）经 XZB.screenAdd.__test 直调，
    * 与 XZB.Core.photos.__test 同一范式。 */
-  var PHOTO_LIMIT = 3;                       /* schema.LIMITS.txPhotos 的兜底值 */
+  var PHOTO_LIMIT = 999;                  /* schema.LIMITS.txPhotos 的兜底值（2.13.0 起不限张数） */
   var PHOTO_ID_RE = /^ph_[a-z0-9_]{3,20}$/;  /* schema.js:29 前缀表 + PLAN §2 pattern 同值 */
   var PHOTO_UA_WECHAT = /MicroMessenger/i;
 
@@ -33092,12 +33155,12 @@ textarea::selection {
     photoEmptyRow.setAttribute('data-role', 'empty');
     photoEmptyRow.appendChild(iconNode('camera', 24));
     photoEmptyRow.appendChild(make('span', 's-add-photos__empty-main', '添加照片'));
-    photoEmptyRow.appendChild(make('span', 's-add-photos__empty-sub', '拍照或从相册选择，每笔最多 3 张'));
+    photoEmptyRow.appendChild(make('span', 's-add-photos__empty-sub', '拍照或从相册选择，张数不限'));
     photoBlock.appendChild(photoEmptyRow);
 
     var photoGroupEl = make('div', 's-add-photos__group');
     photoGroupEl.setAttribute('role', 'group');
-    photoGroupEl.setAttribute('aria-label', '照片，最多 3 张');
+    photoGroupEl.setAttribute('aria-label', '照片，张数不限');
     var photoGridEl = make('div', 's-add-photos__grid');
     photoGroupEl.appendChild(photoGridEl);
     photoBlock.appendChild(photoGroupEl);
@@ -34302,7 +34365,7 @@ textarea::selection {
       /* 照片并入备注弹层：同一个 sheet 里既写备注也加图（用户 2026-10-27 要求）。
          photoBlock 是构建期就建好的活节点，这里 appendChild 是移动，监听器与状态全部沿用。 */
       var photoSection = make('div', 's-add-notesheet__photos');
-      photoSection.appendChild(make('span', 's-add-notesheet__photos-title', '照片 · 最多 ' + photoLimit() + ' 张'));
+      photoSection.appendChild(make('span', 's-add-notesheet__photos-title', '照片 · 张数不限'));
       /* 取照入口直接常驻在备注弹层里：只有 label[for] 才能真正触发 iOS 的系统选择器；
          不再用「添加照片」二次浮层（第二个 sheet 会把当前备注弹层顶掉，真机上等于点不动）。 */
       photoBlock.classList.add('s-add-photos--embedded');
@@ -34723,12 +34786,25 @@ textarea::selection {
         limit: photoLimit()
       });
     }
+    /* 预览条用**缩略图** URL。键名带 '#t' 后缀：同一张照片的「缩略图」与「原图」必须是
+       两个不同的 blob URL 键。若两者共用 item.id，bloburl 的「同一 id 恒返回同一 URL」
+       会让查看器拿到预览条先注册的那张 320px 缩略图 —— 点开大图就是糊的小图（真机实测的
+       「点击照片不是全屏打开 / 画质太低」根因）。add.js 从不单独 revoke，路由销毁 releaseAll 全清。 */
     function photoUrlOf(item) {
       var bloburl = ui('bloburl');
       if (!item || !isPhotoId(item.id)) return '';
       if (!bloburl || typeof bloburl.urlOf !== 'function') return '';
       var blob = item.thumbBlob || item.fullBlob;
-      return blob ? bloburl.urlOf(item.id, blob) : '';
+      return blob ? bloburl.urlOf(item.id + '#t', blob) : '';
+    }
+    /* 全屏查看器用**原图** URL（键 '#f'）：keepOriginal 下 fullBlob === 手机相册原始文件，
+       零重编码 ⇒ 放到全屏也是相册原画质，绝不用缩略图放大冒充。 */
+    function photoFullUrlOf(item) {
+      var bloburl = ui('bloburl');
+      if (!item || !isPhotoId(item.id)) return '';
+      if (!bloburl || typeof bloburl.urlOf !== 'function') return '';
+      var blob = item.fullBlob || item.thumbBlob;
+      return blob ? bloburl.urlOf(item.id + '#f', blob) : '';
     }
     function fmtPhotoBytes(bytes) {
       var photos = photoStore();
@@ -34998,7 +35074,7 @@ textarea::selection {
       albumRow.setAttribute('tabindex', '0');
       albumRow.setAttribute('aria-label', '从相册选择');
       albumRow.appendChild(make('span', 's-add-photos-sheet__row-main', '从相册选择'));
-      albumRow.appendChild(make('span', 's-add-photos-sheet__row-sub', '最多选 3 张'));
+      albumRow.appendChild(make('span', 's-add-photos-sheet__row-sub', '可一次多选，张数不限'));
       holder.appendChild(cameraRow);
       holder.appendChild(albumRow);
       holder.appendChild(make('p', 's-add-photos-sheet__foot', '照片只存在这台手机上，不会上传到任何服务器。'));
@@ -35033,6 +35109,10 @@ textarea::selection {
         var img = make('img', 's-add-photos__img');
         img.alt = '';
         img.setAttribute('draggable', 'false');
+        /* 张数不限 ⇒ 预览条可能一次挂几十上百张缩略图：懒解码 + 异步解码，
+           只给视口内的格子分配位图，滚动时按需再解，避免一次选 100 张就白屏/OOM。 */
+        img.setAttribute('loading', 'lazy');
+        img.setAttribute('decoding', 'async');
         var url = photoUrlOf(item);
         if (url) img.src = url;
         cell.appendChild(img);
@@ -35271,7 +35351,7 @@ textarea::selection {
         if (list[i].key === item.key) index = items.length;
         items.push({
           id: list[i].id,
-          url: photoUrlOf(list[i]),
+          url: photoFullUrlOf(list[i]),          /* 全屏看原图（不是 320px 缩略图） */
           compressed: list[i].compressed !== false,
           bytes: list[i].bytes || 0
         });
@@ -35957,8 +36037,16 @@ textarea::selection {
   var TYPE_KEYS = ['all', 'expense', 'income', 'transfer'];
   var TYPE_LABEL = { all: '全部', expense: '支出', income: '收入', transfer: '转账' };
   var TITLE_MAX = 24;
-  /* F31 照片：契约上限 3（PLAN §2 photoIds maxItems 3）；角标图标用 icons.js:63 的 camera（icons.js:975 有 photo→camera 别名） */
-  var PHOTO_MAX = 3;
+  /* F31 照片：张数上限真源 = schema.LIMITS.txPhotos（2.13.0 起「不限张数」⇒ 999，只是校验安全上界）。
+     本屏**不再**按 3 截断：超过 3 张也要全部渲染、全部进查看器。
+     角标图标用 icons.js:63 的 camera（icons.js:975 有 photo→camera 别名）。 */
+  var PHOTO_MAX_FALLBACK = 999;
+  function photoMaxPerTx() {
+    var Core = XZB && XZB.Core ? XZB.Core : null;
+    var limits = Core && Core.schema ? Core.schema.LIMITS : null;
+    var value = limits ? limits.txPhotos : null;
+    return Number.isInteger(value) && value > 0 ? value : PHOTO_MAX_FALLBACK;
+  }
   var PHOTO_FLAG_ICON = 'camera';
   var PHOTO_FLAG_ICON_SIZE = 11;
   var PHOTO_ID_MAX = 64;
@@ -36137,12 +36225,13 @@ textarea::selection {
 
   /* --- 纯函数（无 DOM、无 IO；tools/_t20_selfcheck.cjs 经 screen.photoTestKit 取用） --- */
 
-  /* 归一化 tx.photoIds：非数组 → []；去重、截断 3（契约上限）、丢弃非字符串/空串/超长项 */
+  /* 归一化 tx.photoIds：非数组 → []；去重（不限张数，仅受 schema 校验上界保护）、丢弃非字符串/空串/超长项 */
   function photoIdList(tx) {
     var raw = tx && tx.photoIds;
     if (!Array.isArray(raw) || !raw.length) { return []; }
+    var max = photoMaxPerTx();
     var out = [];
-    for (var i = 0; i < raw.length && out.length < PHOTO_MAX; i += 1) {
+    for (var i = 0; i < raw.length && out.length < max; i += 1) {
       var id = raw[i];
       if (typeof id !== 'string') { continue; }
       id = id.trim();
@@ -36166,7 +36255,8 @@ textarea::selection {
     var list = Array.isArray(ids) ? ids : [];
     var recs = Array.isArray(records) ? records : [];
     var out = [];
-    for (var i = 0; i < list.length && out.length < PHOTO_MAX; i += 1) {
+    var max = photoMaxPerTx();
+    for (var i = 0; i < list.length && out.length < max; i += 1) {
       var rec = recs[i];
       if (!rec || typeof rec !== 'object') { continue; }        /* null 位：降级 */
       var blob = rec.thumb || rec.blob || null;                 /* 缩略图优先，退原件（PLAN §3 步骤 12） */
@@ -36252,7 +36342,9 @@ textarea::selection {
   }
 
   function openViewerFor(st, tx, ids, index) {
-    var list = Array.isArray(ids) && ids.length ? ids.slice(0, PHOTO_MAX) : photoIdList(tx);
+    /* 不限张数（2.13.0）：ids 全量进查看器，只受 schema 校验上界保护，绝不再 slice(0, 3) */
+    var max = photoMaxPerTx();
+    var list = Array.isArray(ids) && ids.length ? ids.slice(0, max) : photoIdList(tx);
     var viewer = photoViewerApi();
     var photos = photosApi();
     if (!viewer || typeof viewer.open !== 'function' || !photos || !list.length) {
@@ -36306,7 +36398,12 @@ textarea::selection {
   }
 
   function buildDetailPhoto(st, tx, ids, slot, index, total) {
-    var url = photoUrlOf(slot.id, slot.blob);
+    /* 缩略图必须与「大图」用**两条不同的注册键**（2.13.0 真机实测的坑）：
+     * blob-url.js 的 urlOf 对同一 id **恒返回同一个 URL**，已缓存时忽略新 blob ——
+     * 这里若用裸 slot.id 注册缩略图，查看器拿 rec.blob（原件）去 urlOf(slot.id, 原件) 只会
+     * 拿回这个缩略图 URL ⇒ 点开大图看到的还是 320 缩略图（真机 D5/D6 复现）。
+     * 于是缩略图走 id + '#t'，把裸 id 留给查看器的原图（与 add.js 的 #t / #f 分键同约定）。 */
+    var url = photoUrlOf(slot.id + '#t', slot.blob);
     var btn = el('button', {
       className: 's-ledger-detail__photo',
       type: 'button',
@@ -46988,7 +47085,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.12.2';
+  XZB.version = '2.13.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -48104,8 +48201,8 @@ textarea::selection {
        ⑤ pending 只活在模块内存（PLAN §2 pendingCount：不落库、不跨页保持）。
      ============================================================ */
 
-  var PHOTO_PENDING_MAX = 3;
-  var PHOTO_MAX_FALLBACK = 3;
+  var PHOTO_PENDING_MAX = 999;                /* 待重试照片：张数不限，写失败多少张就记着多少张（原为 3） */
+  var PHOTO_MAX_FALLBACK = 999;               /* schema.LIMITS.txPhotos 缺失时的兜底（2.13.0 起不限张数） */
   var PHOTO_UNDO_MS = 5000;
   /* purgeAll 前快照用的 reason：只能取 store 白名单（auto/manual/pre-import/pre-restore/
      pre-migrate），白名单外的 reason 会被 store 静默降级成 manual，验收断言会抓不到。
@@ -48118,7 +48215,7 @@ textarea::selection {
 
   /* --- 内部工具 --- */
 
-  /* 单笔照片上限的唯一来源：core/photos.js PARAMS.maxItemsPerTx，缺席时兜底 3（PLAN §2） */
+  /* 单笔照片上限的唯一来源：core/photos.js PARAMS.maxItemsPerTx，缺席时兜底 999（PLAN §2） */
   function photoLimit() {
     var core = Core.photos || null;
     var params = core && core.PARAMS ? core.PARAMS : null;
