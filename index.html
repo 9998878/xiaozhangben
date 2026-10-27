@@ -4199,22 +4199,36 @@ textarea::selection {
   text-overflow: ellipsis;
 }
 
-/* ---------- 取照入口的两个隐藏面（F-7 补样式：有类名无选择器） ----------
-   两个 <input type="file">（add.js:540 拍照 / :553 相册）与分别包着它们的
-   <label>（add.js:548 / :561）都常驻 DOM，但永不直接呈现：可见入口只有
-   块头 / 空态行 / 宫格第 4 格三处，它们经 add.js:2403 openPhotoPicker()
-   调 input.click()（add.js:2406）打开系统选择器。
-   四个节点都带 hidden（input 见 add.js:544 / :557，label 见 :549 / :562）——
-   本屏已有 .s-add [hidden]{display:none}（add.css:23）兜底，这里再把「不可见」
-   固化成类名自身的选择器：既是可见性语义的显式声明，也避免这两类成为
-   「有类名无样式」的死类。**不得删除这四个节点**：它们承载「带 capture 的
-   拍照入口（add.js:543）/ 不带 capture 的相册入口」两路兼容（安卓微信必需）。 */
+/* ---------- 取照入口的两个「不可见但在渲染树里」的面 ----------
+   iOS/WebKit 实测（2026-10-27 用户真机反馈「手机上不能拍照」）：
+   带 hidden 或 display:none 的 <input type="file">，用 .click() 打不开系统相机/相册；
+   安卓 Chrome 却能打开，所以桌面与安卓都测不出来。
+   因此两个 input 与包它们的 label 一律留在渲染树里（1px、opacity:0），
+   由 <label for="xzb-photo-camera|album"> 的**原生激活**打开选择器。
+   **不得**把这两条改回 display:none，也不得给节点加 hidden —— 一改真机就哑。 */
 .s-add-photos__file {
-  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
 }
 
 .s-add-photos__pick {
-  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ---------- 空态（0 张；整行可点，命中 ≥ 44） ---------- */
@@ -33005,12 +33019,13 @@ textarea::selection {
     photoCameraInput.type = 'file';
     photoCameraInput.setAttribute('accept', 'image/*');
     photoCameraInput.setAttribute('capture', 'environment');   /* 拍照入口：capture="environment" */
-    photoCameraInput.setAttribute('hidden', 'hidden');
+    photoCameraInput.id = 'xzb-photo-camera';
+    /* iOS/WebKit 实测：带 hidden / display:none 的 file input 用 .click() 打不开系统相机。
+       必须留在渲染树里（1px、opacity:0），由 <label for> 原生激活。 */
     photoCameraInput.setAttribute('aria-hidden', 'true');
     photoCameraInput.setAttribute('tabindex', '-1');
     /* label 是隐藏 input 的受支持触发面（§3 数据流 1 的形状），js 触发放同一入口上 */
     var photoCameraLabel = make('label', 's-add-photos__pick');
-    photoCameraLabel.setAttribute('hidden', 'hidden');
     photoCameraLabel.appendChild(photoCameraInput);
     photoBlock.appendChild(photoCameraLabel);
 
@@ -33018,12 +33033,11 @@ textarea::selection {
     photoAlbumInput.type = 'file';
     photoAlbumInput.setAttribute('accept', 'image/*');
     photoAlbumInput.setAttribute('multiple', 'multiple');
-    photoAlbumInput.setAttribute('hidden', 'hidden');
+    photoAlbumInput.id = 'xzb-photo-album';
     photoAlbumInput.setAttribute('aria-hidden', 'true');
     photoAlbumInput.setAttribute('tabindex', '-1');
     /* 无 capture 的相册入口：与上面同形状，但绝不带 capture */
     var photoAlbumLabel = make('label', 's-add-photos__pick');
-    photoAlbumLabel.setAttribute('hidden', 'hidden');
     photoAlbumLabel.appendChild(photoAlbumInput);
     photoBlock.appendChild(photoAlbumLabel);
 
@@ -33086,10 +33100,11 @@ textarea::selection {
     wrap.appendChild(segWrap);
     wrap.appendChild(draftBar);
     wrap.appendChild(gridBlock);
+    /* 照片块常驻主流程（2026-10-27 修：原先塞在「补充信息」折叠区里，手机上默认看不见 ⇒ 用户以为没这功能） */
+    wrap.appendChild(photoBlock);
     extrasBody.appendChild(nlBlock);
     extrasBody.appendChild(reimburseBlock);
     extrasBody.appendChild(tagBlock);
-    extrasBody.appendChild(photoBlock);
     wrap.appendChild(extrasBlock);
 
     /* 固定键盘区（常驻）：上下文行 → 属性横滑栏 → 数字键盘 */
@@ -34874,6 +34889,13 @@ textarea::selection {
       closeKeypad();          /* 系统文件选择器与自绘键盘会双占下半屏（UI.md §2.1.4） */
       openPhotoPicker(input);
     }
+    var activePhotoSheet = null;
+    function closeActivePhotoSheet() {
+      if (activePhotoSheet && typeof activePhotoSheet.close === 'function') {
+        activePhotoSheet.close('pick');
+      }
+      activePhotoSheet = null;
+    }
     function openAddPhotoSheet() {
       var sheet = ui('sheet');
       if (!sheet || typeof sheet.open !== 'function') {
@@ -34883,12 +34905,18 @@ textarea::selection {
       /* 行内不加图标：U30 的 .s-add-photos-sheet__row 是「主文案 + 副文案」两行版式，
          塞图标会破坏既定视觉（UI.md §2.1.3 的图标列由 U30 决定），故只做文案与命中区。 */
       var holder = make('div', 's-add-photos-sheet');
-      var cameraRow = button('s-add-photos-sheet__row', '', '拍照');
-      cameraRow.setAttribute('data-act', 'camera');
+      var cameraRow = make('label', 's-add-photos-sheet__row');
+      cameraRow.setAttribute('for', 'xzb-photo-camera');
+      cameraRow.setAttribute('role', 'button');
+      cameraRow.setAttribute('tabindex', '0');
+      cameraRow.setAttribute('aria-label', '拍照');
       cameraRow.appendChild(make('span', 's-add-photos-sheet__row-main', '拍照'));
       cameraRow.appendChild(make('span', 's-add-photos-sheet__row-sub', '用后置摄像头拍'));
-      var albumRow = button('s-add-photos-sheet__row', '', '从相册选择');
-      albumRow.setAttribute('data-act', 'album');
+      var albumRow = make('label', 's-add-photos-sheet__row');
+      albumRow.setAttribute('for', 'xzb-photo-album');
+      albumRow.setAttribute('role', 'button');
+      albumRow.setAttribute('tabindex', '0');
+      albumRow.setAttribute('aria-label', '从相册选择');
       albumRow.appendChild(make('span', 's-add-photos-sheet__row-main', '从相册选择'));
       albumRow.appendChild(make('span', 's-add-photos-sheet__row-sub', '最多选 3 张'));
       holder.appendChild(cameraRow);
@@ -34900,12 +34928,10 @@ textarea::selection {
         content: holder,
         dismissible: true
       });
-      function pick(row, input) {
-        if (handle && typeof handle.close === 'function') handle.close('pick');
-        openPhotoInput(input);
-      }
-      listen(cameraRow, 'click', function () { pick(cameraRow, photoCameraInput); });
-      listen(albumRow, 'click', function () { pick(albumRow, photoAlbumInput); });
+      /* 不在这里 close：label 的默认行为是「激活关联 input」，同步移除 label 节点
+         在 iOS 上会把这次激活一起打断。改由文件选择结束后（change）再关 sheet。 */
+      handle = handle || null;
+      activePhotoSheet = handle;
     }
     function onPhotoAddTap() {
       if (livePhotoItems().length >= photoLimit()) {
@@ -35222,11 +35248,13 @@ textarea::selection {
 
     /* 预载已在 DOM 之前发起（数据流 5b，见「照片预载」）；这里只补首帧渲染与入口接线 */
     listen(photoCameraInput, 'change', function () {
+      closeActivePhotoSheet();
       var picked = photoCameraInput.files ? Array.prototype.slice.call(photoCameraInput.files) : [];
       photoCameraInput.value = '';        /* 先清空：同一张重选也能触发 change */
       pickPhotoFiles(picked);
     });
     listen(photoAlbumInput, 'change', function () {
+      closeActivePhotoSheet();
       var picked = photoAlbumInput.files ? Array.prototype.slice.call(photoAlbumInput.files) : [];
       photoAlbumInput.value = '';
       pickPhotoFiles(picked);
@@ -46880,7 +46908,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.12.0';
+  XZB.version = '2.12.1';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
