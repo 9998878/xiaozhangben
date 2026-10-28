@@ -6813,8 +6813,16 @@ textarea::selection {
 .s-ledger-item__text {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
+  gap: 0;
   min-width: 0;
+  /* __text 同时带 c-row__main（components.css: padding: --sp-2 0），
+     三行文字 22*3 + gap 2*2 = 70，再加继承来的 8px 上下内边距 = 78，
+     单看没超 --h-row-min 80，但它顶穿 __main 的 min-height 后被 grid 结算成 86，
+     行高随备注有无在 80/86 之间跳（A8b 实测）。
+     行内容器的上下留白已由 __main 的 padding 提供，这里把继承来的内边距与 gap 收掉，
+     三行合计 66px，有备注/无备注两态恒为 80px。 */
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .s-ledger-item__title {
@@ -6827,13 +6835,53 @@ textarea::selection {
   text-overflow: ellipsis;
 }
 
+/* P1 副标题拆行（SPEC R1–R4 / R8–R9 / A7–A10）
+ * 结构：__sub1（账户）+ __sub2（备注）+ __sub（保留的完整语义串，视觉高度 0）。
+ * 三条硬约束：
+ *   ① __sub 必须留在 DOM 且 getBoundingClientRect().height === 0 ⇒ 只做视觉隐藏，
+ *      **不用 display:none / visibility**（几何断言要能查到它，A9）；
+ *   ② 行高不得被撑高（__main 恒 --h-row-min 80px ±2px，A8）：
+ *      __sub 绝对定位 + __sub2 的 [hidden] 都退出流；两行同高，
+ *      故有备注/无备注两态下文字列高度一致（78px ≤ 80px，不撑高）；
+ *   ③ 两行各自单行省略（__sub2 拿独立宽度预算，A10），
+ *      本段只作用于文字列内部，**不碰** __trail / c-row__value 的金额列
+ *      （金额防裁切靠 .s-ledger-item__trail.c-row__value 的等价特异度规则，本次未改）。
+ */
 .s-ledger-item__sub {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.s-ledger-item__sub1,
+.s-ledger-item__sub2 {
+  display: block;
+  min-width: 0;
   overflow: hidden;
   color: var(--c-text-2);
   font-size: var(--fs-aux-lg);
   line-height: var(--lh-body);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* 账户查不到（不存在 / 已软删）⇒ 弱化，但对比度仍过 AA（--c-text-3 白底 5.07:1） */
+.s-ledger-item__sub1--muted {
+  color: var(--c-text-3);
+}
+
+/* 无备注：__sub2 由 JS 设 hidden（[hidden] ⇒ display:none，高度 0，不占行） */
+.s-ledger-item__sub2[hidden] {
+  display: none;
 }
 
 .s-ledger-item__trail {
@@ -7348,6 +7396,64 @@ textarea::selection {
   background: var(--c-pressed);
 }
 
+/* ---------------- P3 筛选状态条（常驻可见 + 一键撤销） ----------------
+ * 只在 type/待报销/搜索词任一命中时挂进 DOM（ledger.js · buildActivebar），无筛选不占高。
+ * 吸附：top 用 --h-nav + --safe-top，与 .s-ledger-sticky 同值时它压在月份/汇总那一层
+ * 正下方（sticky 重叠时后绘制者在上面，本节点紧跟 .s-ledger-chips 之后，恒在 sticky 之后绘制），
+ * 滚动中常驻可见。z-index 盖过 .s-ledger-day__head(2) 与 .s-ledger-item__surface(1)，
+ * 且底色用不透明的 --c-bg —— 否则下方流水行会从半透明底里透出来。
+ */
+.s-ledger-activebar {
+  position: sticky;
+  top: calc(var(--h-nav) + var(--safe-top));
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  box-sizing: border-box;
+  min-height: var(--tap);
+  padding: var(--sp-1) calc(var(--page-x) + var(--safe-right)) var(--sp-1)
+    calc(var(--page-x) + var(--safe-left));
+  background: var(--c-bg);
+}
+
+/* 文案单行省略：长搜索词不换行、不撑高状态条 */
+.s-ledger-activebar__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.s-ledger-activebar__clear {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: var(--tap);
+  margin: 0;
+  padding: 0 var(--sp-4);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--c-tint-soft);
+  color: var(--c-tint-soft-text);
+  font-family: inherit;
+  font-size: var(--fs-footnote);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-ledger-activebar__clear:active {
+  background: var(--c-tint-soft-strong);
+}
+
+/* 桌面端与列表同宽居中（768 断点见文末响应式段） */
+
 /* ---------------- 已启用筛选的可删除 chips（M4） ---------------- */
 .s-ledger-activechips {
   display: flex;
@@ -7550,6 +7656,7 @@ textarea::selection {
   .s-ledger-monthrow,
   .s-ledger-search,
   .s-ledger-chips,
+  .s-ledger-activebar,
   .s-ledger-days,
   .s-ledger-more {
     max-width: calc(var(--content-max) + var(--sp-page) * 2);
@@ -39150,6 +39257,14 @@ textarea::selection {
     chips.appendChild(filterBtn);
     bar.appendChild(chips);
 
+    /* --- P3 筛选状态条：坐在 chips 行下方，有筛选才挂进 DOM（无筛选时不占高、querySelector 为 null） --- */
+    var activebar = buildActivebar(st);
+    /* 紧跟 chips 行之后挂载。注释一直写着「挂进 DOM」，但缺的正是这一步：
+       只把节点存进 st.nodes 而不 append，DOM 里永远查不到 .s-ledger-activebar
+       （A11b/A12/A13/A14 全查不到）。sticky 重叠时后绘制者在上，
+       紧跟 chips 之后才能压在月份/汇总那一层正下方。 */
+    if (activebar) { bar.appendChild(activebar); }
+
     /* --- 已启用的高级筛选：可删除 chips（无筛选时不占高度） --- */
     var activeRow = el('div', { className: 's-ledger-activechips' });
     activeRow.hidden = true;
@@ -39172,6 +39287,14 @@ textarea::selection {
     st.nodes.reimburseChip = reimburseChip;
     st.nodes.activeRow = activeRow;
 
+    if (activebar) {
+      st.nodes.activebar = activebar;
+      st.nodes.activebarText = activebar.querySelector('.s-ledger-activebar__text');
+      st.nodes.activebarClear = activebar.querySelector('.s-ledger-activebar__clear');
+      /* R12：一次性撤掉「类型 / 待报销 / 搜索词」三个维度，月份与日期是导航维度，保留 */
+      bindActivebarClear(st, activebar);
+    }
+
     monthBtn.addEventListener('click', function () { openMonthSheet(st); });
     chipNodes.all.addEventListener('click', function () { setType(st, 'all'); });
     chipNodes.expense.addEventListener('click', function () { setType(st, 'expense'); });
@@ -39189,6 +39312,99 @@ textarea::selection {
     filterBtn.addEventListener('click', function () { openFilterSheet(st); });
 
     return bar;
+  }
+
+  /* ---------------- P3 筛选状态条（常驻可见 + 一键撤销） ---------------- */
+
+  /* R10：只有这三个维度触达「可见筛选」；账户 / 分类 / 金额区 / 单日 仍由
+   * .s-ledger-activechips 那行负责（不重复进状态条，避免同一条件说两遍）。 */
+  function activebarVisible(st) {
+    return st.type !== 'all' || st.reimburseOnly === true || String(st.query || '').trim() !== '';
+  }
+
+  /* R11：固定顺序 筛选： + 类型 + 仅待报销 + <N>月 + 搜索「<q>」，用 · 连接 */
+  function activebarParts(st) {
+    var parts = [];
+    if (st.type !== 'all' && TYPE_LABEL[st.type]) { parts.push(TYPE_LABEL[st.type]); }
+    if (st.reimburseOnly === true) { parts.push('仅待报销'); }
+    var monthNo = Number(String(st.month || '').split('-')[1]);
+    if (isFinite(monthNo) && monthNo > 0) { parts.push(monthNo + ' 月'); }
+    var query = String(st.query || '').trim();
+    if (query) { parts.push('搜索「' + query + '」'); }
+    return parts;
+  }
+
+  /* R12：一次撤销类型 / 待报销 / 搜索词三个维度；月份与日期属导航维度，保留。
+     抽成函数是因为状态条被摘除后还要能重建，重建时必须重绑同一个撤销行为。 */
+  function bindActivebarClear(st, barNode) {
+    if (!barNode) { return; }
+    barNode.addEventListener('click', function () {
+      if (st.dead) { return; }
+      st.type = 'all';
+      st.reimburseOnly = false;
+      st.query = '';
+      if (st.nodes.input) { st.nodes.input.value = ''; }
+      syncCancel(st);
+      paint(st);
+    });
+  }
+
+  /* 状态条与 chips 行同属列表页顶栏，取 chips 的父节点即可；
+     chips 尚未挂载时退回 st.nodes.bar，避免重建时抛错。 */
+  function listBarOf(st) {
+    var chips = st.nodes.chips;
+    return (chips && chips.parentNode) || st.nodes.bar;
+  }
+
+  function buildActivebar(st) {
+    if (!activebarVisible(st)) { return null; }
+    var bar = el('div', {
+      className: 's-ledger-activebar',
+      role: 'status',
+      'aria-live': 'polite',
+      'aria-atomic': 'true'
+    }, [
+      el('span', { className: 's-ledger-activebar__text' }),
+      el('button', {
+        className: 's-ledger-activebar__clear',
+        type: 'button',
+        'aria-label': '清除筛选',
+        text: '清除'
+      })
+    ]);
+    return bar;
+  }
+
+  /* 文案跟随筛选态；出现 / 消失则整条挂载或摘除（无筛选时 querySelector 必须为 null） */
+  function syncActivebar(st) {
+    var bar = st.nodes.activebar;
+    if (!bar) {
+      /* 曾被一键清除摘除（activebar 置 null）后又命中筛选：
+         必须在这里重建，否则 paint 每次都在 !bar 处提前 return，
+         状态条再也回不来（点「支出」后无反应）。 */
+      if (!activebarVisible(st)) { return; }
+      var fresh = buildActivebar(st);
+      if (!fresh) { return; }
+      st.nodes.activebar = fresh;
+      st.nodes.activebarText = fresh.querySelector('.s-ledger-activebar__text');
+      st.nodes.activebarClear = fresh.querySelector('.s-ledger-activebar__clear');
+      bindActivebarClear(st, fresh);
+      listBarOf(st).appendChild(fresh);
+      bar = fresh;
+    }
+    if (!activebarVisible(st)) {
+      if (bar.parentNode) { bar.parentNode.removeChild(bar); }
+      st.nodes.activebar = null;
+      st.nodes.activebarText = null;
+      st.nodes.activebarClear = null;
+      return;
+    }
+    if (!bar.parentNode && st.nodes.chips && st.nodes.chips.parentNode) {
+      st.nodes.chips.parentNode.insertBefore(bar, st.nodes.chips.nextSibling);
+    }
+    if (st.nodes.activebarText) {
+      st.nodes.activebarText.textContent = '筛选：' + activebarParts(st).join(' · ');
+    }
   }
 
   function buildDays(st) {
@@ -39437,10 +39653,22 @@ textarea::selection {
     var cents = Math.abs(Number(tx.amountCents) || 0);
     var cat = maps.categories[tx.categoryId] || null;
     var title = isTransfer ? '转账' : (cat && cat.name ? String(cat.name) : '未分类');
-    var fromName = accountName(maps.accounts[tx.accountId]);
-    var toName = tx.toAccountId ? accountName(maps.accounts[tx.toAccountId]) : '';
-    var sub = isTransfer ? fromName + ' \u2192 ' + toName : fromName;
-    if (!isTransfer && tx.note) { sub += ' \u00b7 ' + String(tx.note); }
+    /* P1 副标题拆行（SPEC R1–R4 / R8–R9）：
+       sub1 = 账户（转账为 from → to），sub2 = 备注；原 __sub 保留为视觉高度 0 的完整语义串。
+       账户查不到（不存在 / 已软删）⇒ sub1 显示「未指定账户」并挂 --muted（R3）。 */
+    var fromAcc = tx.accountId ? (maps.accounts[tx.accountId] || null) : null;
+    var fromName = fromAcc ? accountName(fromAcc) : '未指定账户';
+    var fromMuted = !fromAcc;
+    var toName = '';
+    var toMuted = false;
+    if (isTransfer) {
+      var toAcc = tx.toAccountId ? (maps.accounts[tx.toAccountId] || null) : null;
+      toName = toAcc ? accountName(toAcc) : '未指定账户';
+      toMuted = !toAcc;
+    }
+    var noteText = tx.note === undefined || tx.note === null ? '' : String(tx.note).trim();
+    var sub1 = isTransfer ? fromName + ' \u2192 ' + toName : fromName;
+    var sub = noteText ? sub1 + ' \u00b7 ' + noteText : sub1;
     var iconName = isTransfer ? 'transfer' : (cat && cat.icon ? String(cat.icon) : 'ellipsis');
     var slot = isTransfer ? 2 : categorySlot(st, tx.categoryId);
     var photoIds = photoIdList(tx);
@@ -39505,10 +39733,25 @@ textarea::selection {
       text: title
     }));
     var subLine = el('span', { className: 's-ledger-item__sub c-row__sub u-ellipsis' });
+    /* sub1：账户行（转账 from → to）。muted = 账户缺失/已软删（R3）。
+       垫付待报销的行保留「待报」标记：原挂在旧副标题行 __sub 上、位于文本之前；
+       P1 拆行后 __sub 已退化为视觉高度 0，标记若留在其中就成了不可见，
+       故前移到第 1 行行首（第 2 行无备注时整体 hidden，标记会跟着消失，不能用）。 */
+    var sub1Node = el('span', {
+      className: 's-ledger-item__sub1' + (fromMuted || toMuted ? ' s-ledger-item__sub1--muted' : '')
+    });
     if (tx.reimburse === 'pending') {
-      subLine.appendChild(el('span', { className: 's-ledger-item__flag', text: '待报' }));
+      sub1Node.appendChild(el('span', { className: 's-ledger-item__flag', text: '待报' }));
     }
+    sub1Node.appendChild(document.createTextNode(sub1));
+    /* sub2：备注行。为空整行不渲染（hidden ⇒ 高度 0，R2） */
+    var sub2Node = el('span', { className: 's-ledger-item__sub2', text: noteText });
+    if (!noteText) { sub2Node.hidden = true; }
+    /* 原 __sub 节点保留：仍是完整「账户 · 备注」串，但视觉高度为 0（R9 / A9）。
+       里面放纯文本，不加 role 以免与行级 aria-label 重复播报。 */
     subLine.appendChild(document.createTextNode(sub));
+    mainText.appendChild(sub1Node);
+    mainText.appendChild(sub2Node);
     mainText.appendChild(subLine);
     main.appendChild(mainText);
 
@@ -40755,6 +40998,8 @@ textarea::selection {
 
   function paint(st) {
     if (st.dead) { return; }
+    /* P3 筛选状态条：文案随 type / reimburseOnly / query 变化，每次重绘前同步一次 */
+    syncActivebar(st);
     /* render token：本页异步照片回包只认最新一次 paint，旧请求一律丢弃（A6） */
     st.renderToken += 1;
     st.photoRows.length = 0;
