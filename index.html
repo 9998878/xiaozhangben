@@ -2744,11 +2744,13 @@ textarea::selection {
 }
 
 /* 标签栏中间的「记一笔」：把右下角 FAB 让出来的位置还给流水金额。
-   它是一颗动作按钮，不是第五个 Tab —— 没有 data-tab，不参与选中态。 */
+   它是一颗动作按钮，不是第五个 Tab —— 没有 data-tab，不参与选中态。
+   2.15.0：中央特殊位（flex: 0 0 72px）→ 普通等宽列，与其余列同为 1fr 等分；
+   黄圆 52px 仍由 .c-tabbar__compose-dot 的 --size-compose 决定，中心线自动对齐。 */
 .c-tabbar__compose {
   display: grid;
   place-items: center;
-  flex: 0 0 72px;
+  flex: 1 1 0;
   min-width: 0;
   height: var(--h-tabbar);
   color: var(--c-on-tint);
@@ -2774,6 +2776,14 @@ textarea::selection {
   box-shadow: 0 1px 4px #00000014;
   transition-duration: var(--dur-press-in);
   transition-timing-function: var(--ease-press);
+}
+
+/* 「记一笔」降为普通列后，键盘焦点必须可见：焦点环画在品牌黄圆之上
+   （--c-focus 对 --c-brand 的对比度满足 WCAG 非文本 3:1，实测约 14.2:1），
+   外描边 2px 不改布局尺寸；圆本身 52px、列宽 80px，环不会被圆角裁切。 */
+.c-tabbar__compose:focus-visible .c-tabbar__compose-dot {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: var(--focus-offset);
 }
 
 /* ============================================================
@@ -4073,16 +4083,18 @@ textarea::selection {
   font-weight: inherit;
 }
 
-/* ---------------- 白色快捷入口卡（五等分，压住头部底边 16px） ----------------
+/* ---------------- 白色快捷入口卡（四等分，压住头部底边 16px） ----------------
  * 压边用「负 margin + z-index + 文档流不变」实现：
  * 不用 position:absolute——卡片的 44px 点击区和键盘弹出都不该脱离文档流。
+ * 2026-10 2.15.0：五等分 → 四等分（UI.md §2.2 几何表），只改这一处函数；
+ * minmax(0,1fr) 保证四格可收缩到 0，320/390/430 三档永不横向溢出。
  */
 
 .s-home-quick {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--sp-1);
   box-sizing: border-box;
   margin: calc(var(--sp-5) * -1) var(--sp-page) 0;
@@ -4102,8 +4114,11 @@ textarea::selection {
   min-width: 0;
   min-height: var(--h-tap-min);
   padding: var(--sp-1) 0;
+  border: 0; /* a → button 归一：base.css 未重置 UA 边框 */
   border-radius: var(--r-lg);
+  background: none; /* 同上：去掉 UA buttonface 灰底 */
   color: var(--c-text);
+  font: inherit; /* 同上：UA 默认 13.33px，会破坏 12px 标签继承链 */
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
   transition: background-color var(--dur-base) var(--ease-standard);
@@ -4136,7 +4151,8 @@ textarea::selection {
 }
 
 @media (hover: hover) {
-  .s-home-quick__item:hover {
+  /* hover 收窄：选中态（aria-pressed=true）不吃灰底，避免「选中被 hover 盖掉」 */
+  .s-home-quick__item:not([aria-pressed="true"]):hover {
     background: var(--c-fill);
   }
 }
@@ -4154,6 +4170,25 @@ textarea::selection {
 .s-home-quick__item:focus-visible {
   outline: var(--focus-width) solid var(--c-focus);
   outline-offset: calc(var(--focus-offset) * -1);
+}
+
+/* 唯一持久选中态（「待报销」开关，aria-pressed）。两态语义固定走 warn 黄系：
+ * 底色走 --c-warn-soft、文字与图标走 --c-warn（对比度 4.85:1），
+ * 与 ledger.css 的「待报销」chip 同一套颜色；禁用 --c-tint 表达选中（黄底黄字不可读）。
+ * 层叠：:active / .is-pressed 是同权重（0,2,0）且写在前面，本组规则在后即胜出，
+ * 因此「选中 + 按住」背景保持 warn-soft，只留 :271-274 的图标 scale(.96) 作为反馈。 */
+.s-home-quick__item[aria-pressed="true"] {
+  background: var(--c-warn-soft);
+  color: var(--c-warn);
+}
+
+.s-home-quick__item[aria-pressed="true"] .s-home-quick__icon {
+  color: var(--c-warn);
+}
+
+.s-home-quick__item[aria-pressed="true"] .s-home-quick__label {
+  color: var(--c-warn);
+  font-weight: var(--fw-semibold); /* 12px 加粗：颜色之外的第二重编码 */
 }
 
 /* ---------------- 预算（扁平：黄进度条 + 一行数字） ---------------- */
@@ -6347,7 +6382,9 @@ textarea::selection {
   -webkit-tap-highlight-color: transparent;
 }
 
-.s-ledger-stats-link:active {
+/* 按压底色只对独立明细页的锚点生效（首页嵌入态是 span，不可聚焦、按压不变灰）。
+   UI.md §4.3 / DESIGN [D2-40]：收窄既有选择器，不新增覆盖规则。 */
+.s-ledger-stats-link[href]:active {
   background: var(--c-pressed);
 }
 
@@ -7669,6 +7706,34 @@ textarea::selection {
   .s-ledger-item__main {
     transition: none;
   }
+}
+
+/* ==========================================================================
+   嵌入态（首页内）：JS 在 ledger 根节点同时挂 s-ledger 与 s-ledger--embedded
+   --------------------------------------------------------------------------
+   与独立态恒为 4 处差异（UI.md §1.2 N1 / DESIGN [D2-40]）：
+     1) .s-ledger-sticky 的 top   → 无导航栏，44px 会变成凭空空白带；
+     2) .s-ledger-activebar 的 top → 同上；
+     3) .s-ledger-empty 的 min-height → 上方已叠黄头+四格卡，320px 把 CTA 推离首屏；
+     4) stats 链接按压失效 → 不新增规则，靠 :154 把既有选择器收窄成「锚点专属」。
+   独立态 :15-17 的 calc(var(--h-nav) + var(--safe-top)) 保持不动（回滚保险）。
+   日期头的 top 不在这里：.s-ledger-day__head 样式表内无 top，由 ledger.js 的
+   measureSticky() 内联写入（= sticky 的 used top + offsetHeight），CSS 侧只给 sticky 本条设 top。
+   注意：本节点必须保持「无 overflow / 无 transform / 无 filter / 无 contain」——
+   .s-ledger-bar{display:contents}（:9-13）已把 sticky 的包含块让给本节点，
+   一旦生成裁剪或变换上下文，吸顶与 JS 量出的日头 top 会同时失准（A15/A16）。
+   ========================================================================== */
+
+.s-ledger--embedded .s-ledger-sticky {
+  top: var(--safe-top);
+}
+
+.s-ledger--embedded .s-ledger-activebar {
+  top: var(--safe-top);
+}
+
+.s-ledger--embedded .s-ledger-empty {
+  min-height: 240px;
 }
 
 </style>
@@ -11367,16 +11432,13 @@ textarea::selection {
   <div id="app" aria-busy="true">
     <main id="view-root"></main>
 
-    <!-- 固定标签栏：首页 / 明细 / 统计 / 我的；图标由 app.js 注入。
+    <!-- 固定标签栏：首页 / 记一笔 / 统计 / 我的，四列等分；中央「记一笔」是
+         普通列（无 data-tab，只保留黄圆 +），图标由 app.js 注入。
          2.14.0 起「概览」统一改称「首页」，与 router.js 的视图标题保持一致 -->
     <nav id="tabbar" class="c-tabbar app-tabbar" aria-label="主导航">
       <a class="c-tabbar__item" href="#/home" data-tab="home">
         <span class="c-tabbar__icon" data-tab-icon="home" aria-hidden="true"></span>
         <span class="c-tabbar__label">首页</span>
-      </a>
-      <a class="c-tabbar__item" href="#/ledger" data-tab="ledger">
-        <span class="c-tabbar__icon" data-tab-icon="list" aria-hidden="true"></span>
-        <span class="c-tabbar__label">明细</span>
       </a>
       <a class="c-tabbar__compose" href="#/add" aria-label="记一笔">
         <span class="c-tabbar__compose-dot">
@@ -32883,8 +32945,9 @@ textarea::selection {
 
   /* 八个冻结视图；顺序仅用于诊断输出 */
   var VIEWS = ['home', 'add', 'ledger', 'stats', 'accounts', 'books', 'plan', 'settings'];
-  /* 只有这四个是一级 Tab 根；plan 是二级页，不出现在 TabBar */
-  var TAB_ROOTS = ['home', 'ledger', 'stats', 'settings'];
+  /* 只有这三个是一级 Tab 根；ledger 已归一到 home（D1-5/D1-7），
+     plan 是二级页，二者都不出现在 TabBar */
+  var TAB_ROOTS = ['home', 'stats', 'settings'];
 
   var DEFAULT_TITLES = {
     home: '首页',
@@ -32910,6 +32973,10 @@ textarea::selection {
   var tabbarEl = null;
   var lastFocusAt = 0;
   var popTimer = null;
+  /* 当前屏幕 render 返回的销毁句柄与渲染序号（D3-1..D3-5）；
+     序号用于 Promise 返回值的竞态判定：resolve 时序号已变即视作旧屏。 */
+  var currentScreenCleanup = null;
+  var renderToken = 0;
 
   /* ---------------- 基础工具 ---------------- */
 
@@ -33040,6 +33107,15 @@ textarea::selection {
       });
     }
 
+    /* 2.15.0 起 #/ledger 是「首页（内嵌明细）」的别名：视图归一为 home、
+       sub 丢弃（明细没有子路由）、params 原样保留（D1-7/D1-10）。
+       与上面的 #/mine 一样只在本层改语义；地址栏字面改写由路由层的
+       syncAliasBar 负责（D1-15），这里不碰 history。 */
+    if (view === 'ledger') {
+      view = 'home';
+      sub = '';
+    }
+
     var route = { view: view, sub: sub, params: params };
     route.hash = buildHash(route);
     route.key = route.hash;
@@ -33150,6 +33226,17 @@ textarea::selection {
     } catch (error) {
       /* 同上，降级为纯内存导航 */
     }
+  }
+
+  /* [D1-15] 别名地址栏改写判定：仅当地址栏仍是 #/ledger… 且与归一后的
+     route.hash 不同时命中。本函数只判定、不写历史（历史写入由调用点
+     完成），以保证单次导航内 history.replaceState 计数恒 ≤ 1（D1-16）：
+     ① 冷启动 → 调用点 historyReplace(route, 0) 后立即首次渲染；
+     ② 同 key 重入 → 调用点 replaceRoute(route, scroll, false) 内部只 replace
+        并立即重渲染，恢复被 app.js releaseBlobUrls() 释放的缩略图。 */
+  function syncAliasBar(route) {
+    var liveHash = String(global.location.hash);
+    return liveHash !== route.hash && /^#\/ledger(\?|$|\/)/.test(liveHash);
   }
 
   /* 进入 Tab 根：历史栈重置为单条，浏览器后退不回到上一个 Tab */
@@ -33326,16 +33413,62 @@ textarea::selection {
     toast('这个页面暂时没能显示', { type: 'danger' });
   }
 
+  /* [D3-3] 销毁句柄：调用方先置空、再调用，保证恰好一次；异常只 warn，
+     不阻断导航。 */
+  function destroyHandle(handle) {
+    if (!handle || typeof handle.destroy !== 'function') return;
+    try {
+      handle.destroy();
+    } catch (error) {
+      if (global.console && console.warn) console.warn('[小账本] 屏幕销毁失败', error);
+    }
+  }
+
+  /* [D3-4] 换屏/重绘之前取出并置空当前句柄，再销毁（先置空可防重入）。 */
+  function destroyCurrentScreen() {
+    var handle = currentScreenCleanup;
+    currentScreenCleanup = null;
+    destroyHandle(handle);
+  }
+
+  /* [D3-1] 只采纳带 destroy 函数的对象；undefined/null/字符串/数字/布尔/
+     无 destroy 的对象一律静默忽略，不得进入 showScreenError。 */
+  function adoptHandle(value) {
+    if (!value || typeof value !== 'object') return null;
+    if (typeof value.destroy !== 'function') return null;
+    return {
+      destroy: function () { value.destroy.call(value); }
+    };
+  }
+
   function callScreen(meta, body, ctx) {
+    var token = renderToken;
+    var routeKey = currentRoute ? currentRoute.key : '';
     try {
       var result = meta.render(body, ctx);
       if (result && typeof result.then === 'function') {
-        result.then(null, function (error) {
+        /* [D3-1/D3-2] Promise：立即返回 null；resolve 时只有在仍是本轮渲染
+           且仍属当前路由时才采纳并登记，否则立刻销毁，绝不覆盖当前句柄。 */
+        result.then(function (value) {
+          var handle = adoptHandle(value);
+          if (!handle) return;
+          if (token !== renderToken || !currentRoute || currentRoute.key !== routeKey) {
+            destroyHandle(handle);
+            return;
+          }
+          currentScreenCleanup = handle;
+        }, function (error) {
           showScreenError(body, error);
         });
+        return null;
       }
+      var handle = adoptHandle(result);
+      if (!handle) return null;
+      currentScreenCleanup = handle;
+      return handle;
     } catch (error) {
       showScreenError(body, error);
+      return null;
     }
   }
 
@@ -33410,6 +33543,10 @@ textarea::selection {
     var opts = options || {};
     currentRoute = route;
     publishState();
+    /* 本轮渲染序号递增：上一屏未落定的 Promise 句柄据此判为过期。 */
+    renderToken += 1;
+    /* [D3-4/D3-5] 旧屏 teardown 必须先于新屏构建，且恰好一次。 */
+    destroyCurrentScreen();
 
     var meta = screens[route.view] || null;
     var isMissing = !meta;
@@ -33513,7 +33650,16 @@ textarea::selection {
       replaceRoute(fallback, 0, false);
       return;
     }
-    if (currentRoute && route.key === currentRoute.key) return;
+    if (currentRoute && route.key === currentRoute.key) {
+      /* [D1-15]② 同 key 重入且地址栏仍写着 #/ledger…：只 replace、不 push，
+         并立即经 replaceRoute 重渲染——app.js 的 history 包装与 hashchange
+         监听会在改写时 releaseBlobUrls()，只改地址不重建会让列表缩略图全白
+         （D1-16 同 key 专项）。 */
+      if (syncAliasBar(route)) {
+        replaceRoute(route, getCurrentScroll(), false);
+      }
+      return;
+    }
 
     /* 地址真的变了（浏览器硬件返回 / 手势返回 / 手改地址栏都会走到这里，
        这些路径不经过 back()）：浮层留下来只会压在新页面上，先统一收起。 */
@@ -33600,6 +33746,11 @@ textarea::selection {
     index = 0;
     currentRoute = route;
     publishState();
+    /* [D1-15]① 冷启动：地址栏仍是 #/ledger… 时先改写为归一后的 route.hash。
+       紧随其后就是首次渲染，releaseAll 发生在 blob 诞生之前，不会白图。 */
+    if (syncAliasBar(route)) {
+      historyReplace(route, 0);
+    }
     renderRoute(route, 0, { animate: false });
 
     /* 初次渲染时 startViewTransition 尚未绑定，这里补一次焦点 */
@@ -33648,16 +33799,21 @@ textarea::selection {
 
   <script>
 /* 小账本 2.0 · js/screens/home.js
- * 首页（2.14 改版）：本屏自绘黄色专属头部（品牌行 + 月度汇总三列）
- *   → 白色快捷入口卡（五等分，上浮压住头部底边）
- *   → 紧凑预算单卡（无预算则不渲染）
- *   → 待入账（有数据才出现）→ 最近流水（5 条）。
+ * 首页（2.15 整合版）：本屏自绘黄色专属头部（品牌行 + 月度汇总三列）
+ *   → 白色四格页内动作卡（找流水 / 分类 / 待报销 / 预算，上浮压住头部底边）
+ *   → 紧凑预算单卡（无预算时不渲染；点卡或四格「预算」打开预算状态 Sheet）
+ *   → 待入账（有数据才出现）
+ *   → 嵌入式明细（ledger.render(host, ctx, { embedded:true, … }) 是唯一列表实现）
+ *
+ * 2.15 删除：独立「最近流水」区块、右下角 FAB、行/照片渲染管线（整体交给 ledger.js）。
+ * 四格是**页内动作**不是导航：全是 <button type="button">，无 href、不写 hash（R14/R15）。
  *
  * 契约：XZB.screens.register('home', { title, immersive, render })
+ *   render(root, ctx) → { destroy }；路由换屏前调用一次 destroy（D2-11）。
  *   immersive=true ⇒ 路由壳层不再为首页渲染 .app-nav 与 .c-large-title，
  *   头部与 h1.app-title 由本屏负责（路由 focusTitle 仍命中本屏 h1）。
  * 硬规则：不碰 IndexedDB / localStorage / TabBar；用户数据一律 textContent；
- *         统计只走 XZB.core.stats，月汇总在 render 里只调用一次。
+ *         统计只走 XZB.core.stats，月汇总/预算按「月份」各只算一次。
  */
 (function (global) {
   'use strict';
@@ -33676,62 +33832,86 @@ textarea::selection {
   var stats = Core.stats || null;
   var recurrence = Core.recurrence || null;
 
-  var RECENT_LIMIT = 5;   /* 首页只露 5 条，更多走「查看全部」进明细 */
-
-  /* 快捷入口：五格固定，顺序与 CONTRACT 文案总表一致 */
-  var QUICK_ENTRIES = [
-    { key: 'ledger', label: '明细', href: '#/ledger', icon: 'list' },
-    { key: 'plan', label: '预算', href: '#/plan', icon: 'target' },
-    { key: 'accounts', label: '账户', href: '#/accounts', icon: 'wallet' },
-    { key: 'stats', label: '统计', href: '#/stats', icon: 'chart' },
-    { key: 'settings', label: '我的', href: '#/settings', icon: 'user' }
+  /* 四格页内动作：固定顺序 + 固定文案（UI.md §2.1）。四格都不是导航：
+     点击后 location.hash 逐字符不变、history.length 不变（A5 / R15）。 */
+  var QUICK_ACTIONS = [
+    { attrs: { 'data-quick': 'search' }, label: '找流水', icon: 'search' },
+    { attrs: { 'data-quick': 'tag' }, label: '分类', icon: 'tag' },
+    { attrs: { 'data-quick': 'flag' }, label: '待报销', icon: 'flag', toggle: true },
+    { attrs: { 'data-quick': 'bell' }, label: '预算', icon: 'bell' }
   ];
-
-  /* 分类图标名与 icons.js 的差异（种子数据里的 game / housing 等） */
-  var ICON_ALIAS = {
-    game: 'fun',
-    housing: 'house',
-    utilities: 'bolt',
-    dining: 'food',
-    entertainment: 'fun',
-    education: 'book',
-    medical: 'health',
-    comm: 'phone'
-  };
 
   /* 只在本次会话第一次进首页时播错位入场，之后 rerender 不再抖 */
   var firstPaint = true;
-
-  /* 每次 render 自增：照片异步回包只允许写回同一次渲染，防止旧请求覆盖新页面 */
-  var renderSeq = 0;
 
   /* 下拉刷新：与既有首页能力清单保持一致（阈值 60px，到顶才触发） */
   var PULL_VISUAL_MAX = 88;
   var PULL_TRIGGER = 60;
   var PULL_READY = Math.round(PULL_TRIGGER * 0.7);
 
+  var MONTH_RE = /^\d{4}-\d{2}$/;
+
+  /* 超支态文案唯一真源（A9 单源化：全文件仅此一处字面量，其余引用该常量）。
+     第四行标题、超支徽标与首页预算卡徽标共用，避免三处各写一遍。 */
+  var TEXT_OVER = '已超支';
+
   /* ---------------- 依赖取用 ---------------- */
 
   function uiApi() { return XZB.ui || XZB.UI || {}; }
   function kit() { return uiApi().kit || null; }
+  function sheetApi() { return uiApi().sheet || null; }
   function toastApi() { return uiApi().toast || null; }
   function appApi() { return XZB.app || XZB.App || null; }
+  function routerApi() { return XZB.router || XZB.Router || null; }
 
+  function appendKids(node, kids) {
+    if (kids === undefined || kids === null || kids === false) { return; }
+    if (Array.isArray(kids)) {
+      for (var i = 0; i < kids.length; i += 1) { appendKids(node, kids[i]); }
+      return;
+    }
+    if (kids && typeof kids.nodeType === 'number') { node.appendChild(kids); return; }
+    node.appendChild(document.createTextNode(String(kids)));
+  }
+
+  /* 建节点：正常路径走 XZB.UI.kit.el（浏览器里再由 XZB.ui.dom.el 落全部属性）。
+     降级路径（无 kit）自己补 class/text；两种情况都在末尾补写一次其余属性，
+     保证 data-* / href / type / role / aria-* 在任何环境都真的落在节点上。 */
   function el(tag, attrs, kids) {
     var k = kit();
-    if (k) { return k.el(tag, attrs, kids); }
-    var node = document.createElement(String(tag || 'div'));
     var options = attrs && typeof attrs === 'object' ? attrs : {};
-    var className = options.className || options['class'];
-    if (className) { node.className = String(className); }
-    if (options.text !== undefined) { node.textContent = String(options.text); }
+    var node;
+    if (k && typeof k.el === 'function') {
+      node = k.el(tag, attrs, kids);
+    } else {
+      node = document.createElement(String(tag || 'div'));
+      var className = options.className || options['class'];
+      if (className) { node.className = String(className); }
+      if (options.text !== undefined && options.text !== null) {
+        node.textContent = String(options.text);
+      }
+      appendKids(node, kids !== undefined && kids !== null ? kids : options.children);
+    }
+    if (node && typeof node.setAttribute === 'function') {
+      Object.keys(options).forEach(function (name) {
+        if (name === 'className' || name === 'class' || name === 'text' || name === 'children' ||
+          name === 'html' || name === 'style' || name === 'dataset' || name === 'aria' || name === 'role') {
+          return;
+        }
+        var value = options[name];
+        if (value === undefined || value === null || value === false) { return; }
+        var next = value === true ? '' : String(value);
+        if (typeof node.getAttribute === 'function' && node.getAttribute(name) === next) { return; }
+        node.setAttribute(name, next);
+      });
+      if (options.role) { node.setAttribute('role', String(options.role)); }
+    }
     return node;
   }
 
   function iconNode(name, size) {
     var k = kit();
-    var key = ICON_ALIAS[name] || name || 'ellipsis';
-    if (k) { return k.icon(key, size || 20); }
+    if (k) { return k.icon(name || 'ellipsis', size || 20); }
     var span = el('span', { className: 's-home-glyph' });
     span.textContent = String(name || '·').slice(0, 1);
     return span;
@@ -33741,6 +33921,15 @@ textarea::selection {
     var k = kit();
     if (k) { return k.money(cents, options); }
     return el('span', { text: String(cents) });
+  }
+
+  function btnNode(label, options) {
+    var k = kit();
+    if (k && typeof k.btn === 'function') { return k.btn(label, options); }
+    var href = options && options.href;
+    var node = el(href ? 'a' : 'button', { className: 'c-btn c-btn--secondary', text: label });
+    if (href) { node.setAttribute('href', href); }
+    return node;
   }
 
   function fmt(cents, options) {
@@ -33761,6 +33950,13 @@ textarea::selection {
       return !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
     } catch (error) {
       return false;
+    }
+  }
+
+  function warn(message, detail) {
+    if (global.console && typeof global.console.warn === 'function') {
+      if (detail === undefined) { global.console.warn(message); }
+      else { global.console.warn(message, detail); }
     }
   }
 
@@ -33797,15 +33993,6 @@ textarea::selection {
     return typeof id === 'string' ? id : '';
   }
 
-  function indexById(items) {
-    var map = Object.create(null);
-    for (var i = 0; i < (items || []).length; i += 1) {
-      var item = items[i];
-      if (item && typeof item.id === 'string') { map[item.id] = item; }
-    }
-    return map;
-  }
-
   function todayStr() {
     if (dates && typeof dates.todayStr === 'function') { return dates.todayStr(); }
     return '';
@@ -33828,38 +34015,6 @@ textarea::selection {
     return String(dateText || '');
   }
 
-  function weekdayLabel(dateText) {
-    if (dates && typeof dates.weekdayCN === 'function') {
-      return dates.weekdayCN(dateText);
-    }
-    return '';
-  }
-
-  function sortTransactions(items) {
-    return items.slice().sort(function (a, b) {
-      if (a.date !== b.date) { return a.date < b.date ? 1 : -1; }
-      var at = String(a.time || '');
-      var bt = String(b.time || '');
-      if (at !== bt) { return at < bt ? 1 : -1; }
-      var ac = String(a.createdAt || '');
-      var bc = String(b.createdAt || '');
-      if (ac === bc) { return 0; }
-      return ac < bc ? 1 : -1;
-    });
-  }
-
-  function collect(db, bookId) {
-    var all = rows(db, 'transactions');
-    var out = [];
-    for (var i = 0; i < all.length; i += 1) {
-      var tx = all[i];
-      if (!tx || tx.deleted === true) { continue; }
-      if (bookId && tx.bookId !== bookId) { continue; }
-      out.push(tx);
-    }
-    return sortTransactions(out);
-  }
-
   function daysInMonth(month) {
     var parts = String(month || '').split('-');
     if (parts.length !== 2) { return 30; }
@@ -33869,31 +34024,95 @@ textarea::selection {
     return new Date(y, m, 0).getDate();
   }
 
-  /* ---------------- 区块：首页专属头部（品牌行 + 月度汇总三列） ---------------- */
+  /* `[D2-37]` 日均可用：floor(max(0, 剩余) / daysLeft)，daysLeft <= 0 时为 0（K-19 除零防护）。
+     daysLeft = 月末日 − 今日日 + 1（含今日）。 */
+  function dailyCents(remainingCents, daysLeft) {
+    var left = Number(daysLeft) || 0;
+    if (left <= 0) { return 0; }
+    var rest = Math.max(0, Number(remainingCents) || 0);
+    return Math.floor(rest / left);
+  }
+
+  function daysLeftOf(month, today) {
+    var left = daysInMonth(month) - (Number(String(today || '').slice(8, 10)) || 1) + 1;
+    return left > 0 ? left : 0;
+  }
+
+  /* `[D4-8]` baseHash：只提供路径 `#/home`。五个参与键（month/flag/ca/date/detail）
+     由 ledger 自己的 live 状态在清参时重写（ledger.js 的 baseHashOf → liveParams），
+     因此这里**不得**读 ctx.params 做 URL 快照（D4-8「禁止取 URL 快照」）；
+     编码一律经 XZB.router.hash（D7-2：禁止字符串拼接注入 query）。 */
+  function homeBaseHash() {
+    var router = routerApi();
+    if (router && typeof router.hash === 'function') {
+      try { return router.hash({ view: 'home', sub: '', params: {} }); } catch (error) { /* 回退 */ }
+    }
+    return '#/home';
+  }
+
+  function readSummary(db, month, scope) {
+    var out = stats && typeof stats.monthSummary === 'function'
+      ? stats.monthSummary(db, month, scope)
+      : { incomeCents: 0, expenseCents: 0, netCents: 0, count: 0 };
+    if (!out || typeof out !== 'object') {
+      out = { incomeCents: 0, expenseCents: 0, netCents: 0, count: 0 };
+    }
+    return out;
+  }
+
+  function readBudget(db, month, scope) {
+    var out = stats && typeof stats.budgetProgress === 'function'
+      ? stats.budgetProgress(db, month, scope)
+      : { totalCents: 0, spentCents: 0, remainingCents: 0, pct: 0, state: 'none' };
+    if (!out || typeof out !== 'object') {
+      out = { totalCents: 0, spentCents: 0, remainingCents: 0, pct: 0, state: 'none' };
+    }
+    if (out.month === undefined) { out.month = month; }
+    return out;
+  }
+
+  /* ---------------- 头部（品牌行 + 月度汇总三列） ---------------- */
+
+  /* 大金额降档（任务书 §八 要求处理「大金额」；修的是「金额被省略号吃掉」）。
+     三列等分时每列只有约 1/3 视口宽（390px 下约 111px），而 34px 字号每字符约 14.6px
+     （tabular-nums 实测 0.43em/字符）⇒ 只能容下 7 个字符，「¥1,234.56」9 字符就会截断。
+     这里按「已格式化文本的字符数」降档，保证金额完整可读：
+       ≤ 7 字符（¥99,999.99 以内）  34px / 窄屏 28px
+       8–9 字符（¥1,234.56 一级）    28px / 窄屏 17px
+       ≥ 10 字符（¥10,000 以上）     17px / 窄屏 15px
+     用字符数而非视口宽度：金额长度由用户数据决定，与视口无关。
+     具体字号在 home.css 末尾（intentional 放最后，才能压过窄屏媒体查询）。 */
+  function fitValueClass(node) {
+    if (!node || !node.classList) { return; }
+    node.classList.remove('s-home-head__value--tight');
+    node.classList.remove('s-home-head__value--compact');
+    var len = String(node.textContent || '').length;
+    if (len >= 10) { node.classList.add('s-home-head__value--tight'); }
+    else if (len >= 8) { node.classList.add('s-home-head__value--compact'); }
+    return node;
+  }
+
+  /* 月份切换后复用同一个节点重绘金额（不重建头部，滚动位置与焦点不受影响） */
+  function paintValue(node, cents) {
+    if (!node) { return; }
+    while (node.firstChild) { node.removeChild(node.firstChild); }
+    node.appendChild(moneyNode(Math.abs(Number(cents) || 0)));
+    fitValueClass(node);
+  }
 
   /* 三列中的金额列：标签 12px + 金额（尺寸与 tabular-nums 交给 home.css） */
-  function summaryColumn(label, cents, kind) {
+  function summaryColumn(label, cents, kind, refs) {
     var col = el('div', { className: 's-home-head__col s-home-head__col--' + kind });
     col.appendChild(el('span', { className: 's-home-head__label', text: label }));
     var value = el('span', { className: 's-home-head__value' });
     value.appendChild(moneyNode(Math.abs(Number(cents) || 0)));
-    /* 大金额降档（任务书 §八 要求处理「大金额」；修的是「金额被省略号吃掉」）。
-       三列等分时每列只有约 1/3 视口宽（390px 下约 111px），而 34px 字号每字符约 14.6px
-       （tabular-nums 实测 0.43em/字符）⇒ 只能容下 7 个字符，「¥1,234.56」9 字符就会截断。
-       这里按「已格式化文本的字符数」降档，保证金额完整可读：
-         ≤ 7 字符（¥99,999.99 以内）  34px / 窄屏 28px
-         8–9 字符（¥1,234.56 一级）    28px / 窄屏 17px
-         ≥ 10 字符（¥10,000 以上）     17px / 窄屏 15px
-       用字符数而非视口宽度：金额长度由用户数据决定，与视口无关。
-       具体字号在 home.css 末尾（intentional 放最后，才能压过窄屏媒体查询）。 */
-    var len = String(value.textContent || '').length;
-    if (len >= 10) { value.classList.add('s-home-head__value--tight'); }
-    else if (len >= 8) { value.classList.add('s-home-head__value--compact'); }
+    fitValueClass(value);
     col.appendChild(value);
+    if (refs) { refs[kind] = value; }
     return col;
   }
 
-  function buildHead(book, month, summary) {
+  function buildHead(book, month, summary, view) {
     var bookName = book && book.name ? String(book.name) : '日常账本';
     var head = el('header', { className: 's-home-head' });
     head.setAttribute('data-home-head', '1');
@@ -33925,65 +34144,233 @@ textarea::selection {
     sum.setAttribute('data-home-summary', '1');
 
     var monthCol = el('div', { className: 's-home-head__col s-home-head__col--month' });
-    monthCol.appendChild(el('span', {
+    var monthText = el('span', {
       className: 's-home-head__label',
       text: monthLabel(month) || '本月'
-    }));
+    });
+    monthCol.appendChild(monthText);
     monthCol.appendChild(el('span', { className: 's-home-head__book', text: bookName }));
     sum.appendChild(monthCol);
 
-    sum.appendChild(summaryColumn('收入', summary.incomeCents, 'income'));
-    sum.appendChild(summaryColumn('支出', summary.expenseCents, 'expense'));
+    var refs = { month: monthText };
+    sum.appendChild(summaryColumn('收入', summary.incomeCents, 'income', refs));
+    sum.appendChild(summaryColumn('支出', summary.expenseCents, 'expense', refs));
     head.appendChild(sum);
-
+    if (view) { view.head = refs; }
     return head;
   }
 
-  /* ---------------- 区块：白色快捷入口卡（五等分，压住头部底边） ---------------- */
+  /* ---------------- 区块：四格页内动作卡（压住头部底边） ---------------- */
 
-  function buildQuick() {
+  function bindQuickAction(button, key, view) {
+    button.addEventListener('click', function () {
+      if (view.dead || view.destroyed) { return; }
+      var controller = view.controller;
+      var method = key === 'search' ? 'focusSearch'
+        : key === 'tag' ? 'openCategoryFilter'
+          : key === 'flag' ? 'toggleReimburse'
+            : 'openBudgetStatus';
+      if (key === 'bell') {
+        /* 预算：恒走 controller.openBudgetStatus()（D2-9 转发 onBudgetStatus）；
+           控制器缺失（ledger 未实现/未加载）时直接开本屏自建的 Sheet，不吞掉点击。 */
+        if (controller && typeof controller.openBudgetStatus === 'function') {
+          try { controller.openBudgetStatus(); } catch (error) { warn('[home] 预算状态转发失败', error); }
+        } else {
+          openBudgetStatus(view);
+        }
+        return;
+      }
+      if (!controller || typeof controller[method] !== 'function') { return; }
+      try { controller[method](); } catch (error) { warn('[home] 快捷动作失败：' + key, error); }
+      if (key === 'flag') {
+        /* 双态由 aria-pressed 表达（CSS 负责观感，本文件零内联样式）。
+           controller 不回传当前值，因此以本屏点击次数为准翻转。 */
+        view.reimbursePressed = !view.reimbursePressed;
+        button.setAttribute('aria-pressed', view.reimbursePressed ? 'true' : 'false');
+      }
+    });
+  }
+
+  function buildQuick(view) {
     var card = el('nav', { className: 's-home-quick', 'aria-label': '快捷入口' });
     card.setAttribute('data-home-quick', '1');
-    for (var i = 0; i < QUICK_ENTRIES.length; i += 1) {
-      var item = QUICK_ENTRIES[i];
-      var link = el('a', { className: 's-home-quick__item c-pressable', href: item.href });
-      link.setAttribute('data-quick', item.key);
+    for (var i = 0; i < QUICK_ACTIONS.length; i += 1) {
+      var action = QUICK_ACTIONS[i];
+      var attrs = { className: 's-home-quick__item c-pressable' };
+      Object.keys(action.attrs).forEach(function (name) {
+        attrs[name] = action.attrs[name];
+      });
+      attrs.type = 'button'; /* A5：恒为 <button type=button>，恒无 href / data-nav / data-tab */
+      if (action.toggle) {
+        attrs['aria-pressed'] = view.reimbursePressed ? 'true' : 'false';
+      }
+      var button = el('button', attrs);
+      button.setAttribute('type', 'button'); /* kit 缺失时的兜底 */
+      var key = '';
+      var attrNames = Object.keys(action.attrs);
+      if (attrNames.length) { key = String(action.attrs[attrNames[0]]); } /* 派发键取自动作表，不二次维护 */
       var holder = el('span', { className: 's-home-quick__icon' });
-      holder.appendChild(iconNode(item.icon, 24));
-      link.appendChild(holder);
-      link.appendChild(el('span', { className: 's-home-quick__label', text: item.label }));
-      card.appendChild(link);
+      holder.setAttribute('aria-hidden', 'true');
+      holder.appendChild(iconNode(action.icon, 24));
+      button.appendChild(holder);
+      button.appendChild(el('span', { className: 's-home-quick__label', text: action.label }));
+      bindQuickAction(button, key, view);
+      card.appendChild(button);
     }
     return card;
   }
 
   /* ---------------- 区块：预算（紧凑单卡；没预算就整块不渲染） ---------------- */
 
-  function buildBudget(budget, today) {
-    var totalCents = Number(budget && budget.totalCents) || 0;
+  function openBudgetStatus(view) {
+    if (view && (view.dead || view.destroyed)) { return; }
+    var sheet = sheetApi();
+    if (!sheet || typeof sheet.open !== 'function') { return; }
+    sheet.open({ title: '本月预算', content: budgetSheetContent(view) });
+  }
+
+  function budgetSheetContent(view) {
+    var list = [];
+    var budget = (view && view.budget) || {};
+    var totalCents = Number(budget.totalCents) || 0;
+    var spentCents = Number(budget.spentCents) || 0;
+
+    if (totalCents <= 0) {
+      /* 未设预算：只两行，不以 0 值占位（§5.1） */
+      list.push(sheetRow({
+        title: '本月未设置预算',
+        sub: '设置后这里显示已用、剩余与日均可用'
+      }));
+      list.push(btnNode('去设置月度预算', { variant: 'secondary', href: '#/plan' }));
+      return list;
+    }
+
+    var remainingCents = totalCents - spentCents;
+    var pct = Number(budget.pct) || 0;
+    var overCents = spentCents - totalCents;
+    var danger = budget.state === 'over' || overCents > 0;
+    var month = String(budget.month || (view && view.month) || '');
+    var left = daysLeftOf(month, view && view.today);
+
+    /* 第 1 行：已用 / 预算总额 */
+    list.push(sheetRow({
+      title: '已用',
+      sub: '预算 ' + fmt(totalCents),
+      value: moneyNode(spentCents),
+      strong: true
+    }));
+
+    /* 第 2 行：剩余（可为负，超支走 --expense + U+2212） */
+    list.push(sheetRow({
+      title: '剩余',
+      sub: '占预算 ' + pctText(pct) + '%',
+      value: moneyNode(remainingCents),
+      expense: remainingCents < 0
+    }));
+
+    /* 第 3 行：日均可用 = floor(max(0, 剩余) / daysLeft) */
+    list.push(sheetRow({
+      title: '日均可用',
+      sub: '本月还剩 ' + left + ' 天',
+      value: moneyNode(dailyCents(remainingCents, left))
+    }));
+
+    /* 第 4 行：只按态二选一（warn → 「预警」，over → TEXT_OVER）；safe 恒 3 行，禁止第三种措辞 */
+    if (danger || pct >= 80 || budget.state === 'warn') {
+      list.push(budgetWarnRow(danger, pct));
+    }
+    return list;
+  }
+
+  function pctText(pct) {
+    return String(Math.round((Number(pct) || 0) * 10) / 10);
+  }
+
+  function sheetRow(options) {
+    var o = options || {};
+    /* 类名封闭集合（UI.md §5.1）：c-row / c-row__* / c-money / u-tabular / c-btn--secondary。
+       不带 --two-line（行高由 min-height + 内容撑开，加修饰符会出集合）。 */
+    var row = el('div', { className: 'c-row' });
+    var main = el('div', { className: 'c-row__main' });
+    main.appendChild(el('span', { className: 'c-row__title', text: o.title }));
+    if (o.sub) { main.appendChild(el('span', { className: 'c-row__sub', text: o.sub })); }
+    row.appendChild(main);
+    if (o.value) {
+      var className = 'c-row__value u-tabular';
+      if (o.strong) { className += ' c-row__value--strong'; }
+      if (o.expense) { className += ' c-row__value--expense'; }
+      var slot = el('span', { className: className });
+      slot.appendChild(o.value);
+      row.appendChild(slot);
+    }
+    return row;
+  }
+
+  /* 第 4 行：c-tile--warn / --danger + 文案 + c-badge（行首 36px 底座） */
+  function budgetWarnRow(danger, pct) {
+    var k = kit();
+    /* 与其它行同属 c-row 家族（§5.1 类名封闭集合），不使用 --with-tile 修饰符 */
+    var row = el('div', { className: 'c-row' });
+    var tile = k && typeof k.tile === 'function'
+      ? k.tile('warning', { tone: danger ? 'danger' : 'warn' })
+      : el('span', { className: 'c-tile c-tile--' + (danger ? 'danger' : 'warn') });
+    tile.setAttribute('aria-hidden', 'true');
+    row.appendChild(tile);
+
+    var main = el('div', { className: 'c-row__main' });
+    main.appendChild(el('span', { className: 'c-row__title', text: danger ? TEXT_OVER : '预警' }));
+    row.appendChild(main);
+
+    row.appendChild(el('span', {
+      className: 'c-badge ' + (danger ? 'c-badge--danger' : 'c-badge--warn'),
+      text: danger
+        ? TEXT_OVER + ' ' + Math.max(0, Math.round((Number(pct) || 0) - 100)) + '%'
+        : '已用 ' + Math.round(Number(pct) || 0) + '%'
+    }));
+    return row;
+  }
+
+  function buildBudget(view) {
+    var budget = (view && view.budget) || {};
+    var totalCents = Number(budget.totalCents) || 0;
     if (totalCents <= 0) { return null; }
 
     var spentCents = Number(budget.spentCents) || 0;
-    var remainingCents = Math.max(0, Number(budget.remainingCents) || 0);
+    var remainingCents = totalCents - spentCents;
     var overCents = Math.max(0, spentCents - totalCents);
     var pct = Number(budget.pct) || 0;
     var danger = overCents > 0 || budget.state === 'over';
     var k = kit();
 
-    var card = el('a', {
+    /* 点击等价于四格「预算」：打开预算状态 Sheet，不是导航（不写 hash）。 */
+    var card = el('div', {
       className: 's-home-budget c-pressable' + (danger ? ' s-home-budget--danger' : ''),
-      href: '#/plan',
-      'aria-label': '本月预算已用百分之' + Math.round(pct) + '，查看预算与目标'
+      role: 'button',
+      tabindex: '0',
+      'aria-label': '本月预算已用百分之' + Math.round(pct) + '，打开预算状态'
+    });
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+
+    function activate() {
+      if (view.dead || view.destroyed) { return; }
+      openBudgetStatus(view);
+    }
+    card.addEventListener('click', activate);
+    card.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') { return; }
+      event.preventDefault();
+      activate();
     });
 
     var head = el('div', { className: 's-home-budget__head' });
     head.appendChild(el('span', { className: 's-home-budget__title', text: '本月预算' }));
     if (danger) {
-      head.appendChild(el('span', { className: 'c-badge c-badge--danger', text: '已超支' }));
+      head.appendChild(el('span', { className: 'c-badge c-badge--danger', text: TEXT_OVER }));
     } else {
       head.appendChild(el('span', {
         className: 's-home-budget__remain',
-        text: '剩 ' + fmt(remainingCents)
+        text: '剩 ' + fmt(Math.max(0, remainingCents))
       }));
     }
     card.appendChild(head);
@@ -33999,24 +34386,21 @@ textarea::selection {
     }));
     card.appendChild(nums);
 
-    if (k) {
-      card.appendChild(k.bar(pct, danger ? 'danger' : ''));
-    }
+    if (k) { card.appendChild(k.bar(pct, danger ? 'danger' : '')); }
 
     /* 当月才谈「每天可花」；超支后只报超出的金额 */
-    var month = String(today || '').slice(0, 7);
+    var today = String((view && view.today) || '');
+    var month = monthOf(today);
     if (danger) {
       card.appendChild(el('p', {
         className: 's-home-budget__daily-text',
         text: '超出 ' + fmt(overCents)
       }));
     } else if (remainingCents > 0 && String(budget.month || month) === month) {
-      var day = Number(String(today).slice(8, 10)) || 1;
-      var left = Math.max(1, daysInMonth(month) - day + 1);
-      var daily = Math.floor(remainingCents / left);
+      var left = daysLeftOf(month, today);
       card.appendChild(el('p', {
         className: 's-home-budget__daily-text',
-        text: '每天可花 ' + fmt(daily) + ' · 还剩 ' + left + ' 天'
+        text: '每天可花 ' + fmt(dailyCents(remainingCents, left)) + ' · 还剩 ' + left + ' 天'
       }));
     }
     return card;
@@ -34057,432 +34441,83 @@ textarea::selection {
     return section;
   }
 
-  /* ---------------- 区块：最近流水（三列 + 批量照片 + 详情深链） ---------------- */
+  /* ---------------- 嵌入式明细 ---------------- */
 
-  function accountText(tx, accounts) {
-    var from = accounts[tx.accountId];
-    if (tx.type === 'transfer') {
-      var to = accounts[tx.toAccountId];
-      return '转出 ' + (from ? from.name : '账户') + ' → ' + (to ? to.name : '账户');
-    }
-    var text = from ? String(from.name || '') : '';
-    var note = String(tx.note || '').trim();
-    if (note) { text += (text ? ' · ' : '') + note; }
-    return text || '未填写备注';
-  }
-
-  function accountNameText(tx, accounts) {
-    var from = accounts[tx.accountId];
-    if (tx.type === 'transfer') {
-      var to = accounts[tx.toAccountId];
-      return '转出 ' + (from ? String(from.name || '账户') : '账户') +
-        ' → ' + (to ? String(to.name || '账户') : '账户');
-    }
-    return from ? String(from.name || '') : '';
-  }
-
-  function photoIdsOf(tx) {
-    /* 去重/剔空/保序统一走 kit 纯函数；kit 缺失时才退回本文件的最小实现 */
+  function ledgerPlaceholder() {
     var k = kit();
-    if (k && typeof k.photoIdList === 'function') {
-      return k.photoIdList(tx);
+    if (k && typeof k.empty === 'function') {
+      return k.empty({
+        icon: 'list',
+        iconSize: 36,
+        title: '明细暂时不可用',
+        text: '刷新页面后再试'
+      });
     }
-    var out = [];
-    if (!tx || !Array.isArray(tx.photoIds)) { return out; }
-    var seen = Object.create(null);
-    for (var i = 0; i < tx.photoIds.length; i += 1) {
-      var id = tx.photoIds[i];
-      if (typeof id !== 'string' || !id || seen[id]) { continue; }
-      seen[id] = true;
-      out.push(id);
-    }
-    return out;
+    return el('div', { className: 'c-empty', text: '明细暂时不可用' });
   }
 
-  function photoApi() {
-    var app = appApi();
-    return app && app.photos && typeof app.photos.get === 'function' ? app.photos : null;
-  }
-
-  function reportPhotoError(message, error) {
-    if (global.console && typeof global.console.error === 'function') {
-      global.console.error('[home] ' + message, error);
+  /* `[D2-13]`/R22：render 时才取 ledger 实现；取不到只降级、不抛错、不白屏 */
+  function mountLedger(host, ctx, view) {
+    var ledger = null;
+    if (registry && typeof registry.get === 'function') {
+      try { ledger = registry.get('ledger'); } catch (error) { ledger = null; }
     }
-  }
-
-  /* 异步回包的唯一写法入口：序号对不上或屏根已卸载，一律不碰 DOM */
-  function renderAlive(root, token) {
-    return token === renderSeq && !!root && root.isConnected === true;
-  }
-
-  /* 渲染期同步入口的存活判据：只比序号，不看 isConnected。
-     为什么不能复用 renderAlive：router 是在 render() 返回之后才把屏根挂进文档的，
-     所以 render 末尾调用 loadPhotos 时 root.isConnected 恒为 false ——
-     原写法使 photos.get 永不发出，媒体区永远停在骨架屏
-     （2.14.0 实机实测：首页 imgs=0 / .c-photo-skel=1；明细屏不走这条同步路径所以正常）。
-     「屏根没挂载就不写 DOM」这条仍然要保留，它由异步回包里的 renderAlive 负责。 */
-  function loadAlive(token) {
-    return token === renderSeq;
-  }
-
-  /* 键只经 kit.photoKey（内部转交 bloburl.key）构造；URL 只经 urlOf(..., 'list')。 */
-  function photoKeyOf(photoId, variant) {
-    var k = kit();
-    if (k && typeof k.photoKey === 'function') {
-      var fromKit = k.photoKey(photoId, variant);
-      if (fromKit) { return fromKit; }
+    if (!ledger || typeof ledger.render !== 'function') {
+      warn('[home] 明细模块缺失');
+      host.appendChild(ledgerPlaceholder());
+      return null;
     }
-    var api = uiApi().bloburl || null;
-    if (!api) { return ''; }
-    if (typeof api.key === 'function') {
-      var made = api.key(photoId, variant);
-      if (made) { return String(made); }
-    }
-    if (variant === 'full' && typeof api.fullKey === 'function') { return api.fullKey(photoId); }
-    return typeof api.thumbKey === 'function' ? api.thumbKey(photoId) : '';
-  }
-
-  function thumbUrl(photoId, variant, blob) {
-    var api = uiApi().bloburl || null;
-    if (!api || typeof api.urlOf !== 'function') { return ''; }
-    var key = photoKeyOf(photoId, variant);
-    if (!key) { return ''; }
-    try {
-      var url = api.urlOf(key, blob, 'list');
-      return typeof url === 'string' ? url : '';
-    } catch (error) {
-      reportPhotoError('生成照片缩略图 URL 失败', error);
-      return '';
-    }
-  }
-
-  function localIconCell(iconName, tone) {
-    var cell = el('span', {
-      className: 'c-photo-cell c-photo-cell--icon s-home-row__icon' + (tone ? ' c-tile--' + tone : '')
-    });
-    cell.appendChild(iconNode(iconName, 32));
-    return cell;
-  }
-
-  function buildMedia(ids, iconName, tone) {
-    var k = kit();
-    if (!ids.length) {
-      var iconCell = k && typeof k.mediaCell === 'function'
-        ? k.mediaCell({ media: 'icon', icon: iconName, tone: tone })
-        : localIconCell(iconName, tone);
-      iconCell.setAttribute('data-photo-state', 'empty');
-      return { cell: iconCell, target: null };
-    }
-    if (!k || typeof k.mediaCell !== 'function' || typeof k.photoState !== 'function') {
-      /* 结构兜底：宁可显示分类图标，也不让整行渲染失败或退回逐张读取 */
-      var fallback = localIconCell(iconName, tone);
-      fallback.setAttribute('data-photo-state', 'unavailable');
-      return { cell: fallback, target: null };
-    }
-    var plan = k.photoState({ ids: ids, loading: true });
-    var cell = k.mediaCell({ media: plan.media, icon: iconName, tone: tone });
-    cell.setAttribute('data-photo-state', 'loading');
-    cell.setAttribute('aria-busy', 'true');
-    return {
-      cell: cell,
-      target: { ids: ids, cell: cell, icon: iconName, tone: tone, records: null }
+    var options = {
+      embedded: true,
+      baseHash: homeBaseHash(),
+      stickyTop: 0,
+      onMonthChange: function (month) { refreshMonth(view, month); },
+      onBudgetStatus: function () { openBudgetStatus(view); }
     };
-  }
-
-  function mountMedia(target, cell) {
-    if (!target || !cell) { return; }
-    if (target.cell && target.cell.parentNode) {
-      target.cell.parentNode.replaceChild(cell, target.cell);
-    }
-    target.cell = cell;
-  }
-
-  function markMediaCell(cell, state, missing) {
-    cell.setAttribute('data-photo-state', state);
-    if (missing > 0) { cell.setAttribute('data-missing', String(missing)); }
-    else { cell.removeAttribute('data-missing'); }
-    cell.removeAttribute('aria-busy');
-  }
-
-  function appendMissingLabel(cell, state) {
-    /* 行内只对「有可用照片 + 部分缺失」补隐藏说明；全部缺失按无图降级，缺失数留给详情 */
-    if (!state || state.state !== 'ready' || !state.partial || !(state.missing > 0)) { return; }
-    cell.appendChild(el('span', {
-      className: 'u-sr-only',
-      text: state.missingLabel || ('缺失 ' + state.missing + ' 张')
-    }));
-  }
-
-  function paintUnavailable(target, root, token) {
-    if (!renderAlive(root, token)) { return; }
-    var k = kit();
-    var cell;
-    if (k && typeof k.mediaCell === 'function') {
-      cell = k.mediaCell({ media: 'placeholder' });
-    } else {
-      cell = el('span', { className: 'c-photo-cell c-photo-cell--placeholder' });
-      cell.appendChild(el('span', { className: 'c-photo-empty', text: '照片不可用' }));
-    }
-    markMediaCell(cell, 'failed', 0);
-    mountMedia(target, cell);
-  }
-
-  function paintAllUnavailable(targets, root, token) {
-    for (var i = 0; i < targets.length; i += 1) {
-      paintUnavailable(targets[i], root, token);
-    }
-  }
-
-  function dropPhotoRecord(target, photoId) {
-    if (!target || !target.records) { return; }
-    for (var i = 0; i < target.ids.length; i += 1) {
-      if (target.ids[i] === photoId) {
-        target.records[i] = null;
-        return;
-      }
-    }
-  }
-
-  /* 用 kit.photoState/photoPick 推导，再用 kit.mediaCell 产出媒体区；
-     一次解码失败只剔掉该位，仍展示其余可读照片，且不触发任何自动重读。 */
-  function paintPhoto(target, root, token) {
-    if (!renderAlive(root, token)) { return; }
-    var k = kit();
-    if (!k || typeof k.photoState !== 'function' || typeof k.mediaCell !== 'function') {
-      paintUnavailable(target, root, token);
-      return;
-    }
-    var state = k.photoState({ ids: target.ids, records: target.records });
-    var pick = state.media === 'thumb' && typeof k.photoPick === 'function'
-      ? k.photoPick(target.ids, target.records)
-      : null;
-    var cell;
-    if (state.media === 'thumb' && pick) {
-      var url = thumbUrl(pick.photoId, pick.variant, pick.blob);
-      if (!url) {
-        paintUnavailable(target, root, token);
-        return;
-      }
-      cell = k.mediaCell({
-        media: 'thumb',
-        url: url,
-        photoId: pick.photoId,
-        variant: pick.variant,
-        count: state.badge ? state.badge.count : pick.count,
-        text: state.badge ? state.badge.text : '',
-        alt: ''
-      });
-      var img = cell.querySelector ? cell.querySelector('.c-photo-cell__img') : null;
-      if (img) {
-        img.addEventListener('error', function () {
-          if (!renderAlive(root, token)) { return; }
-          dropPhotoRecord(target, pick.photoId);
-          paintPhoto(target, root, token);
-        }, { once: true });
-      }
-    } else if (state.media === 'icon') {
-      /* 批量成功但全部读不出：按无图降级为分类图标（缺失数留给详情） */
-      cell = k.mediaCell({ media: 'icon', icon: target.icon, tone: target.tone });
-    } else {
-      cell = k.mediaCell({ media: state.media, icon: target.icon, tone: target.tone });
-    }
-    var visual = state.state === 'ready' && state.partial ? 'partial' : state.state;
-    markMediaCell(cell, visual, state.missing);
-    appendMissingLabel(cell, state);
-    mountMedia(target, cell);
-  }
-
-  function applyPhotos(targets, result, root, token) {
-    if (!renderAlive(root, token)) { return; }
-    var ok = !!(result && result.ok === true);
-    var records = ok && Array.isArray(result.records) ? result.records : null;
-    if (!records) {
-      paintAllUnavailable(targets, root, token);
-      return;
-    }
-    /* 批量契约：同序同长、缺失位 null；长度不足时 photoState 会按 null 补齐 */
-    for (var t = 0; t < targets.length; t += 1) {
-      targets[t].records = records.slice();
-      paintPhoto(targets[t], root, token);
-    }
-  }
-
-  function loadPhotos(targets, root, token) {
-    if (!targets.length || !loadAlive(token)) { return; }
-    var ids = [];
-    var seen = Object.create(null);
-    for (var i = 0; i < targets.length; i += 1) {
-      for (var j = 0; j < targets[i].ids.length; j += 1) {
-        var id = targets[i].ids[j];
-        if (seen[id]) { continue; }
-        seen[id] = true;
-        ids.push(id);
-      }
-    }
-    var photos = photoApi();
-    if (!photos) {
-      paintAllUnavailable(targets, root, token);
-      return;
-    }
-    var request;
     try {
-      request = photos.get(ids);
+      return ledger.render(host, ctx, options) || null;
     } catch (error) {
-      reportPhotoError('批量读取照片失败', error);
-      paintAllUnavailable(targets, root, token);
-      return;
+      if (global.console && typeof global.console.error === 'function') {
+        global.console.error('[home] 嵌入明细渲染失败', error);
+      }
+      while (host.firstChild) { host.removeChild(host.firstChild); }
+      host.appendChild(ledgerPlaceholder());
+      return null;
     }
-    Promise.resolve(request).then(function (result) {
-      applyPhotos(targets, result, root, token);
-    }, function (error) {
-      reportPhotoError('批量读取照片失败', error);
-      paintAllUnavailable(targets, root, token);
-    });
   }
 
-  function buildRow(tx, maps, photoTargets) {
-    var category = maps.categories[tx.categoryId] || null;
-    var isTransfer = tx.type === 'transfer';
-    var isIncome = tx.type === 'income';
-    var title = isTransfer ? '转账' : (category ? String(category.name || '未分类') : '未分类');
-    var iconName = isTransfer ? 'transfer' : (category && category.icon ? category.icon : 'ellipsis');
-    var tone = isTransfer ? 'tint' : (maps.tones[tx.categoryId] || 'cat-12');
-    var amountCents = Math.abs(Number(tx.amountCents) || 0);
-    var ids = photoIdsOf(tx);
-    var shortAccount = accountNameText(tx, maps.accounts);
-    var note = String(tx.note || '').trim();
-    var direction = isTransfer ? '转账' : (isIncome ? '收入' : '支出');
-    var k = kit();
-    var ariaHead = title + '，' + accountText(tx, maps.accounts) + '，' + direction + ' ' +
-      fmt(amountCents) + '，查看详情';
-    var aria = k && typeof k.photoAriaLabel === 'function'
-      ? k.photoAriaLabel(ariaHead, ids.length)
-      : ariaHead + (ids.length ? '，含 ' + ids.length + ' 张照片' : '');
-    var detailHref = '#/ledger?detail=' + encodeURIComponent(String(tx.id || ''));
-    var media = buildMedia(ids, iconName, tone);
+  /* `[D2-38]`：月份变化后头部月标签 / 收入 / 支出 / 预算卡（含日均可用）一起更新 */
+  function refreshMonth(view, month) {
+    if (!view || view.dead || view.destroyed) { return; }
+    var next = String(month || '');
+    if (!MONTH_RE.test(next) || next === view.month) { return; }
+    view.month = next;
 
-    var side = el('span', { className: 'c-row__value s-home-row__side' });
-    /* 金额一律深色 + 正负号，不再按收支着色 */
-    var amount = moneyNode(isTransfer ? amountCents : (isIncome ? amountCents : -amountCents), {
-      size: 'md',
-      sign: isIncome
-    });
-    amount.classList.add('s-home-row__amount');
-    side.appendChild(amount);
-    side.appendChild(el('span', {
-      className: 's-home-row__time',
-      text: String(tx.time || '') || '全天'
-    }));
-
-    var row = null;
-    if (k && typeof k.row === 'function') {
-      /* 行工厂统一产出 c-row 三列（媒体 / 文字 / 金额），明细页共用同一结构 */
-      row = k.row({
-        href: detailHref,
-        media: media.cell,
-        title: title,
-        sub: shortAccount,
-        trailing: side,
-        ariaLabel: aria
-      });
-      var main = row.querySelector ? row.querySelector('.c-row__main') : null;
-      if (main && note) {
-        main.appendChild(el('span', { className: 'c-row__note', text: note }));
-      }
-    } else {
-      row = el('a', { className: 'c-row c-row--tappable' });
-      row.setAttribute('href', detailHref);
-      row.appendChild(media.cell);
-      var plainMain = el('span', { className: 'c-row__main' });
-      plainMain.appendChild(el('span', { className: 'c-row__title', text: title }));
-      if (shortAccount) {
-        plainMain.appendChild(el('span', { className: 'c-row__sub', text: shortAccount }));
-      }
-      if (note) {
-        plainMain.appendChild(el('span', { className: 'c-row__note', text: note }));
-      }
-      row.appendChild(plainMain);
-      row.appendChild(side);
+    if (view.head && view.head.month) {
+      view.head.month.textContent = monthLabel(next) || '本月';
     }
-    row.classList.add('s-home-row');
-    if (!row.getAttribute('aria-label')) { row.setAttribute('aria-label', aria); }
-    /* 链接原生支持 Enter；Space 在部分浏览器不触发 click，这里补齐 */
-    row.addEventListener('keydown', function (event) {
-      if (event.key !== ' ' && event.key !== 'Spacebar') { return; }
-      event.preventDefault();
-      if (typeof row.click === 'function') { row.click(); }
-    });
+    var summary = readSummary(view.db, next, view.scope);
+    paintValue(view.head && view.head.income, summary.incomeCents);
+    paintValue(view.head && view.head.expense, summary.expenseCents);
 
-    if (media.target) { photoTargets.push(media.target); }
-    return row;
-  }
-
-  function buildRecent(list, maps, photoTargets) {
-    var k = kit();
-    var section = k
-      ? k.section({ title: '最近流水', action: { label: '查看全部', href: '#/ledger' } })
-      : el('section', { className: 'c-section' });
-
-    if (!list.length) {
-      var emptyBox = el('div', { className: 's-home-empty' });
-      emptyBox.appendChild(k
-        ? k.empty({
-          icon: 'wallet',
-          iconSize: 38,
-          title: '还没有一笔流水',
-          text: '记下第一笔，月底就能看清钱都花在哪。',
-          action: { label: '记下第一笔', variant: 'primary', href: '#/add' }
-        })
-        : el('p', { text: '还没有一笔流水' }));
-      section.appendChild(emptyBox);
-      return section;
+    view.budget = readBudget(view.db, next, view.scope);
+    var prev = view.budgetCard;
+    var nextCard = buildBudget(view);
+    if (prev && prev.parentNode) {
+      if (nextCard) { prev.parentNode.replaceChild(nextCard, prev); }
+      else { prev.parentNode.removeChild(prev); }
+    } else if (nextCard && view.inner) {
+      var anchor = view.quickCard ? view.quickCard.nextSibling : view.inner.firstChild;
+      view.inner.insertBefore(nextCard, anchor);
     }
-
-    var groups = [];
-    for (var i = 0; i < list.length; i += 1) {
-      var tx = list[i];
-      var last = groups[groups.length - 1];
-      if (!last || last.date !== tx.date) {
-        last = { date: tx.date, items: [], expenseCents: 0, incomeCents: 0 };
-        groups.push(last);
-      }
-      if (tx.type === 'income') { last.incomeCents += Math.abs(Number(tx.amountCents) || 0); }
-      else if (tx.type === 'expense') { last.expenseCents += Math.abs(Number(tx.amountCents) || 0); }
-      last.items.push(tx);
-    }
-
-    for (var g = 0; g < groups.length; g += 1) {
-      var day = groups[g];
-      var dayBox = el('div', { className: 's-home-day' });
-      var head = el('div', { className: 's-home-day__head' });
-      head.appendChild(el('span', {
-        className: 's-home-day__date',
-        text: humanDate(day.date) + (weekdayLabel(day.date) ? ' · ' + weekdayLabel(day.date) : '')
-      }));
-      var parts = [];
-      if (day.expenseCents > 0) { parts.push('支出 ' + fmt(day.expenseCents)); }
-      if (day.incomeCents > 0) { parts.push('收入 ' + fmt(day.incomeCents)); }
-      head.appendChild(el('span', {
-        className: 's-home-day__sum',
-        text: parts.length ? parts.join(' · ') : '无金额'
-      }));
-      dayBox.appendChild(head);
-
-      var group = el('div', { className: 'c-group' });
-      for (var r = 0; r < day.items.length; r += 1) {
-        group.appendChild(buildRow(day.items[r], maps, photoTargets));
-      }
-      dayBox.appendChild(group);
-      section.appendChild(dayBox);
-    }
-    return section;
+    view.budgetCard = nextCard || null;
   }
 
   /* ---------------- 下拉刷新 ---------------- */
 
-  function bindPullRefresh(scroller, pull) {
+  function bindPullRefresh(scroller, pull, isDead) {
     var app = appApi();
-    if (!scroller || !pull || !app || typeof app.refresh !== 'function') { return; }
+    if (!scroller || !pull || !app || typeof app.refresh !== 'function') { return null; }
 
     var startY = 0;
     var tracking = false;
@@ -34490,22 +34525,26 @@ textarea::selection {
     var ready = false;
     var busy = false;
 
+    function dead() {
+      return typeof isDead === 'function' && isDead() === true;
+    }
+
     function setVisual(height, text) {
       pull.style.height = height + 'px';
       pull.textContent = text;
     }
 
-    scroller.addEventListener('touchstart', function (event) {
-      if (busy || scroller.scrollTop > 0) { return; }
+    function onStart(event) {
+      if (busy || dead() || scroller.scrollTop > 0) { return; }
       var touch = event.touches && event.touches[0];
       if (!touch) { return; }
       startY = touch.clientY;
       tracking = true;
       distance = 0;
       ready = false;
-    }, { passive: true });
+    }
 
-    scroller.addEventListener('touchmove', function (event) {
+    function onMove(event) {
       if (!tracking || busy) { return; }
       var touch = event.touches && event.touches[0];
       if (!touch) { return; }
@@ -34519,9 +34558,9 @@ textarea::selection {
       var visual = Math.min(PULL_VISUAL_MAX, Math.round(distance * 0.7));
       ready = visual >= PULL_READY;
       setVisual(visual, ready ? '松开刷新' : '下拉刷新');
-    }, { passive: true });
+    }
 
-    scroller.addEventListener('touchend', function () {
+    function onEnd() {
       if (!tracking || busy) { return; }
       tracking = false;
       if (!ready) {
@@ -34534,25 +34573,36 @@ textarea::selection {
       try { result = app.refresh(); } catch (error) { result = null; }
       var finish = function () {
         busy = false;
+        if (dead()) { return; } /* 已换屏：不再写 DOM、不再 toast */
         setVisual(0, '下拉刷新');
         toast('已刷新', { type: 'success' });
       };
       if (result && typeof result.then === 'function') { result.then(finish, finish); }
       else { global.setTimeout(finish, 360); }
-    }, { passive: true });
+    }
 
-    scroller.addEventListener('touchcancel', function () {
+    function onCancel() {
       tracking = false;
       ready = false;
       if (!busy) { setVisual(0, '下拉刷新'); }
-    }, { passive: true });
+    }
+
+    scroller.addEventListener('touchstart', onStart, { passive: true });
+    scroller.addEventListener('touchmove', onMove, { passive: true });
+    scroller.addEventListener('touchend', onEnd, { passive: true });
+    scroller.addEventListener('touchcancel', onCancel, { passive: true });
+
+    return function unbind() {
+      scroller.removeEventListener('touchstart', onStart, { passive: true });
+      scroller.removeEventListener('touchmove', onMove, { passive: true });
+      scroller.removeEventListener('touchend', onEnd, { passive: true });
+      scroller.removeEventListener('touchcancel', onCancel, { passive: true });
+    };
   }
 
   /* ---------------- 屏幕 ---------------- */
 
   function render(root, ctx) {
-    renderSeq += 1;
-    var token = renderSeq;
     root = root || document.createElement('div');
     var db = readDb(ctx);
     var today = todayStr();
@@ -34567,17 +34617,32 @@ textarea::selection {
     if (!book && books.length) { book = books[0] || null; }
 
     var scope = bookId ? { bookId: bookId } : undefined;
-    /* 月汇总唯一调用点：头部三列与后续所有区块共用这一份结果 */
-    var summary = stats && typeof stats.monthSummary === 'function'
-      ? stats.monthSummary(db, month, scope)
-      : { incomeCents: 0, expenseCents: 0, netCents: 0, count: 0 };
-    if (!summary || typeof summary !== 'object') {
-      summary = { incomeCents: 0, expenseCents: 0, netCents: 0, count: 0 };
-    }
-    var budget = stats && typeof stats.budgetProgress === 'function'
-      ? stats.budgetProgress(db, month, scope)
-      : { totalCents: 0, spentCents: 0, remainingCents: 0, pct: 0, state: 'none' };
-    if (budget && budget.month === undefined) { budget.month = month; }
+
+    var params = (ctx && ctx.params) || {};
+    /* 双态按钮只有一个真值来源：ledger 的 reimburseOnly。URL 只能把待报销「打开」
+       （D4-6），所以初始按压态按 ?flag=reimburse 对齐；之后以本屏点击次数翻转。
+       controller 不暴露 getter（D2-10 只允许三个只读字段），故不反查。 */
+    var reimburseOn = String(params.flag || '') === 'reimburse';
+
+    /* 月汇总/预算各算一次：头部、预算卡与预算 Sheet 共用同一份结果（D2-37 零二次读库） */
+    var view = {
+      dead: false,
+      destroyed: false,
+      db: db,
+      ctx: ctx,
+      scope: scope,
+      today: today,
+      month: month,
+      budget: null,
+      controller: null,
+      head: null,
+      inner: null,
+      quickCard: null,
+      budgetCard: null,
+      reimbursePressed: reimburseOn
+    };
+    var summary = readSummary(db, month, scope);
+    view.budget = readBudget(db, month, scope);
 
     var due = recurrence && typeof recurrence.dueInstances === 'function'
       ? recurrence.dueInstances(db, today) || []
@@ -34586,64 +34651,73 @@ textarea::selection {
       due = due.filter(function (item) { return !item.bookId || item.bookId === bookId; });
     }
 
-    var transactions = collect(db, bookId);
-    var recent = transactions.slice(0, RECENT_LIMIT);
+    /* 树形（UI.md §4.1）：.app-screen__body.s-home > div[data-home-view="1"]
+       >（.s-home-pull / header.s-home-head / .s-home-inner）。头部整块属于本屏（immersive），
+       黄底通栏靠它吃满宽度；其余内容进 s-home-inner 吃页面左右留白。 */
+    var viewBody = el('div');
+    viewBody.setAttribute('data-home-view', '1');
+    root.appendChild(viewBody);
 
-    var categories = rows(db, 'categories');
-    var k = kit();
-    var maps = {
-      categories: indexById(categories),
-      accounts: indexById(rows(db, 'accounts')),
-      tones: k ? k.categoryTones(categories) : {}
-    };
-
-    /* 头部整块属于本屏（immersive），直接挂在屏根上以便黄底通栏；
-       其余内容进 s-home-inner 吃页面左右留白。 */
-    root.setAttribute('data-home-view', '1');
     var pull = el('div', { className: 's-home-pull', text: '下拉刷新' });
     pull.style.height = '0px';
-    root.appendChild(pull);
-    var head = buildHead(book, month, summary);
-    root.appendChild(head);
+    viewBody.appendChild(pull);
+    viewBody.appendChild(buildHead(book, month, summary, view));
 
     var inner = el('div', { className: 's-home-inner' });
+    view.inner = inner;
 
-    var quickCard = buildQuick();
+    var quickCard = buildQuick(view);
+    view.quickCard = quickCard;
     inner.appendChild(quickCard);
 
-    var budgetCard = buildBudget(budget, today);
+    var budgetCard = buildBudget(view);
+    view.budgetCard = budgetCard;
     if (budgetCard) { inner.appendChild(budgetCard); }
 
     var dueCard = buildDue(due);
     if (dueCard) { inner.appendChild(dueCard); }
 
-    var photoTargets = [];
-    var recentSection = buildRecent(recent, maps, photoTargets);
-    inner.appendChild(recentSection);
+    /* 嵌入明细宿主：就是这个 div 本身（ledger.render 会加 s-ledger / --embedded /
+       data-ledger-embed="1"）；不得包任何中间壳类（D2-14 / UI.md:310），
+       也不得给它加 c-stagger（transform 会让 sticky 失效）。 */
+    var ledgerHost = el('div');
+    inner.appendChild(ledgerHost);
 
-    root.appendChild(inner);
+    viewBody.appendChild(inner);
+    root.appendChild(viewBody);
 
-    /* 右下角 FAB：与静态 TabBar 中央「+」同为目标 #/add，键盘可直接聚焦 */
-    var fab = el('a', { className: 's-home-fab' });
-    fab.setAttribute('href', '#/add');
-    fab.setAttribute('aria-label', '记一笔');
-    fab.appendChild(iconNode('plus', 24));
-    root.appendChild(fab);
+    var unbindPull = bindPullRefresh(
+      root.closest ? root.closest('.app-screen') : null,
+      pull,
+      function () { return view.dead; }
+    );
 
-    var scroller = root.closest ? root.closest('.app-screen') : null;
-    bindPullRefresh(scroller, pull);
+    view.controller = mountLedger(ledgerHost, ctx, view);
 
-    /* 文字与金额已可用，照片后到再填充媒体区 */
-    loadPhotos(photoTargets, root, token);
-
-    if (firstPaint && k && !reducedMotion()) {
-      k.stagger([quickCard, budgetCard, dueCard, recentSection], { step: 34 });
+    if (firstPaint && kit() && !reducedMotion()) {
+      kit().stagger([quickCard, budgetCard, dueCard], { step: 34 });
       firstPaint = false;
     }
 
     if (due.length > 0) {
       inner.setAttribute('data-due-count', String(due.length));
     }
+
+    return {
+      /* `[D2-17]` 销毁顺序：embeddedController.destroy() → 解绑 bindPullRefresh → 本轮 token 失效；
+         重复调用恒为空操作（destroyed 守卫先于一切副作用）。 */
+      destroy: function () {
+        if (view.destroyed) { return; }
+        view.destroyed = true;
+        var controller = view.controller;
+        view.controller = null;
+        if (controller && typeof controller.destroy === 'function') {
+          try { controller.destroy(); } catch (error) { warn('[home] 销毁嵌入明细失败', error); }
+        }
+        if (typeof unbindPull === 'function') { unbindPull(); }
+        view.dead = true;
+      }
+    };
   }
 
   var screen = {
@@ -38121,8 +38195,13 @@ textarea::selection {
  *           SPEC A14/A15/A17/A18/C-2、PLAN §2（XZB.app.photos / XZB.UI.bloburl / XZB.UI.photoViewer 冻结签名）、
  *           PLAN §3 步骤 11–13、§9.4 / §9.4.1（URL 生命周期）、§10 R-6（null 位降级）。
  *
- * 形状：一级 Tab #/ledger（root 已是 .app-screen__body.s-ledger，已清空；
- *       .app-screen 是滚动容器，.app-nav 已 position:sticky 在顶部）。
+ * 形状：2.15.0 起同一份实现支持两态（DESIGN D2-* / D4-*，T05）：
+ *   ① 嵌入态 embedded === true：root 是首页 .s-home-inner 里的容器 div，本屏在它身上加
+ *      s-ledger + s-ledger--embedded + data-ledger-embed="1"，不渲染独立外壳 / 吸顶容器；
+ *   ② 独立态 embedded === false（回滚保险，2.15.0 路由不可达）：root 是 .app-screen__body.s-ledger。
+ *   两态都返回 controller（destroy/embedded/focusSearch/month/openBudgetStatus/
+ *   openCategoryFilter/root/scrollToList/toggleReimburse，恰好 9 键，见 D2-11）；
+ *   .app-screen 是全页唯一滚动容器，.app-nav 在独立态下 position:sticky 在顶部。
  * 能力：
  *   1. 月份切换：左右箭头 ±1 月；点月份标签开「选择月份」浮层（年份 ±，12 宫格）。
  *   2. 账本切换入口 → #/books；标题展示当前账本名。
@@ -38710,7 +38789,7 @@ textarea::selection {
       val.textContent = '照片加载失败';
     }
 
-    function render(result, mine) {
+    function applyResult(result, mine) {
       if (!st || st.dead || mine !== seq) { return; }
       var records = result && Array.isArray(result.records) ? result.records : null;
       if (!result || result.ok !== true || !records || records.length !== ids.length) {
@@ -38759,7 +38838,7 @@ textarea::selection {
       try { pending = photos.get(ids.slice()); } catch (error) { pending = null; }
       Promise.resolve(pending).then(function (result) {
         busy = false;
-        render(result, mine);
+        applyResult(result, mine);
       }, function () {
         busy = false;
         if (!st || st.dead || mine !== seq) { return; }
@@ -39053,9 +39132,19 @@ textarea::selection {
 
   /* ---------------- 状态 ---------------- */
 
-  var persisted = null;   /* 跨 rerender 保留月份与筛选（commit 后 app 会整屏重建） */
+  var persisted = null;   /* 跨 rerender 保留月份与筛选（commit 后 app 会整屏重建）；[D4-11] URL 派生值不回写 */
   var live = null;        /* 当前屏状态（用于清理上一屏监听） */
   var cleanups = [];
+
+  /* ---------------- 2.15.0 嵌入契约（T05：DESIGN §2 §4） ---------------- */
+
+  /* [D4-1] 五键白名单：URL 上只有这五个键参与状态构造，其余键一律忽略 */
+  var URL_KEYS = ['detail', 'month', 'flag', 'date', 'ca'];
+  var EMBED_CLASS = 's-ledger--embedded';
+  var EMBED_ATTR = 'data-ledger-embed';
+  /* [D4-10] 上一次渲染实例的生效态 + 已消费的五键指纹：指纹不变的重绘不得再被 URL 覆盖 */
+  var lastState = null;
+  var lastUrlKey = '';
 
   function runCleanups() {
     while (cleanups.length) {
@@ -39064,8 +39153,116 @@ textarea::selection {
     }
   }
 
+  /* [D2-5] options 缺省值：字段名与语义冻结，只可增补可选字段 */
+  function normalizeOptions(options) {
+    var source = options && typeof options === 'object' ? options : {};
+    return {
+      embedded: source.embedded === true,
+      baseHash: typeof source.baseHash === 'string' && source.baseHash ? source.baseHash : null,
+      stickyTop: typeof source.stickyTop === 'number' && isFinite(source.stickyTop) ? source.stickyTop : null,
+      onMonthChange: typeof source.onMonthChange === 'function' ? source.onMonthChange : null,
+      onBudgetStatus: typeof source.onBudgetStatus === 'function' ? source.onBudgetStatus : null
+    };
+  }
+
+  /* [D2-6]/[D2-7] 宿主节点就是根节点本身：s-ledger 三件套一律打在传入的 root 上，不建中间壳。
+   * embedded === false 是回滚路径，恒不带 --embedded / data 属性（供 CSS 与断言区分两态）。 */
+  function mountRoot(root, options) {
+    if (!root || !root.classList) { return; }
+    root.classList.add('s-ledger');
+    if (options && options.embedded === true) {
+      root.classList.add(EMBED_CLASS);
+      if (typeof root.setAttribute === 'function') { root.setAttribute(EMBED_ATTR, '1'); }
+      return;
+    }
+    root.classList.remove(EMBED_CLASS);
+    if (typeof root.removeAttribute === 'function') { root.removeAttribute(EMBED_ATTR); }
+  }
+
+  /* 五键取值：ctx.query 与 ctx.params 是同一份解析结果（router 的 query 恒为 params 克隆），
+   * [D4-3] 同名键「后者覆盖」已由 parseHash 完成，这里只做缺省回落。 */
+  function readUrlParams(ctx) {
+    var query = ctx && ctx.query && typeof ctx.query === 'object' ? ctx.query : {};
+    var params = ctx && ctx.params && typeof ctx.params === 'object' ? ctx.params : {};
+    var raw = {};
+    URL_KEYS.forEach(function (key) {
+      var value = query[key];
+      if (value === undefined || value === null) { value = params[key]; }
+      raw[key] = value === undefined || value === null ? '' : String(value);
+    });
+    return raw;
+  }
+
+  function urlKeyOf(raw) {
+    return URL_KEYS.map(function (key) {
+      return String(raw && raw[key] !== undefined && raw[key] !== null ? raw[key] : '');
+    }).join('\u0001');
+  }
+
+  /* [D4-5] month：接受 YYYY-MM-DD（取前 7 位）或合法 YYYY-MM */
+  function urlMonthOf(text) {
+    var value = String(text || '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) { return value.slice(0, 7); }
+    return isValidMonth(value) ? value : '';
+  }
+
+  function sameIdList(a, b) {
+    if (!a || !b || a.length !== b.length) { return false; }
+    for (var i = 0; i < a.length; i += 1) {
+      if (String(a[i]) !== String(b[i])) { return false; }
+    }
+    return true;
+  }
+
+  /* 从 persisted / lastState 这类快照还原筛选态（两处形状一致，缺的字段回默认值） */
+  function stateFromSaved(saved, defaults) {
+    var src = saved && typeof saved === 'object' ? saved : {};
+    return {
+      month: isValidMonth(src.month) ? src.month : defaults.month,
+      query: String(src.query || ''),
+      type: TYPE_KEYS.indexOf(src.type) >= 0 ? src.type : 'all',
+      accountIds: Array.isArray(src.accountIds) ? src.accountIds.slice(0) : [],
+      categoryIds: Array.isArray(src.categoryIds) ? src.categoryIds.slice(0) : [],
+      minCents: typeof src.minCents === 'number' ? src.minCents : null,
+      maxCents: typeof src.maxCents === 'number' ? src.maxCents : null,
+      reimburseOnly: src.reimburseOnly === true,
+      day: typeof src.day === 'string' ? src.day : ''
+    };
+  }
+
   function savePersisted(st) {
+    var prev = persisted && persisted.bookId === st.bookId ? persisted : null;
+    var derived = st.urlDerived || {};
+    var month = st.month;
+    var categoryIds = st.categoryIds.slice(0);
+    var reimburseOnly = st.reimburseOnly === true;
+    /* [D4-11] URL 派生值不得写回 persisted：值仍等于落地时由 URL 派生出来的值 ⇒ 视为用户未改动，
+     * persisted 保持「访问前」的那份值（否则 #/home?month=2020-01 会污染后续无参访问）。 */
+    if (derived.month && derived.month === st.month) {
+      month = prev && isValidMonth(prev.month) ? prev.month : monthOf(today());
+    }
+    if (derived.categoryIds && sameIdList(derived.categoryIds, st.categoryIds)) {
+      categoryIds = prev && Array.isArray(prev.categoryIds) ? prev.categoryIds.slice(0) : [];
+    }
+    if (derived.reimburseOnly === true && reimburseOnly === true) {
+      reimburseOnly = prev ? prev.reimburseOnly === true : false;
+    }
     persisted = {
+      bookId: st.bookId,
+      month: month,
+      query: st.query,
+      type: st.type,
+      accountIds: st.accountIds.slice(0),
+      categoryIds: categoryIds,
+      minCents: st.minCents,
+      maxCents: st.maxCents,
+      reimburseOnly: reimburseOnly
+    };
+  }
+
+  /* [D4-10] 记下本实例的生效态：同一五键指纹的 ctx.rerender() / 路由重建据此还原 */
+  function rememberState(st) {
+    lastState = {
       bookId: st.bookId,
       month: st.month,
       query: st.query,
@@ -39074,11 +39271,24 @@ textarea::selection {
       categoryIds: st.categoryIds.slice(0),
       minCents: st.minCents,
       maxCents: st.maxCents,
-      reimburseOnly: st.reimburseOnly === true
+      reimburseOnly: st.reimburseOnly === true,
+      day: st.day || ''
     };
+    lastUrlKey = st.urlKey || '';
   }
 
-  function createState(root, ctx) {
+  /* [D2-16] 嵌入态月份变化回调：首页据此同步头部三列（同一个 month 只报一次） */
+  function notifyMonth(st) {
+    if (!st || st.dead || st.embedded !== true) { return; }
+    var handler = st.opts && st.opts.onMonthChange;
+    if (typeof handler !== 'function') { return; }
+    if (st.notifiedMonth === st.month) { return; }
+    st.notifiedMonth = st.month;
+    try { handler.call(null, st.month); } catch (error) { /* 回调异常不得影响明细渲染 */ }
+  }
+
+  function createState(root, ctx, options) {
+    var opts = options && typeof options === 'object' ? options : normalizeOptions(null);
     var db = readDb(ctx);
     var bookId = activeBookId(db);
     var nowToday = today();
@@ -39093,48 +39303,60 @@ textarea::selection {
       reimburseOnly: false,
       day: ''
     };
+    /* [D4-1]~[D4-7] 五键白名单解析（其余 query 一律忽略） */
+    var raw = readUrlParams(ctx);
+    var urlKey = urlKeyOf(raw);
+    var urlMonth = urlMonthOf(raw.month);
+    /* [D4-7] date 严格 YYYY-MM-DD；带日期进来时月份跟着日期走（N4：热力图 → 明细） */
+    var urlDate = /^\d{4}-\d{2}-\d{2}$/.test(raw.date) ? raw.date : '';
+    if (urlDate && !urlMonth) { urlMonth = urlDate.slice(0, 7); }
+    var urlFlag = raw.flag === 'reimburse';      /* [D4-6] 只能打开，不能关闭 */
+    var urlCa = raw.ca && raw.ca !== '' ? raw.ca : '';   /* [D4-4] 空串视为未提供 */
+
+    /* [D4-10] 同一五键指纹的重绘（ctx.rerender / 路由重建）恒以 persisted 为准，URL 不再二次覆盖 */
     var seed = defaults;
-    if (persisted && persisted.bookId === bookId) {
-      seed = {
-        month: isValidMonth(persisted.month) ? persisted.month : defaults.month,
-        query: String(persisted.query || ''),
-        type: TYPE_KEYS.indexOf(persisted.type) >= 0 ? persisted.type : 'all',
-        accountIds: Array.isArray(persisted.accountIds) ? persisted.accountIds.slice(0) : [],
-        categoryIds: Array.isArray(persisted.categoryIds) ? persisted.categoryIds.slice(0) : [],
-        minCents: typeof persisted.minCents === 'number' ? persisted.minCents : null,
-        maxCents: typeof persisted.maxCents === 'number' ? persisted.maxCents : null,
-        reimburseOnly: persisted.reimburseOnly === true
-      };
+    var reuse = !!(lastState && lastState.bookId === bookId && lastUrlKey === urlKey);
+    if (reuse) {
+      seed = stateFromSaved(lastState, defaults);
+    } else if (persisted && persisted.bookId === bookId) {
+      seed = stateFromSaved(persisted, defaults);
     }
-    var urlMonth = ctx && ctx.query ? String(ctx.query.month || '') : '';
-    if (!isValidMonth(urlMonth) && ctx && ctx.params) { urlMonth = String(ctx.params.month || ''); }
-    /* 统计页的「待报销」卡直接带 flag 过来，落地就筛好 */
-    var urlFlag = ctx && ctx.query ? String(ctx.query.flag || '') : '';
-    if (!urlFlag && ctx && ctx.params) { urlFlag = String(ctx.params.flag || ''); }
-    /* 统计热力图带日期过来：只看当天（N4） */
-    var urlDate = ctx && ctx.query ? String(ctx.query.date || '') : '';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(urlDate) && ctx && ctx.params) {
-      urlDate = String(ctx.params.date || '');
+
+    /* [D4-9] 首次进入优先级：URL 五键 > persisted > 默认值 */
+    var month = seed.month;
+    var day = seed.day;
+    var reimburseOnly = seed.reimburseOnly === true;
+    var categoryIds = seed.categoryIds;
+    var urlDerived = {};
+    if (!reuse) {
+      if (urlMonth) { month = urlMonth; urlDerived.month = urlMonth; }
+      if (urlDate) { day = urlDate; urlDerived.day = urlDate; }
+      if (urlFlag) { reimburseOnly = true; urlDerived.reimburseOnly = true; }
+      if (urlCa) { categoryIds = [urlCa]; urlDerived.categoryIds = [urlCa]; }   /* [D4-2] ca ⇒ categoryIds=[ca] */
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(urlDate)) { urlDate = ''; }
-    /* 带日期进来时，月份跟着日期走（N4：热力图 → 明细） */
-    if (urlDate && !isValidMonth(urlMonth)) { urlMonth = urlDate.slice(0, 7); }
 
     var st = {
       root: root,
       ctx: ctx || {},
+      opts: opts,
       db: db,
       bookId: bookId,
       bookName: bookNameOf(db, bookId),
-      month: isValidMonth(urlMonth) ? urlMonth : seed.month,
+      /* [D2-10] controller 的只读字段来源 */
+      embedded: opts.embedded === true,
+      baseHash: opts.baseHash,
+      urlKey: urlKey,
+      urlDerived: urlDerived,
+      notifiedMonth: '',
+      month: isValidMonth(month) ? month : defaults.month,
       query: seed.query,
       type: seed.type,
       accountIds: seed.accountIds,
-      categoryIds: seed.categoryIds,
+      categoryIds: categoryIds,
       minCents: seed.minCents,
       maxCents: seed.maxCents,
-      reimburseOnly: seed.reimburseOnly === true || urlFlag === 'reimburse',
-      day: urlDate,
+      reimburseOnly: reimburseOnly,
+      day: day,
       today: nowToday,
       all: [],
       filtered: [],
@@ -39145,6 +39367,7 @@ textarea::selection {
       stickTop: 0,
       openItem: null,
       dead: false,
+      destroyed: false,   /* [D2-18] destroy 幂等标记 */
       nodes: {},
       cleanups: [],
       /* M4 照片批量读取：本页待读行 + render token（旧请求回包必须丢弃） */
@@ -39193,11 +39416,14 @@ textarea::selection {
     ]);
     /* 收支结余从三列汇总卡收成一行灰字（鲨鱼式两层头部） */
     var statText = el('span', { className: 's-ledger-stats-link__text u-tabular', text: '' });
-    var statsLink = el('a', {
-      className: 's-ledger-stats-link s-ledger-summary',
-      href: '#/stats',
-      'aria-label': '查看本月统计'
-    }, [statText]);
+    /* [D2-6] ④ 嵌入态不渲染 <a href="#/stats">（R26）：同 class 的 span，无 href、无 aria-label */
+    var statsLink = st.embedded
+      ? el('span', { className: 's-ledger-stats-link s-ledger-summary' }, [statText])
+      : el('a', {
+        className: 's-ledger-stats-link s-ledger-summary',
+        href: '#/stats',
+        'aria-label': '查看本月统计'
+      }, [statText]);
     row.appendChild(monthBtn);
     row.appendChild(statsLink);
     sticky.appendChild(row);
@@ -39391,16 +39617,20 @@ textarea::selection {
       bindActivebarClear(st, fresh);
       listBarOf(st).appendChild(fresh);
       bar = fresh;
+      scheduleMeasure(st);   /* [D2-28] ② 状态条挂入 DOM 后吸顶条变高 */
     }
     if (!activebarVisible(st)) {
+      var hadBar = !!bar.parentNode;
       if (bar.parentNode) { bar.parentNode.removeChild(bar); }
       st.nodes.activebar = null;
       st.nodes.activebarText = null;
       st.nodes.activebarClear = null;
+      if (hadBar) { scheduleMeasure(st); }   /* [D2-28] ② 状态条移出 DOM 后吸顶条变矮 */
       return;
     }
     if (!bar.parentNode && st.nodes.chips && st.nodes.chips.parentNode) {
       st.nodes.chips.parentNode.insertBefore(bar, st.nodes.chips.nextSibling);
+      scheduleMeasure(st);   /* [D2-28] ② 状态条重新挂载 */
     }
     if (st.nodes.activebarText) {
       st.nodes.activebarText.textContent = '筛选：' + activebarParts(st).join(' · ');
@@ -39435,23 +39665,27 @@ textarea::selection {
       className: 's-ledger-empty__title',
       text: hasAny ? '没有匹配的记录' : '这个月还没有流水'
     }));
+    /* [D2-6] ⑤ 嵌入态 hasAny === false 时不渲染跳 #/add 的 CTA（R27）：底栏已有「记一笔」 */
     box.appendChild(el('p', {
       className: 's-ledger-empty__text',
       text: hasAny
         ? '换个关键词，或清除筛选看看全部流水。'
-        : '换个账本或月份，也可以现在记一笔。'
+        : (st.embedded ? '使用底部『记一笔』新增流水' : '换个账本或月份，也可以现在记一笔。')
     }));
-    var cta = el('button', {
-      className: 'c-btn c-btn--secondary s-ledger-empty__cta',
-      type: 'button',
-      text: hasAny ? '清除筛选' : '记一笔'
-    });
-    cta.addEventListener('click', function () {
-      if (st.dead) { return; }
-      if (hasAny) { clearFilters(st, true); return; }
-      navigate(st, '#/add');
-    });
-    box.appendChild(cta);
+    /* 「清除筛选」是纯筛选动作，两态都保留；只有跳 #/add 的 CTA 在嵌入态消失 */
+    if (hasAny || !st.embedded) {
+      var cta = el('button', {
+        className: 'c-btn c-btn--secondary s-ledger-empty__cta',
+        type: 'button',
+        text: hasAny ? '清除筛选' : '记一笔'
+      });
+      cta.addEventListener('click', function () {
+        if (st.dead) { return; }
+        if (hasAny) { clearFilters(st, true); return; }
+        navigate(st, '#/add');
+      });
+      box.appendChild(cta);
+    }
     return box;
   }
 
@@ -39635,7 +39869,11 @@ textarea::selection {
         }
         if (chosen) {
           renderThumbMedia(rowRef.cell, rowRef, chosen);
-          if (missingInRow > 0) { rowRef.cell.setAttribute('data-photo-state', 'partial'); }
+          if (missingInRow > 0) {
+            rowRef.cell.setAttribute('data-photo-state', 'partial');
+            /* 读屏要知道缺了几张：可见区只有缩略图与总数徽标，缺数量只能走 u-sr-only */
+            rowRef.cell.appendChild(el('span', { className: 'u-sr-only', text: '缺失 ' + missingInRow + ' 张' }));
+          }
         } else {
           renderUnavailableMedia(rowRef.cell);
         }
@@ -39952,13 +40190,58 @@ textarea::selection {
 
   /* ---------------- 流水详情面板（N3）/ 删除 / 复制 ---------------- */
 
+  /* [D4-8] 清参用的 baseHash：五键参数一律取 live 状态（不取 URL 快照），detail 恒删。
+   * 路径优先取宿主给的 options.baseHash（首页传 '#/home…'），否则按当前视图拼；
+   * 编码一律经 XZB.router.hash（D7-2：禁止字符串拼接注入 query）。 */
+  function liveParams(st) {
+    var params = {};
+    if (isValidMonth(st.month)) { params.month = st.month; }
+    if (st.reimburseOnly === true) { params.flag = 'reimburse'; }
+    if (st.categoryIds.length === 1) { params.ca = st.categoryIds[0]; }
+    if (st.day && String(st.day).slice(0, 7) === st.month) { params.date = st.day; }
+    return params;
+  }
+
+  function baseHashOf(st) {
+    if (!st) { return '#/home'; }
+    var routerApi = XZB.router || XZB.Router || null;
+    var view = st.embedded === true ? 'home' : 'ledger';
+    var sub = '';
+    var extra = {};
+    var base = typeof st.baseHash === 'string' ? st.baseHash : '';
+    var route = null;
+    if (base && routerApi && typeof routerApi.parse === 'function') {
+      try { route = routerApi.parse(base); } catch (error) { route = null; }
+    }
+    if (route && route.view) {
+      /* 嵌入态视图恒为 home（D4-8）；其余模式沿用 baseHash 自己的路径 */
+      if (st.embedded !== true) { view = String(route.view); }
+      sub = String(route.sub || '');
+      extra = route.params && typeof route.params === 'object' ? route.params : {};
+    }
+    /* R6「其余 query 原值保留」：非五键、非 detail 的键原样带过去 */
+    var params = {};
+    Object.keys(extra).forEach(function (key) {
+      if (key === 'detail' || URL_KEYS.indexOf(key) >= 0) { return; }
+      params[key] = extra[key];
+    });
+    var liveQuery = liveParams(st);
+    Object.keys(liveQuery).forEach(function (key) { params[key] = liveQuery[key]; });
+    if (routerApi && typeof routerApi.hash === 'function') {
+      try { return routerApi.hash({ view: view, sub: sub, params: params }); } catch (error) { /* 退回静态路径 */ }
+    }
+    return '#/' + view;
+  }
+
+  /* [R6]/[D4-13] 关闭详情只删 detail：经 ctx.replace 走 router（屏内不直写 history） */
   function clearDetailParam(st) {
     if (!st || !st.detailParam) { return; }
-    st.detailParam = '';
     var ctx = st.ctx;
-    if (ctx && typeof ctx.replace === 'function') {
-      try { ctx.replace('#/ledger'); } catch (error) { /* 清参失败不影响已关闭的面板 */ }
-    }
+    st.detailParam = '';
+    if (!ctx || typeof ctx.replace !== 'function') { return; }
+    var target = baseHashOf(st);
+    if (!target) { return; }
+    try { ctx.replace(target); } catch (error) { /* 清参失败不影响已关闭的面板 */ }
   }
 
   function openDetailSheet(st, tx) {
@@ -40370,7 +40653,8 @@ textarea::selection {
     paint(st);
   }
 
-  function openFilterSheet(st) {
+  function openFilterSheet(st, options) {
+    var opts = options && typeof options === 'object' ? options : {};
     var sheet = sheetApi();
     if (!sheet || typeof sheet.open !== 'function') { return; }
     var draft = {
@@ -40666,6 +40950,18 @@ textarea::selection {
     paintSelected();
     paintCategories();
     syncApply();
+
+    /* [D2-9] openCategoryFilter()：打开既有筛选 sheet 并定位分类区（不新建第二套筛选 UI） */
+    if (opts.focusCategory) {
+      global.setTimeout(function () {
+        if (st.dead) { return; }
+        try {
+          if (typeof catGroup.scrollIntoView === 'function') { catGroup.scrollIntoView({ block: 'center' }); }
+        } catch (error) { /* 老 WebView 不支持带参 scrollIntoView */ }
+        if (typeof catInput.focus === 'function') { catInput.focus(); }
+      }, 0);
+    }
+    return handle;
   }
 
   function toggleId(list, id, next) {
@@ -40781,7 +41077,10 @@ textarea::selection {
   /* 搜索默认收起（M4）：有查询或聚焦时才占高度 */
   function openSearch(st) {
     if (st.dead || !st.nodes.search) { return; }
+    var wasOpen = st.nodes.search.classList.contains('is-open');
     st.nodes.search.classList.add('is-open');
+    /* [D2-28] ① 搜索框展开改变了吸顶条高度 → 重算日期头偏移 */
+    if (!wasOpen) { scheduleMeasure(st); }
   }
 
   function syncCancel(st) {
@@ -40791,7 +41090,10 @@ textarea::selection {
     st.nodes.cancel.classList.toggle('is-hidden', !open);
     st.nodes.search && st.nodes.search.classList.toggle('is-active', open);
     if (!open) {
+      var wasOpen = !!(st.nodes.search && st.nodes.search.classList.contains('is-open'));
       st.nodes.search && st.nodes.search.classList.remove('is-open');
+      /* [D2-28] ① 收起后吸顶条变矮，同样要重算 */
+      if (wasOpen) { scheduleMeasure(st); }
     }
   }
 
@@ -40833,6 +41135,8 @@ textarea::selection {
   }
 
   function syncTitle(st) {
+    /* [D2-6] ① 嵌入态不打 syncTitle：document.title 恒为「首页 · 小账本」（R25/A13） */
+    if (st && st.embedded === true) { return; }
     var text = titleOf(st);
     applyTitle(st, text);
     /* render 期间新屏尚未挂载，ctx.setTitle 会落到上一屏标题上；挂载后补一次。
@@ -40847,13 +41151,23 @@ textarea::selection {
 
   /* ---------------- 渲染 / 分页 ---------------- */
 
+  /* [D2-25] 吸顶偏移一律读实际计算值：首页没有 .app-nav，用常量 44 会多顶一段（A16）。
+   * 只有 getComputedStyle 不可用（测试桩）时才退回 options.stickyTop → .app-nav 高度兜底。
+   * 本函数内不得出现 embedded 分支：两态共用同一套算法。 */
   function measureSticky(st) {
-    var scroller = st.scroller;
-    var nav = null;
-    if (scroller && scroller.querySelector) { nav = scroller.querySelector('.app-nav'); }
-    var navHeight = nav ? nav.offsetHeight : 0;
+    if (!st || !st.nodes) { return; }
+    var stickyTop = 0;
+    if (st.nodes.sticky && typeof global.getComputedStyle === 'function') {
+      try { stickyTop = parseFloat(global.getComputedStyle(st.nodes.sticky).top) || 0; } catch (error) { stickyTop = 0; }
+    } else if (st.opts && typeof st.opts.stickyTop === 'number' && isFinite(st.opts.stickyTop)) {
+      stickyTop = st.opts.stickyTop;
+    } else {
+      var scroller = st.scroller;
+      var nav = scroller && scroller.querySelector ? scroller.querySelector('.app-nav') : null;
+      stickyTop = nav ? nav.offsetHeight : 0;
+    }
     var stickyHeight = st.nodes.sticky ? st.nodes.sticky.offsetHeight : 0;
-    st.stickTop = navHeight + stickyHeight;
+    st.stickTop = stickyTop + stickyHeight;
     if (!st.nodes.days) { return; }
     var heads = st.nodes.days.querySelectorAll('.s-ledger-day__head');
     for (var i = 0; i < heads.length; i += 1) {
@@ -41018,15 +41332,18 @@ textarea::selection {
     renderChips(st);
     syncTitle(st);
     savePersisted(st);
+    rememberState(st);   /* [D4-10] 同一五键指纹的重绘据此还原（含用户改过的月份/筛选） */
     if (!st.filtered.length) {
       st.nodes.days.appendChild(buildEmpty(st, hasFilters(st)));
       updateMore(st);
+      notifyMonth(st);   /* [D2-16] 嵌入态首页头部三列跟随月份 */
       scheduleMeasure(st);
       scheduleAfterPaint(st);
       return;
     }
     appendPage(st);
     updateMore(st);
+    notifyMonth(st);
     scheduleMeasure(st);
     scheduleAfterPaint(st);
   }
@@ -41078,27 +41395,42 @@ textarea::selection {
     syncCancel(st);
   }
 
+  /* 滚动容器只认 .app-screen（[D2-30]：首页不得出现第二个滚动容器）。
+   * 首页可能先 render 再把宿主挂进文档，找不到时按帧重试（最多 30 帧，不新增全局监听）。 */
   function bindScroll(st) {
-    var scroller = st.root.closest ? st.root.closest('.app-screen') : null;
-    if (!scroller) { return; }
-    st.scroller = scroller;
-    var ticking = false;
-    var request = global.requestAnimationFrame || function (fn) { return global.setTimeout(fn, 16); };
-
-    function onScroll() {
-      if (ticking) { return; }
-      ticking = true;
-      request(function () {
-        ticking = false;
-        if (st.dead) { return; }
-        if (st.openItem) { closeSwiped(st); }
-        var remain = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-        if (remain < LOAD_AHEAD && st.rendered < MAX_AUTO_ROWS) { loadMore(st); }
-      });
+    var tries = 0;
+    function pick() {
+      if (st.dead) { return null; }
+      return st.root && st.root.closest ? st.root.closest('.app-screen') : null;
     }
+    function attach(scroller) {
+      st.scroller = scroller;
+      var ticking = false;
+      var request = global.requestAnimationFrame || function (fn) { return global.setTimeout(fn, 16); };
 
-    scroller.addEventListener('scroll', onScroll, { passive: true });
-    st.cleanups.push(function () { scroller.removeEventListener('scroll', onScroll); });
+      function onScroll() {
+        if (ticking) { return; }
+        ticking = true;
+        request(function () {
+          ticking = false;
+          if (st.dead) { return; }
+          if (st.openItem) { closeSwiped(st); }
+          var remain = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+          if (remain < LOAD_AHEAD && st.rendered < MAX_AUTO_ROWS) { loadMore(st); }
+        });
+      }
+
+      scroller.addEventListener('scroll', onScroll, { passive: true });
+      st.cleanups.push(function () { scroller.removeEventListener('scroll', onScroll); });
+    }
+    function retry() {
+      if (st.dead) { return; }
+      var scroller = pick();
+      if (scroller) { attach(scroller); return; }
+      tries += 1;
+      if (tries < 30) { raf(retry); }
+    }
+    retry();
   }
 
   function bindResize(st) {
@@ -41111,30 +41443,179 @@ textarea::selection {
         measureSticky(st);
       }, 180);
     }
+    /* [D2-28] ④ 地址栏 / 键盘引起的 --vvh 变化（visualViewport 与 window.resize 不同源） */
+    function onViewport() {
+      if (st.dead) { return; }
+      measureSticky(st);
+    }
     global.addEventListener('resize', onResize);
+    var vv = global.visualViewport || null;
+    var vvBound = !!(vv && typeof vv.addEventListener === 'function');
+    if (vvBound) { vv.addEventListener('resize', onViewport); }
+
+    /* [D2-28] ④ 滚动容器自身尺寸变化（首页头部三列换行）；宿主可能稍后才挂进文档 */
+    var observer = null;
+    var tries = 0;
+    function watchScroller() {
+      if (st.dead || observer) { return; }
+      var Ctor = global.ResizeObserver;
+      if (!Ctor) { return; }
+      var scroller = st.scroller || (st.root && st.root.closest ? st.root.closest('.app-screen') : null);
+      if (!scroller) {
+        tries += 1;
+        if (tries < 30) { raf(watchScroller); }
+        return;
+      }
+      try {
+        observer = new Ctor(function () { if (!st.dead) { measureSticky(st); } });
+        observer.observe(scroller);
+      } catch (error) { observer = null; }
+    }
+    watchScroller();
+
     st.cleanups.push(function () {
       if (timer) { global.clearTimeout(timer); timer = 0; }
       global.removeEventListener('resize', onResize);
+      if (vvBound) { try { vv.removeEventListener('resize', onViewport); } catch (error) { /* 忽略 */ } }
+      if (observer) { try { observer.disconnect(); } catch (error) { /* 忽略 */ } }
     });
+  }
+
+  /* [D2-28] ③ 吸顶条自身高度变化（搜索展开 / 状态条挂入 / 月份行换行）→ 立刻重算日期头偏移 */
+  function bindStickyObserver(st) {
+    var Ctor = global.ResizeObserver;
+    if (!Ctor || !st.nodes.sticky) { return; }
+    var observer = null;
+    try {
+      observer = new Ctor(function () { if (!st.dead) { measureSticky(st); } });
+      observer.observe(st.nodes.sticky);
+    } catch (error) { observer = null; }
+    if (!observer) { return; }
+    st.cleanups.push(function () { try { observer.disconnect(); } catch (error) { /* 忽略 */ } });
+  }
+
+  /* ---------------- 销毁 / controller（2.15.0 嵌入契约） ---------------- */
+
+  function teardownState(st) {
+    if (!st) { return; }
+    st.dead = true;
+    var list = st.cleanups || [];
+    st.cleanups = [];
+    while (list.length) {
+      var fn = list.pop();
+      try { fn(); } catch (error) { /* 忽略 */ }
+    }
+  }
+
+  /* [D2-18] destroy：① dead ② 跑完 cleanups ③ flushPhotoUrls ④ live 摘指针；② 起幂等（重复调用为空操作）。
+   * [D2-19] 不调 bloburl.releaseAll（路由级职责）；[D2-20] 不关任何 Sheet。 */
+  function destroyScreen(st) {
+    if (!st || st.destroyed === true) { return; }
+    st.destroyed = true;
+    teardownState(st);
+    try { flushPhotoUrls(); } catch (error) { /* 释放失败不影响销毁 */ }
+    if (live === st) { live = null; }
+  }
+
+  /* [D2-9] scrollToList：把明细区滚入视口。以滚动容器（.app-screen）为基准，不假设 window 滚动 */
+  function scrollToList(st) {
+    if (!st || st.dead) { return; }
+    var node = st.root;
+    if (!node || typeof node.getBoundingClientRect !== 'function') { return; }
+    var scroller = st.scroller || (node.closest ? node.closest('.app-screen') : null);
+    if (scroller && typeof scroller.getBoundingClientRect === 'function') {
+      var delta = node.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      if (delta > 0) {
+        var max = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
+        scroller.scrollTop = Math.min(max, (scroller.scrollTop || 0) + delta);
+        return;
+      }
+    }
+    if (typeof node.scrollIntoView === 'function') {
+      try { node.scrollIntoView({ block: 'start' }); } catch (error) { /* 老 WebView 忽略参数 */ }
+    }
+  }
+
+  /* [D2-9] A6：展开搜索框 + input.focus({preventScroll:false}) + scrollToList() */
+  function focusSearch(st) {
+    if (!st || st.dead) { return; }
+    openSearch(st);
+    var input = st.nodes.input;
+    if (input && typeof input.focus === 'function') {
+      try { input.focus({ preventScroll: false }); } catch (error) { input.focus(); }
+    }
+    scrollToList(st);
+  }
+
+  /* [D2-9] 待报销快捷入口：取反 → 重绘 → scrollToList → 同步 aria-pressed */
+  function toggleReimburse(st) {
+    if (!st || st.dead) { return; }
+    st.reimburseOnly = st.reimburseOnly !== true;
+    if (st.nodes.reimburseChip) {
+      st.nodes.reimburseChip.setAttribute('aria-pressed', st.reimburseOnly ? 'true' : 'false');
+      st.nodes.reimburseChip.classList.toggle('is-active', st.reimburseOnly);
+    }
+    paint(st);
+    scrollToList(st);
+  }
+
+  /* [D2-11] controller 恰好 9 键：Object.keys(controller).sort() 与契约数组逐项相等 */
+  function buildController(st, opts) {
+    var controller = {
+      destroy: function () { destroyScreen(st); },
+      embedded: st.embedded === true,
+      focusSearch: function () { focusSearch(st); },
+      openBudgetStatus: function () {
+        /* [D2-35] 语义恒为「调用 options.onBudgetStatus()」；缺省 null 时恒空操作（不抛错 / 不 toast / 不开 Sheet） */
+        var handler = opts.onBudgetStatus;
+        if (typeof handler !== 'function') { return; }
+        handler.call(opts);
+      },
+      openCategoryFilter: function () {
+        /* [D2-9] 打开既有筛选 sheet 并定位分类区（不自建第二套筛选 UI） */
+        if (!st || st.dead) { return; }
+        openFilterSheet(st, { focusCategory: true });
+      },
+      root: st.root,
+      scrollToList: function () { scrollToList(st); },
+      toggleReimburse: function () { toggleReimburse(st); }
+    };
+    /* [D2-10] 只读字段 month（/^\d{4}-\d{2}$/，恒为当前渲染月份） */
+    if (typeof Object.defineProperty === 'function') {
+      Object.defineProperty(controller, 'month', {
+        enumerable: true,
+        configurable: true,
+        get: function () { return String(st.month || ''); }
+      });
+    } else {
+      controller.month = String(st.month || '');
+    }
+    return controller;
   }
 
   /* ---------------- 屏幕 ---------------- */
 
-  function render(root, ctx) {
-    if (!root) { return; }
-    if (live) { live.dead = true; }
-    if (live && live.cleanups) {
-      while (live.cleanups.length) {
-        var fn = live.cleanups.pop();
-        try { fn(); } catch (error) { /* 忽略 */ }
-      }
-    }
+  /**
+   * 2.15.0 明细屏：既独立成屏，也可被首页嵌入（DESIGN D2-* / D4-*）。
+   * @param {HTMLElement} root 宿主节点：嵌入态是首页里的容器 div，独立态是 .app-screen__body
+   * @param {object} ctx 路由上下文
+   * @param {object} [options] {embedded, baseHash, stickyTop, onMonthChange, onBudgetStatus}（缺省见 D2-5）
+   * @returns {object} controller（9 键，见 D2-11）
+   */
+  function render(root, ctx, options) {
+    if (!root) { return null; }
+    var opts = normalizeOptions(options);
+    /* [D2-8] 单实例：第二次 render 必须先把旧实例置 dead 并跑完 cleanups */
+    if (live) { teardownState(live); }
     runCleanups();
     /* F31：整屏重建（路由切换 / commit 后 app 重建本屏）前释放本屏上一轮创建的 blob URL；
      * 详情或查看器仍打开时自动推迟（它们可能正显示同一批 URL），本屏不做 releaseAll —— 路由级 releaseAll 归 app.js（PLAN §9.4）。 */
     flushPhotoUrls();
 
-    var st = createState(root, ctx);
+    /* [D2-6]/[D2-7] 类名与标记一律打在宿主节点本身，不建中间壳（禁止 s-home-* 这类包裹层） */
+    mountRoot(root, opts);
+
+    var st = createState(root, ctx, opts);
     live = st;
     st.all = collectAll(st.db, st.bookId);
     st.maps = {
@@ -41155,17 +41636,25 @@ textarea::selection {
     bindScroll(st);
     scheduleMeasure(st);
     bindResize(st);
+    bindStickyObserver(st);
     st.cleanups.push(function () { st.dead = true; });
 
-    /* 一次性轻提示（N3）：左滑快捷操作不容易被发现 */
-    var app = appApi();
-    var prefs = app && app.prefs ? app.prefs : null;
-    if (prefs && typeof prefs.get === 'function' && !prefs.get('ledgerHintShown', false)) {
-      try { prefs.set('ledgerHintShown', true); } catch (error) { /* 提示失败无碍 */ }
-      global.setTimeout(function () {
-        if (!st.dead) { toast('点流水看详情 · 左滑可直接编辑 / 删除', { type: 'info' }); }
-      }, 600);
+    var controller = buildController(st, opts);
+    st.controller = controller;
+
+    /* 一次性轻提示（N3）：左滑快捷操作不容易被发现。只给独立态——嵌入态首页已有自己的引导层，
+       UI.md:327 把这条留给前端定（非视觉阻塞）。 */
+    if (!st.embedded) {
+      var app = appApi();
+      var prefs = app && app.prefs ? app.prefs : null;
+      if (prefs && typeof prefs.get === 'function' && !prefs.get('ledgerHintShown', false)) {
+        try { prefs.set('ledgerHintShown', true); } catch (error) { /* 提示失败无碍 */ }
+        global.setTimeout(function () {
+          if (!st.dead) { toast('点流水看详情 · 左滑可直接编辑 / 删除', { type: 'info' }); }
+        }, 600);
+      }
     }
+    return controller;
   }
 
   var screen = {
@@ -50043,7 +50532,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.14.0';
+  XZB.version = '2.15.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
