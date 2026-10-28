@@ -3542,7 +3542,10 @@ textarea::selection {
 /* ---------- 三列行骨架 ---------- */
 .c-row--media {
   display: grid;
-  grid-template-columns: var(--size-media) minmax(0, 1fr) auto;
+  /* 第三列用 minmax(0, auto)：auto 轨道正常按内容定宽（金额完整显示），
+     只有整行放不下时才允许降到内容宽以下让位（金额省略号）。
+     不能写裸 auto 再配百分比 max-width —— 见下方 .c-row--media > .c-row__value 的说明。 */
+  grid-template-columns: var(--size-media) minmax(0, 1fr) minmax(0, auto);
   column-gap: var(--sp-col);
   align-items: center;
   box-sizing: border-box;
@@ -3550,6 +3553,16 @@ textarea::selection {
   padding: var(--sp-4) var(--sp-page);
   transition: background-color var(--dur-base) var(--ease-standard),
     transform var(--dur-fast) var(--ease-standard);
+}
+
+/* 网格变体必须解除 .c-row__value 的百分比夹逼（2.14.0 修）。
+   反直觉点：百分比 max-width 落在 grid 子项上时，百分比是对「它自己那条 auto 轨道」求值 ——
+   轨道先按内容定宽，子项再被夹到 56% × 该轨道宽，于是自我夹逼：实测 390px 下
+   「−¥12.00 + 12:22」被压到 27px 内容宽（真需 45px），金额只剩一个减号加省略号。
+   语法完全合法、grep 找不到错字、DOM 结构断言也全过，只有真渲染量 boundingRect 才发现。
+   让位职责归 minmax(0, auto) 轨道，这里只需去掉百分比。 */
+.c-row--media > .c-row__value {
+  max-width: none;
 }
 
 /* 分隔线左缩进 = P + W + G，与文字左缘对齐（行内 padding 已含 P） */
@@ -4512,6 +4525,32 @@ textarea::selection {
   .s-home-quick__item:active .s-home-quick__icon,
   .s-home-quick__item.is-pressed .s-home-quick__icon {
     transform: none;
+  }
+}
+
+/* ---------------- 头部汇总金额降档（配 home.js summaryColumn） ----------------
+ * 「汇总金额 28–34px」的字号层级只在短金额上成立：三列等分下每列约 1/3 视口宽，
+ * 390px 下 34px 每字符约 14.6px（tabular-nums 实测 0.43em），只容得下 7 个字符。
+ * 降档口径（阈值标定见 home.js 注释）：8–9 字符降到 28px，≥10 字符降到 17px。
+ *
+ * 故意放在文件最末尾：这三条的原文在上方 @media (max-width:360px) 里也有一条
+ * 单类规则设置 __value 的 28px，同特异度下靠「后出现者胜出」才能让窄屏档位生效。
+ */
+.s-home-head__value--compact {
+  font-size: var(--fs-summary-min);
+}
+
+.s-home-head__value--tight {
+  font-size: var(--fs-money-list);
+}
+
+@media (max-width: 360px) {
+  .s-home-head__value--compact {
+    font-size: var(--fs-money-list);
+  }
+
+  .s-home-head__value--tight {
+    font-size: var(--fs-money-list-2);
   }
 }
 
@@ -6673,7 +6712,9 @@ textarea::selection {
    本文件不写 64/12/80 字面值，窄屏也不压缩媒体列与金额列。 */
 .s-ledger-item__main {
   display: grid;
-  grid-template-columns: var(--size-media) minmax(0, 1fr) auto;
+  /* 第三列 minmax(0, auto)：按内容定宽显示完整金额，仅当整行放不下时才让位。
+     不能写裸 auto 再靠 __trail 的百分比 max-width 兜底（那是自我夹逼，见 __trail 注释）。 */
+  grid-template-columns: var(--size-media) minmax(0, 1fr) minmax(0, auto);
   column-gap: var(--sp-col);
   align-items: center;
   box-sizing: border-box;
@@ -6797,7 +6838,20 @@ textarea::selection {
   gap: var(--sp-1);
   justify-self: end;
   min-width: 0;
-  max-width: 45%;
+  /* 这里曾有 max-width: 45%（2.14.0 删除）。它是自我夹逼的根源：
+     __trail 是 grid 第三列，百分比 max-width 对自己的 auto 轨道求值，
+     轨道按内容定宽后再被夹到 45%，实测 320~1440px 全线把金额压到 26px 内容宽
+     （真需 57.7px）⇒ 金额只剩「-」和省略号，用户读不到任何数字。
+     让位改由 minmax(0, auto) 轨道承担，正常金额一律完整显示。 */
+  max-width: none;
+}
+
+/* 明细行右列同时带 c-row__value（金额口径来自 .c-row 家族），
+   而 components.css 的 .c-row__value 带 max-width: 56% —— 同一个自我夹逼，
+   实测把金额压到 32px 内容宽。只靠文件加载顺序（components 在前、ledger 在后）胜出太脆，
+   这里用双类名提高特异度，与顺序解耦。 */
+.s-ledger-item__trail.c-row__value {
+  max-width: none;
 }
 
 /* 金额列：__trail 给布局（列语义、右对齐、不缩），__value 给金额口径；
@@ -33711,6 +33765,18 @@ textarea::selection {
     col.appendChild(el('span', { className: 's-home-head__label', text: label }));
     var value = el('span', { className: 's-home-head__value' });
     value.appendChild(moneyNode(Math.abs(Number(cents) || 0)));
+    /* 大金额降档（任务书 §八 要求处理「大金额」；修的是「金额被省略号吃掉」）。
+       三列等分时每列只有约 1/3 视口宽（390px 下约 111px），而 34px 字号每字符约 14.6px
+       （tabular-nums 实测 0.43em/字符）⇒ 只能容下 7 个字符，「¥1,234.56」9 字符就会截断。
+       这里按「已格式化文本的字符数」降档，保证金额完整可读：
+         ≤ 7 字符（¥99,999.99 以内）  34px / 窄屏 28px
+         8–9 字符（¥1,234.56 一级）    28px / 窄屏 17px
+         ≥ 10 字符（¥10,000 以上）     17px / 窄屏 15px
+       用字符数而非视口宽度：金额长度由用户数据决定，与视口无关。
+       具体字号在 home.css 末尾（intentional 放最后，才能压过窄屏媒体查询）。 */
+    var len = String(value.textContent || '').length;
+    if (len >= 10) { value.classList.add('s-home-head__value--tight'); }
+    else if (len >= 8) { value.classList.add('s-home-head__value--compact'); }
     col.appendChild(value);
     return col;
   }
@@ -33937,6 +34003,16 @@ textarea::selection {
     return token === renderSeq && !!root && root.isConnected === true;
   }
 
+  /* 渲染期同步入口的存活判据：只比序号，不看 isConnected。
+     为什么不能复用 renderAlive：router 是在 render() 返回之后才把屏根挂进文档的，
+     所以 render 末尾调用 loadPhotos 时 root.isConnected 恒为 false ——
+     原写法使 photos.get 永不发出，媒体区永远停在骨架屏
+     （2.14.0 实机实测：首页 imgs=0 / .c-photo-skel=1；明细屏不走这条同步路径所以正常）。
+     「屏根没挂载就不写 DOM」这条仍然要保留，它由异步回包里的 renderAlive 负责。 */
+  function loadAlive(token) {
+    return token === renderSeq;
+  }
+
   /* 键只经 kit.photoKey（内部转交 bloburl.key）构造；URL 只经 urlOf(..., 'list')。 */
   function photoKeyOf(photoId, variant) {
     var k = kit();
@@ -34120,7 +34196,7 @@ textarea::selection {
   }
 
   function loadPhotos(targets, root, token) {
-    if (!targets.length || !renderAlive(root, token)) { return; }
+    if (!targets.length || !loadAlive(token)) { return; }
     var ids = [];
     var seen = Object.create(null);
     for (var i = 0; i < targets.length; i += 1) {
