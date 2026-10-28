@@ -37,7 +37,10 @@
 
   <!-- 基础样式 → 组件样式 → 各屏幕样式（顺序冻结，不可调整） -->
   <style>
-/* 唯一真源：UI.md §9（:1302-1756），裁决 D06；本文件只放设计变量与全局 color-scheme，不放布局、不放组件样式。 */
+/* 唯一真源：UI.md §9「令牌清单」，裁决 D06。
+   定位方式：**按章节锚点，不按行号** —— UI.md 于 2.14.0 重写为 1137 行，此前注释里写的行号区间已失效，
+   改用章节号可永久免于漂移（行号是派生量，章节号是稳定标识）。
+   本文件只放设计变量与全局 color-scheme，不放布局、不放组件样式。 */
 /* ============================================================
    小账本 2.0 · Design Tokens
    基准：iPhone 390×844；4pt 间距；金额以「分」存储
@@ -344,7 +347,7 @@
 
   /* ==========================================================
      M1 设计令牌（UI.md §2；名字唯一清单 = CONTRACT §令牌名清单）
-     约定：本段只放 UI.md §2 表里的名字；--r-card(16px) 已在 :85，
+     约定：本段只放 UI.md §2 表里的名字；--r-card(16px) 已在本文件更上方定义过，
      不重复新增；颜色类新令牌 0 个，故暗色块无需镜像。
      ========================================================== */
 
@@ -36721,7 +36724,7 @@ textarea::selection {
        - blob URL 只在 XZB.UI.bloburl 注册表创建；revoke 的唯一时机是路由销毁 releaseAll（数据流 19），
          屏幕层不自行 revoke —— 组件卸载即 revoke 会让来回切页白图（§2.6 已否决）。
        ============================================================ */
-    var photoSeq = 0;
+    var photoSeq;                /* 只声明不赋值：:420 的 preloadExistingPhotos() 早于本行执行，在此赋 0 会重置已用序号；初始化见 nativePhotoId()（D-1417） */
     var photoQueue = [];        /* 串行压缩队列：同刻只跑一张（PH-PERF-4） */
     var photoWorking = false;
     var photoMetaTimer = 0;
@@ -36837,6 +36840,7 @@ textarea::selection {
       return (n / (1024 * 1024)).toFixed(1) + ' MB';
     }
     function nativePhotoId() {
+      if (typeof photoSeq !== 'number' || !isFinite(photoSeq) || photoSeq < 0) photoSeq = 0;  /* 自初始化，见 DECISIONS D-1417 */
       photoSeq += 1;
       return 'p' + photoSeq;
     }
