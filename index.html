@@ -39352,7 +39352,11 @@ textarea::selection {
 
   function failPhotoRows(refs) {
     for (var i = 0; i < refs.length; i += 1) {
-      if (refs[i] && refs[i].cell && refs[i].cell.isConnected) { renderUnavailableMedia(refs[i].cell); }
+      var ref = refs[i];
+      if (!ref || !ref.cell || !ref.cell.isConnected) { continue; }
+      /* 没有照片的行在 buildItem 已经渲染成分类图标，不该被批量读取的失败连带标成「照片不可用」 */
+      if (!ref.photoIds || !ref.photoIds.length) { continue; }
+      renderUnavailableMedia(ref.cell);
     }
   }
 
@@ -39399,6 +39403,8 @@ textarea::selection {
       for (var k = 0; k < refs.length; k += 1) {
         var rowRef = refs[k];
         if (!rowRef || !rowRef.cell || !rowRef.cell.isConnected) { continue; }
+        /* 无照片行已渲染为分类图标，不参与本轮回写：否则 chosen 恒为 null 会被误判成失败态 */
+        if (!rowRef.photoIds || !rowRef.photoIds.length) { continue; }
         var chosen = null;
         var missingInRow = 0;
         for (var m = 0; m < rowRef.photoIds.length; m += 1) {
@@ -39472,6 +39478,13 @@ textarea::selection {
       className: 's-ledger-item__main',
       href: '#/ledger?detail=' + encodeURIComponent(String(tx.id || '')),
       'aria-label': mainLabel
+    });
+    /* 链接原生支持 Enter；Space 在部分浏览器不触发 click，这里补齐
+       （与首页 a.s-home-row 的无障碍口径一致，见 home.js 的同一段注释） */
+    main.addEventListener('keydown', function (event) {
+      if (event.key !== ' ' && event.key !== 'Spacebar') { return; }
+      event.preventDefault();
+      if (typeof main.click === 'function') { main.click(); }
     });
 
     /* 第一列：64px 媒体区。无照片 = 分类图标；有照片 = 骨架 → 缩略图 / 占位（一行只放一张） */
