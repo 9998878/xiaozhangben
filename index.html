@@ -2419,7 +2419,7 @@ textarea::selection {
   font-weight: var(--fw-semibold);
 }
 
-/* 空态说明文字：kit.empty 产出的 __desc 与路由占位屏的 __text 是同一个视觉角色（灰字、限宽） */
+/* 空态说明文字：kit 的空态组件产出的 __desc 与路由占位屏的 __text 是同一个视觉角色（灰字、限宽） */
 .c-empty__desc,
 .c-empty__text {
   max-width: 280px;
@@ -2949,17 +2949,19 @@ textarea::selection {
 /* ---------- 19.3b 分类图标选择器（2.6 · js/ui/icon-picker.js） ----------
  * 96 枚图标不能一整片铺开，所以做成「搜索 + 分组标签 + 6 列网格」。
  * 网格只渲染当前分组，手机上滚一屏就够。 */
-.s-icon-picker {
+.c-icon-picker {
+  /* JS 可经 opt.columns 覆写；此处只是 CSS 兜底默认值 */
+  --s-icon-cols: 6;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
 }
 
-.s-icon-picker__search {
+.c-icon-picker__search {
   position: relative;
 }
 
-.s-icon-picker__input {
+.c-icon-picker__input {
   width: 100%;
   min-height: var(--tap);
   padding: 0 var(--sp-4) 0 34px;
@@ -2969,12 +2971,12 @@ textarea::selection {
   background: var(--c-fill-2);
   color: var(--c-text);
   font-family: var(--font-sans);
-  font-size: var(--fs-body-2, 13px);
+  font-size: var(--fs-footnote);
   -webkit-appearance: none;
   appearance: none;
 }
 
-.s-icon-picker__search::before {
+.c-icon-picker__search::before {
   content: "";
   position: absolute;
   left: 13px;
@@ -2987,7 +2989,7 @@ textarea::selection {
   pointer-events: none;
 }
 
-.s-icon-picker__search::after {
+.c-icon-picker__search::after {
   content: "";
   position: absolute;
   left: 22px;
@@ -3001,12 +3003,12 @@ textarea::selection {
   pointer-events: none;
 }
 
-.s-icon-picker__input:focus {
+.c-icon-picker__input:focus {
   outline: none;
   box-shadow: inset 0 0 0 1.5px var(--c-tint);
 }
 
-.s-icon-picker__tabs {
+.c-icon-picker__tabs {
   display: flex;
   gap: 6px;
   overflow-x: auto;
@@ -3015,9 +3017,9 @@ textarea::selection {
   padding-bottom: 2px;
 }
 
-.s-icon-picker__tabs::-webkit-scrollbar { display: none; }
+.c-icon-picker__tabs::-webkit-scrollbar { display: none; }
 
-.s-icon-picker__tab {
+.c-icon-picker__tab {
   flex: none;
   min-height: 32px;
   padding: 0 12px;
@@ -3033,13 +3035,13 @@ textarea::selection {
     color var(--dur-1) var(--ease-out);
 }
 
-.s-icon-picker__tab.is-active {
+.c-icon-picker__tab.is-active {
   background: var(--c-on-tint);
   color: var(--c-toast-text);
   font-weight: var(--fw-semibold);
 }
 
-.s-icon-picker__grid {
+.c-icon-picker__grid {
   display: grid;
   grid-template-columns: repeat(var(--s-icon-cols, 6), minmax(0, 1fr));
   gap: var(--sp-2) 6px;
@@ -3050,7 +3052,7 @@ textarea::selection {
   padding: 2px 0 4px;
 }
 
-.s-icon-picker__item {
+.c-icon-picker__item {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3062,7 +3064,7 @@ textarea::selection {
   touch-action: manipulation;
 }
 
-.s-icon-picker__tile {
+.c-icon-picker__tile {
   display: grid;
   place-items: center;
   width: 100%;
@@ -3079,7 +3081,7 @@ textarea::selection {
     background-color var(--dur-1) var(--ease-out);
 }
 
-.s-icon-picker__cap {
+.c-icon-picker__cap {
   max-width: 100%;
   font-size: 10px;
   line-height: 1.2;
@@ -3089,31 +3091,31 @@ textarea::selection {
   white-space: nowrap;
 }
 
-.s-icon-picker__item.is-active .s-icon-picker__tile {
+.c-icon-picker__item.is-active .c-icon-picker__tile {
   background-color: var(--c-tint-soft);
   box-shadow: inset 0 1px 0 var(--tile-inner-hi),
     0 0 0 2px var(--c-tint);
 }
 
-.s-icon-picker__item.is-active .s-icon-picker__cap {
+.c-icon-picker__item.is-active .c-icon-picker__cap {
   color: var(--c-text);
   font-weight: var(--fw-semibold);
 }
 
-.s-icon-picker__item:active .s-icon-picker__tile {
+.c-icon-picker__item:active .c-icon-picker__tile {
   transform: scale(0.94);
   transition-duration: var(--dur-press-in);
   transition-timing-function: var(--ease-press);
 }
 
-.s-icon-picker__hint,
-.s-icon-picker__empty {
+.c-icon-picker__hint,
+.c-icon-picker__empty {
   margin: 0;
   font-size: var(--fs-caption);
   color: var(--c-text-3);
 }
 
-.s-icon-picker__empty {
+.c-icon-picker__empty {
   grid-column: 1 / -1;
   padding: var(--sp-3) 0;
   text-align: center;
@@ -3297,12 +3299,12 @@ textarea::selection {
   }
 
   /* 2.6：减动效下关掉图标贴纸的回弹/位移动画，只保留颜色变化 */
-  .s-icon-picker__tile,
+  .c-icon-picker__tile,
   .c-tile {
     transition: background-color 0ms, color 0ms, box-shadow 0ms;
   }
 
-  .s-icon-picker__item:active .s-icon-picker__tile {
+  .c-icon-picker__item:active .c-icon-picker__tile {
     transform: none;
   }
 }
@@ -26102,9 +26104,9 @@ textarea::selection {
       recents: Array.isArray(opt.recents) ? opt.recents.slice(0, 12) : []
     };
 
-    var root = el('div', 's-icon-picker');
-    var searchWrap = el('div', 's-icon-picker__search');
-    var input = el('input', 's-icon-picker__input');
+    var root = el('div', 'c-icon-picker');
+    var searchWrap = el('div', 'c-icon-picker__search');
+    var input = el('input', 'c-icon-picker__input');
     input.type = 'search';
     input.placeholder = '搜索图标（拼音或中文）';
     input.setAttribute('autocomplete', 'off');
@@ -26112,16 +26114,16 @@ textarea::selection {
     searchWrap.appendChild(input);
     root.appendChild(searchWrap);
 
-    var tabs = el('div', 's-icon-picker__tabs');
+    var tabs = el('div', 'c-icon-picker__tabs');
     tabs.setAttribute('role', 'tablist');
     tabs.setAttribute('aria-label', '图标分组');
     root.appendChild(tabs);
 
-    var grid = el('div', 's-icon-picker__grid');
+    var grid = el('div', 'c-icon-picker__grid');
     if (opt.columns) { root.style.setProperty('--s-icon-cols', String(opt.columns)); }
     root.appendChild(grid);
 
-    var hint = el('p', 's-icon-picker__hint', '');
+    var hint = el('p', 'c-icon-picker__hint', '');
     root.appendChild(hint);
     container.appendChild(root);
 
@@ -26174,7 +26176,7 @@ textarea::selection {
       if (!exists) { state.group = 'recommend'; }
       for (var i = 0; i < defs.length; i += 1) {
         (function (def) {
-          var tab = el('button', 's-icon-picker__tab' + (state.group === def.key ? ' is-active' : ''), def.label);
+          var tab = el('button', 'c-icon-picker__tab' + (state.group === def.key ? ' is-active' : ''), def.label);
           tab.type = 'button';
           tab.setAttribute('role', 'tab');
           tab.setAttribute('aria-selected', state.group === def.key ? 'true' : 'false');
@@ -26191,7 +26193,7 @@ textarea::selection {
     }
 
     function iconTile(key, size) {
-      var tile = el('span', 's-icon-picker__tile');
+      var tile = el('span', 'c-icon-picker__tile');
       var meta = typeof icons.meta === 'function' ? icons.meta(key) : null;
       var tone = meta && meta.group ? GROUP_TONE[meta.group] : 0;
       if (tone) {
@@ -26211,7 +26213,7 @@ textarea::selection {
         : keysOfGroup(state.group);
 
       if (!keys.length) {
-        grid.appendChild(el('p', 's-icon-picker__empty',
+        grid.appendChild(el('p', 'c-icon-picker__empty',
           state.keyword ? '没有叫「' + state.keyword + '」的图标' : '这个分组还没有图标'));
         hint.textContent = '';
         return;
@@ -26220,13 +26222,13 @@ textarea::selection {
       for (var i = 0; i < keys.length; i += 1) {
         (function (key) {
           var label = icons.labelOf(key);
-          var item = el('button', 's-icon-picker__item' + (state.value === key ? ' is-active' : ''));
+          var item = el('button', 'c-icon-picker__item' + (state.value === key ? ' is-active' : ''));
           item.type = 'button';
           item.setAttribute('data-icon', key);
           item.setAttribute('aria-label', label);
           item.setAttribute('aria-pressed', state.value === key ? 'true' : 'false');
           item.appendChild(iconTile(key));
-          item.appendChild(el('span', 's-icon-picker__cap', label));
+          item.appendChild(el('span', 'c-icon-picker__cap', label));
           item.addEventListener('click', function () { pick(key); });
           grid.appendChild(item);
         }(keys[i]));
