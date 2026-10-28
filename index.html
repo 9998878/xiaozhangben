@@ -80,6 +80,9 @@
   --c-success: #22B07D;
   --c-success-soft: #E3F7EE;
   --c-overlay: #00000073;
+  /* 照片删除键的恒定遮罩：这一层永远压在图片上，不随主题翻转（取值同浅色口径的 --c-overlay，
+   * 但刻意不做深色覆盖 —— --c-overlay 深色会变浓，用它会改变照片上的视觉）。 */
+  --c-photo-scrim: #00000073;
   --c-pressed: #0000000F;
   --c-toast: #1C1C1E;
   --c-toast-bg: var(--c-toast);
@@ -158,6 +161,16 @@
   --cat-10: #15803D; --cat-10-soft: #15803D14; --cat-10-accent: #4ADE80;
   --cat-11: #4338CA; --cat-11-soft: #4338CA14; --cat-11-accent: #A5B4FC;
   --cat-12: #52525B; --cat-12-soft: #52525B14; --cat-12-accent: #A1A1AA;
+  /* 分类色的「主题恒定」原始值（= 上表浅色主色，深色块刻意不覆盖）。
+   * 写回数据库的分类色必须落固定 hex：读 --cat-N 会在深色下把 #C2410C 存成 #FB923C，
+   * 反复编辑保存会越漂越亮。需要「真色值」的代码只经这一组 token 取值。 */
+  --cat-raw-1: #C2410C;  --cat-raw-2: #1D4ED8;  --cat-raw-3: #BE185D;
+  --cat-raw-4: #0F766E;  --cat-raw-5: #7C3AED;  --cat-raw-6: #B91C1C;
+  --cat-raw-7: #0369A1;  --cat-raw-8: #A16207;  --cat-raw-9: #0E7490;
+  --cat-raw-10: #15803D; --cat-raw-11: #4338CA; --cat-raw-12: #52525B;
+  /* 分类图标色：屏幕层只下达这一个名字（内联自定义属性 --cat-color），
+   * 默认退回软色调，深浅两个主题各自成立。 */
+  --cat-color: var(--c-tint-soft-text);
 
   /* ---------- 双色图标（sticker）----------
    * 图标 SVG 里的 accent 形状用 fill:var(--ico-a)、fill-opacity:var(--ico-a-o)。
@@ -328,6 +341,63 @@
   --ph-thumb: 64px;             /* 详情面板内缩略图边长 */
   --ph-viewer-bg: #000000E6;    /* 大图查看器底色（浅色） */
   --z-viewer: 260;              /* 查看器层级：> --z-menu(250)，< --z-toast(300) */
+
+  /* ==========================================================
+     M1 设计令牌（UI.md §2；名字唯一清单 = CONTRACT §令牌名清单）
+     约定：本段只放 UI.md §2 表里的名字；--r-card(16px) 已在 :85，
+     不重复新增；颜色类新令牌 0 个，故暗色块无需镜像。
+     ========================================================== */
+
+  /* --- 圆角（§2.2） --- */
+  --r-thumb: 12px;              /* 缩略图圆角 */
+  --r-chip: 8px;                /* 小控件圆角（角标/胶囊） */
+  --r-pill: 999px;              /* 全圆 */
+  --r-sheet: 20px;              /* 底部 sheet 上圆角 */
+
+  /* --- 间距与尺寸（§2.3） --- */
+  --sp-page: 16px;              /* 页面左右留白（≤360 覆盖 12px，见文件末尾 body 块） */
+  --sp-block: 12px;             /* 模块间距下限 */
+  --sp-block-lg: 16px;          /* 模块间距上限 */
+  --sp-col: 12px;               /* 三列列间距（三列度量的唯一定义处之一） */
+  --h-tap-min: 44px;            /* 点击区最小边长 */
+  --size-compose: 52px;         /* 中央「＋」直径 */
+  --size-media: 64px;           /* 列表媒体列宽：恒 64px，任何视口都不压缩（SPEC E-3） */
+  --h-row-min: 80px;            /* 列表行高最小（三列度量的唯一定义处之一） */
+  --size-quick-icon: 24px;      /* 快捷入口图标 */
+  --size-icon: 24px;            /* 普通图标 */
+  --content-max: 768px;         /* 桌面内容最大宽 */
+  --panel-max-w: 560px;         /* 详情面板最大宽 */
+  --panel-max-h: 80dvh;         /* 详情面板最大高 */
+
+  /* --- 字号 / 字重（§2.4；语义名，取值与既有阶梯同值不同名） --- */
+  --fs-brand: 20px;
+  --fw-brand: 600;
+  --fs-summary: 34px;
+  --fw-summary: 600;
+  --fs-summary-min: 28px;
+  --fs-row: 16px;
+  --fw-row: 600;                /* CONTRACT 给 500–600，取 600 与 §6.5 一致 */
+  --fs-row-lg: 17px;
+  --fs-aux: 12px;
+  --fs-aux-lg: 13px;
+
+  /* --- 动效（§2.5；与 --dur-1/--dur-press-out 等值不同名，reduce 块内一并归零） --- */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --ease-standard: cubic-bezier(.32, .72, 0, 1);
+}
+
+/* 窄屏（≤360px，对应 UI.md §5.1 的 xs 档）页面左右留白降到 12px。
+   注意：UI.md §5.3 的示例写成 `@media{ :root{...} }`，但 _t22 把
+   「:root 出现次数」冻结成 6（EXPECT_ROOT_BLOCKS）；这里改用 body 作用域，
+   靠「body 声明写在 html 继承值之后」取胜，不改 :root 计数。
+   --page-x 一并下调，避免新旧规则在 12/16px 之间错位。
+   64px 媒体列与 12px 列间距**不在窄屏收缩**（SPEC E-3 硬口径）。 */
+@media (max-width: 360px) {
+  body {
+    --sp-page: 12px;
+    --page-x: var(--page-x-compact);
+  }
 }
 
 /* ============================================================
@@ -566,6 +636,9 @@
     --dur-exit: 0.01ms;
     --dur-count: 0.01ms;
     --dur-ring: 0.01ms;
+  /* M1：语义动效令牌同步归零（否则新规则在 reduce 下仍会过渡） */
+  --dur-fast: 0.01ms;
+  --dur-base: 0.01ms;
   }
 }
 
@@ -1069,6 +1142,20 @@ textarea::selection {
   background: transparent;
   color: var(--c-tint-soft-text);
   font-weight: var(--fw-regular);
+}
+
+/* 幽灵按钮（photo-viewer 删除确认层的「取消」）：透明底 + 一条描边，
+   与同排的 c-btn--danger 一眼可分，又不抢 c-btn--primary 的黄底。 */
+.c-btn--ghost {
+  min-height: var(--h-btn-md);
+  background: transparent;
+  color: var(--c-text);
+  box-shadow: inset 0 0 0 var(--hairline) var(--c-stroke);
+}
+
+.c-btn--ghost:active,
+.c-btn--ghost.is-pressed {
+  background: var(--c-fill-press);
 }
 
 .c-btn--sm {
@@ -2329,7 +2416,9 @@ textarea::selection {
   font-weight: var(--fw-semibold);
 }
 
-.c-empty__desc {
+/* 空态说明文字：kit.empty 产出的 __desc 与路由占位屏的 __text 是同一个视觉角色（灰字、限宽） */
+.c-empty__desc,
+.c-empty__text {
   max-width: 280px;
   margin-top: var(--sp-1);
   color: var(--c-text-2);
@@ -2877,7 +2966,7 @@ textarea::selection {
   background: var(--c-fill-2);
   color: var(--c-text);
   font-family: var(--font-sans);
-  font-size: var(--fs-body-2);
+  font-size: var(--fs-body-2, 13px);
   -webkit-appearance: none;
   appearance: none;
 }
@@ -2943,7 +3032,7 @@ textarea::selection {
 
 .s-icon-picker__tab.is-active {
   background: var(--c-on-tint);
-  color: #FFFFFF;
+  color: var(--c-toast-text);
   font-weight: var(--fw-semibold);
 }
 
@@ -3264,7 +3353,7 @@ textarea::selection {
   border: 0;
   border-radius: var(--r-full);
   background: transparent;
-  color: #FFFFFF;
+  color: var(--c-toast-text);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background-color var(--dur-1) var(--ease-out);
@@ -3292,7 +3381,7 @@ textarea::selection {
 .c-photoviewer__count {
   grid-column: 2;
   min-width: 0;
-  color: #FFFFFF;
+  color: var(--c-toast-text);
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   font-weight: var(--fw-semibold);
@@ -3362,7 +3451,7 @@ textarea::selection {
   padding: var(--sp-1) var(--sp-3);
   border-radius: var(--r-full);
   background: #000000A6;
-  color: #FFFFFF;
+  color: var(--c-toast-text);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
   text-align: center;
@@ -3439,6 +3528,340 @@ textarea::selection {
   flex: 1 1 0;
 }
 
+/* ============================================================
+   2.14 M1：列表行三列 / 缩略图 / 多图角标 / 骨架屏
+   （UI.md §6 三列规范、§4 状态矩阵、§7.2-M1 扁平化）
+   ------------------------------------------------------------
+   三列度量只在 tokens.css 定义一次：
+     var(--size-media) 64px 媒体列 / var(--sp-col) 12px 列间距 /
+     var(--h-row-min) 80px 行高下限。
+   本文件与 home.css、ledger.css 只引用，不写字面值（SPEC E-3 硬口径：
+   媒体列恒 64px，任何视口都不压缩，靠 minmax(0,1fr) 文字区让位）。
+   ============================================================ */
+
+/* ---------- 三列行骨架 ---------- */
+.c-row--media {
+  display: grid;
+  grid-template-columns: var(--size-media) minmax(0, 1fr) auto;
+  column-gap: var(--sp-col);
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--h-row-min);
+  padding: var(--sp-4) var(--sp-page);
+  transition: background-color var(--dur-base) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
+}
+
+/* 分隔线左缩进 = P + W + G，与文字左缘对齐（行内 padding 已含 P） */
+.c-row--media + .c-row::before,
+.c-row--media + .c-row--media::before {
+  left: calc(var(--sp-page) + var(--size-media) + var(--sp-col));
+}
+
+/* ---------- 媒体列：照片与分类图标共用同一列，文字左缘因此恒对齐 ---------- */
+.c-row__media {
+  position: relative;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  width: var(--size-media);
+  height: var(--size-media);
+  aspect-ratio: 1;
+  border-radius: var(--r-thumb);
+  background: var(--c-fill);
+  color: var(--c-text-3);
+}
+
+.c-row__media .c-icon {
+  /* 32px = --size-icon(24) + --sp-3(8)：CONTRACT 未定义 32px 图标令牌，不新造名字 */
+  width: calc(var(--size-icon) + var(--sp-3));
+  height: calc(var(--size-icon) + var(--sp-3));
+}
+
+/* 图片必须铺满且自带裁剪：不得靠内容撑宽，否则列宽漂移、对齐失效 */
+.c-row__thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.c-row__thumb > img,
+.c-row__thumb img,
+.c-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 「未添加」态：虚线占位 */
+.c-row__media--empty {
+  border: 1px dashed var(--c-separator-strong);
+  border-radius: var(--r-thumb);
+  background: transparent;
+  color: var(--c-text-3);
+}
+
+/* 「不可用」态：破图直接退成分类图标形态，不显示破图 */
+.c-row__media--unavailable {
+  background: var(--c-fill);
+  color: var(--c-text-3);
+}
+
+.c-row__media--unavailable img {
+  display: none;
+}
+
+/* ---------- 多图数量角标（UI.md §6.2；CONTRACT §210 冻结口径） ---------- */
+.c-row__count {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  height: 18px;
+  min-width: 18px;
+  padding: 0 4px;
+  border: 2px solid var(--c-bg-elev);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--c-toast) 92%, transparent);
+  color: var(--c-toast-text);
+  font-size: var(--fs-caption-2);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* ---------- 行状态矩阵（UI.md §4） ---------- */
+@media (hover: hover) {
+  .c-row--media:hover {
+    background: var(--c-fill);
+  }
+}
+
+.c-row--media:active,
+.c-row--media.is-pressed {
+  background: var(--c-pressed);
+  transform: scale(var(--press-card));
+}
+
+.c-row--media:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: calc(var(--focus-offset) * -1);
+  border-radius: var(--r-lg);
+}
+
+.c-row--media[aria-disabled="true"] {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+/* ---------- 骨架屏（UI.md §4 / §7.3.2） ---------- */
+.c-skeleton {
+  border-radius: var(--r-chip);
+  background: var(--c-skeleton);
+  animation: c-skeleton-pulse 1.4s var(--ease-standard) infinite;
+}
+
+.c-skeleton--media {
+  width: var(--size-media);
+  height: var(--size-media);
+  border-radius: var(--r-thumb);
+}
+
+.c-skeleton--line {
+  height: var(--sp-3);
+  border-radius: var(--r-chip);
+}
+
+.c-skeleton--line-sm {
+  width: 45%;
+  height: var(--sp-2);
+}
+
+.c-skeleton--amount {
+  width: var(--sp-11);
+  height: var(--sp-5);
+  justify-self: end;
+}
+
+.c-skeleton--circle {
+  border-radius: var(--r-pill);
+}
+
+@keyframes c-skeleton-pulse {
+  50% {
+    background: var(--c-skeleton-pulse);
+  }
+}
+
+/* ---------- M1 扁平化 ---------- */
+
+/* 普通列表取消厚重阴影，只留 1px 描边（§7.2-M1）；浮卡/浮层仍可用 --shadow-card */
+.c-list {
+  box-shadow: none;
+}
+
+/* sheet 上圆角收敛到 --r-sheet(20px)（§2.2 / §5.2） */
+.c-sheet {
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+}
+
+/* 中央记账按钮直径走 --size-compose(52px)（§2.3） */
+.c-tabbar__compose-dot {
+  width: var(--size-compose);
+  height: var(--size-compose);
+}
+
+/* ---------- 降级动效（§4.1） ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .c-skeleton {
+    animation: none;
+  }
+
+  .c-row--media {
+    transition: none;
+  }
+}
+
+/* ============================================================
+   2.15 M1：照片媒体区
+   （类名由 src/js/ui/kit.js 的 mediaCell() L751 与 photoBadge() L786 直接输出，
+    JS 侧已冻结，CSS 必须逐字对位，否则首页/明细的照片位是裸 div）
+   ============================================================ */
+
+/* 64px 媒体列容器：有图 / 无图 / 加载中 / 失败 四种形态共用同一格，文字左缘因此恒对齐。
+   任何断点都不得小于 64px（SPEC E-3：320px 视口也不缩，让位只发生在文字区）。 */
+.c-photo-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  flex: 0 0 var(--size-media);
+  width: var(--size-media);
+  height: var(--size-media);
+  min-width: var(--size-media);
+  aspect-ratio: 1;
+  border-radius: var(--r-thumb);
+  background: var(--c-fill);
+  color: var(--c-text-3);
+  overflow: hidden;
+}
+
+/* 缩略图：居中裁切（cover）。详情大图在 .c-photoviewer__img 里仍是 contain，不复用这条。 */
+.c-photo-cell__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+/* 多图数量角标：不是命中区，pointer-events 必须为 none */
+.c-photo-badge {
+  position: absolute;
+  right: var(--sp-1);
+  bottom: var(--sp-1);
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-width: var(--sp-5);
+  height: var(--sp-5);
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-chip);
+  background: color-mix(in srgb, var(--c-toast) 92%, transparent);
+  color: var(--c-toast-text);
+  font-size: var(--fs-caption-2);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* 加载中骨架：与 cell 同尺寸；单次明暗过渡 = --dur-base(180ms) */
+.c-photo-skel {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--c-skeleton);
+  animation: c-photo-pulse calc(var(--dur-base) * 2) var(--ease-standard) infinite alternate;
+}
+
+@keyframes c-photo-pulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.72;
+  }
+}
+
+/* 读取失败占位：与 cell 同尺寸，居中「照片不可用」文字（供读屏，也视觉可见） */
+.c-photo-empty {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--sp-1);
+  color: var(--c-text-4);
+  font-size: var(--fs-caption-2);
+  line-height: var(--lh-body);
+  text-align: center;
+}
+
+/* 无照片：同一个 64px 格内居中放分类图标底座，与有图行共用一格宽 */
+.c-photo-cell--icon {
+  background: transparent;
+}
+
+.c-photo-cell--icon .c-tile {
+  margin: 0;
+}
+
+/* 有照片（--thumb）与加载中（--skeleton）两态：
+   外壳与无照片态 --icon 逐字节同构 —— 尺寸 / 圆角 / 居中全部继承 .c-photo-cell，
+   这里只锁住「格内内容裁进圆角」这条状态契约，让三态之间不发生任何一像素位移
+   （这是「有图 / 无图两行文字左缘差 0」的前提：媒体列在两种状态下恒 64px）。
+   缩放口径：缩略图 cover 在 .c-photo-cell__img，详情大图 contain 在 .c-photoviewer__img，两者不复用。 */
+.c-photo-cell--thumb,
+.c-photo-cell--skeleton {
+  overflow: hidden;
+}
+
+/* kit.js 对「加载失败」改用 --placeholder：同一格宽，虚线描边 + 居中不可用提示 */
+.c-photo-cell--placeholder {
+  padding: 0 var(--sp-1);
+  background: var(--c-fill-2);
+  box-shadow: inset 0 0 0 var(--hairline) var(--c-separator-strong);
+  color: var(--c-text-4);
+  font-size: var(--fs-caption-2);
+  line-height: var(--lh-body);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-photo-skel {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   分层注记：本文件只放跨屏组件（c-*），不留屏级类名
+   ------------------------------------------------------------
+   屏级 s-* 一律留在各自屏的 CSS —— add 屏在 screens/add.css、
+   ledger 屏在 screens/ledger.css、plan 屏在 screens/plan.css。
+   本层先于屏层加载，屏级规则写在这里必然被屏层覆盖，
+   等于埋一条看不见的重复声明，所以这里连白名单外的 s-* 一个都不留。
+   ============================================================ */
+
 </style>
   <style>
 /* 小账本 2.0 · css/screens/home.css
@@ -3457,6 +3880,54 @@ textarea::selection {
   padding: 0 0 var(--sp-8);
 }
 
+/* 下拉刷新指示器：JS 把它从 0 拉起（home.js:932，内联 height 优先），
+   这里给的是初始态与上限高；app-screen 是滚动容器，所以它随内容一起被拉出可视区，
+   松手回弹由 JS 收尾。降级见文末 prefers-reduced-motion。 */
+.s-home-pull {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 0;
+  max-height: var(--sp-11);
+  overflow: hidden;
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  transition: height var(--dur-base) var(--ease-standard);
+}
+
+/* 记一笔 FAB（home.js:956 追加在屏内容末尾）：sticky 常驻在 tab 栏之上 ——
+   它属于本屏 DOM，切屏时随整棵树卸载，不需要路由额外收尾；
+   56px = --sp-10 + --sp-3（没有 FAB 尺寸令牌，按文件既有的 calc 标尺组合，不新造名字）。 */
+.s-home-fab {
+  position: sticky;
+  bottom: calc(var(--h-tabbar) + var(--safe-bottom) + var(--sp-4));
+  z-index: var(--z-sticky);
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: calc(var(--sp-10) + var(--sp-3));
+  height: calc(var(--sp-10) + var(--sp-3));
+  margin: var(--sp-5) calc(var(--sp-page) + var(--safe-right)) 0 auto;
+  border-radius: var(--r-full);
+  background: var(--c-tint);
+  color: var(--c-on-tint);
+  box-shadow: var(--shadow-float);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.s-home-fab:active {
+  transform: scale(var(--press-fab));
+}
+
+.s-home-fab:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: var(--focus-offset);
+}
+
 .s-home-glyph {
   display: grid;
   place-items: center;
@@ -3466,115 +3937,222 @@ textarea::selection {
   font-size: var(--fs-caption-1);
 }
 
-/* ---------------- 大标题（月份 + 账本，鲨鱼式首屏标题） ---------------- */
+/* ---------------- 黄色头部（通栏 + 安全区 + 月度汇总三列） ----------------
+ * 背景必须通栏，内容才受 --content-max 约束；因此左右留白用 padding 实现，
+ * 不额外套 wrapper（≥768px 用 max() 让内容居中而黄底仍铺满整行）。
+ * 底部 padding 比常规多出 --sp-4（16px），供快捷卡以负 margin 压上来。
+ */
 
-.s-home-titlebar {
-  display: flex;
-  align-items: center;
-  padding: var(--sp-2) var(--page-x) var(--sp-3);
+.s-home-head {
+  position: relative;
+  box-sizing: border-box;
+  padding: calc(env(safe-area-inset-top, 0px) + var(--sp-3)) var(--sp-page)
+    calc(var(--sp-5) + var(--sp-4));
+  background: var(--c-tint);
+  color: var(--c-on-tint);
 }
 
-.s-home-title {
-  display: inline-flex;
+/* 品牌行：左 44px 账本入口 / 中品牌 / 右 44px 占位，保证品牌视觉居中 */
+.s-home-head__top {
+  display: grid;
+  grid-template-columns: var(--h-tap-min) minmax(0, 1fr) var(--h-tap-min);
   align-items: center;
-  gap: var(--sp-1);
-  min-height: var(--tap);
+  gap: var(--sp-2);
+}
+
+.s-home-head__books {
+  display: grid;
+  place-items: center;
+  width: var(--h-tap-min);
+  height: var(--h-tap-min);
   margin-left: calc(var(--sp-2) * -1);
-  padding: 0 var(--sp-2);
   border-radius: var(--r-lg);
-  color: var(--c-text);
-  font-size: var(--fs-title-3);
-  line-height: var(--lh-title-3);
-  font-weight: var(--fw-bold);
+  color: var(--c-on-tint);
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-.s-home-title:active,
-.s-home-title.is-pressed {
-  background: var(--c-pressed);
+/* 黄色是浅底，焦点环必须换成深色可读色，不能沿用默认 --c-focus */
+.s-home-head__books:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: calc(var(--focus-offset) * -1);
 }
 
-.s-home-title__text {
-  max-width: 70vw;
+.s-home-head__brand {
+  margin: 0;
   overflow: hidden;
+  font-size: var(--fs-brand);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-brand);
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.s-home-title .c-icon {
-  margin-top: 2px;
-  color: var(--c-text-3);
+.s-home-head__spacer {
+  display: block;
 }
 
-/* ---------------- 本月支出大卡（白底 + 黑色大数字 + 黄色涨跌 pill） ---------------- */
+/* 月度汇总：三列等分，列间距与列表行共用 --sp-col */
+.s-home-head__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: var(--sp-col);
+  margin-top: var(--sp-5);
+}
 
-.s-home-hero {
-  margin: 0 var(--page-x);
-  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+.s-home-head__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.s-home-head__col--income,
+.s-home-head__col--expense {
+  align-items: flex-end;
+  text-align: right;
+}
+
+/* 月份 + 账本名列（home.js:266，摘要行第一列）：信息密度低于收支数字，
+   只在自身范围内靠左，不与「收入 / 支出」两列共用对齐轴 */
+.s-home-head__col--month {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.s-home-head__label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--fs-aux);
+  line-height: var(--lh-body);
+  opacity: 0.7;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-home-head__value,
+.s-home-head__book {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--fs-summary);
+  line-height: 1.1;
+  font-weight: var(--fw-summary);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-home-head__book {
+  font-size: var(--fs-row);
+  font-weight: var(--fw-row);
+}
+
+/* .c-money 自带段落级字号，金额列统一压成汇总字号 */
+.s-home-head__value .c-money {
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+}
+
+/* ---------------- 白色快捷入口卡（五等分，压住头部底边 16px） ----------------
+ * 压边用「负 margin + z-index + 文档流不变」实现：
+ * 不用 position:absolute——卡片的 44px 点击区和键盘弹出都不该脱离文档流。
+ */
+
+.s-home-quick {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sp-1);
+  box-sizing: border-box;
+  margin: calc(var(--sp-5) * -1) var(--sp-page) 0;
+  padding: var(--sp-4) var(--sp-2);
   border-radius: var(--r-card);
   background: var(--c-bg-elev);
   box-shadow: var(--shadow-card);
-  color: var(--c-text);
 }
 
-.s-home-hero__head {
+.s-home-quick__item {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  min-height: 22px;
-}
-
-.s-home-hero__label {
-  color: var(--c-text-3);
-  font-size: var(--fs-caption-1);
-  line-height: var(--lh-caption-1);
-}
-
-.s-home-hero__amount {
-  margin: var(--sp-2) 0 0;
-}
-
-.s-home-hero__amount .c-money {
+  justify-content: center;
+  gap: var(--sp-1);
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--h-tap-min);
+  padding: var(--sp-1) 0;
+  border-radius: var(--r-lg);
   color: var(--c-text);
-  font-size: var(--fs-large-title);
-  line-height: var(--lh-large-title);
-  font-weight: var(--fw-bold);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--dur-base) var(--ease-standard);
 }
 
-.s-home-hero__foot {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin: var(--sp-4) 0 0;
-  padding-top: var(--sp-3);
-  border-top: var(--hairline) solid var(--c-hairline);
-  color: var(--c-text-3);
-  font-size: var(--fs-footnote);
-  line-height: var(--lh-footnote);
+.s-home-quick__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--size-quick-icon);
+  height: var(--size-quick-icon);
+  color: var(--c-text);
+  transition: transform var(--dur-fast) var(--ease-standard);
 }
 
-.s-home-hero__foot-item {
-  font-variant-numeric: tabular-nums;
+.s-home-quick__icon svg,
+.s-home-quick__icon .c-icon {
+  width: var(--size-quick-icon);
+  height: var(--size-quick-icon);
 }
 
-.s-home-hero__foot-sep {
-  color: var(--c-text-4);
+.s-home-quick__label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--fs-aux);
+  line-height: var(--lh-body);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (hover: hover) {
+  .s-home-quick__item:hover {
+    background: var(--c-fill);
+  }
+}
+
+.s-home-quick__item:active,
+.s-home-quick__item.is-pressed {
+  background: var(--c-pressed);
+}
+
+.s-home-quick__item:active .s-home-quick__icon,
+.s-home-quick__item.is-pressed .s-home-quick__icon {
+  transform: scale(var(--press-btn));
+}
+
+.s-home-quick__item:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: calc(var(--focus-offset) * -1);
 }
 
 /* ---------------- 预算（扁平：黄进度条 + 一行数字） ---------------- */
 
 .s-home-budget {
   display: block;
-  margin: var(--sp-4) var(--page-x) 0;
-  padding: var(--sp-4) var(--sp-5);
+  box-sizing: border-box;
+  margin: var(--sp-block-lg) var(--sp-page) 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--hairline) solid var(--c-stroke);
   border-radius: var(--r-card);
   background: var(--c-bg-elev);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
   color: var(--c-text);
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--dur-base) var(--ease-standard);
 }
 
 .s-home-budget__head {
@@ -3630,15 +4208,33 @@ textarea::selection {
   line-height: var(--lh-body);
 }
 
+/* 「已用 / 预算」两端文字（home.js:331 与 336）：与中间的金额同一字号口径，
+   三者拼成一句可读的句子；键灰、总值深，层次仍分得清 */
+.s-home-budget__nums-key,
+.s-home-budget__nums-total {
+  color: var(--c-text-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-home-budget__nums-total {
+  color: var(--c-text);
+}
+
 .s-home-budget .c-progress {
   height: 8px;
   border-radius: 4px;
   background: var(--c-ring-track);
 }
 
-/* 超支：进度条整条转红色斜纹，一眼看出越线 */
+/* 超支：进度条整条转红色斜纹，一眼看出越线（红色仅用于超支，不越界） */
 .s-home-budget--danger .c-progress__bar {
-  background: repeating-linear-gradient(-45deg, var(--c-expense) 0 6px, #FF9A92 6px 12px);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--c-expense) 0 6px,
+    color-mix(in srgb, var(--c-expense) 45%, var(--c-bg-elev)) 6px 12px
+  );
 }
 
 .s-home-budget__daily-text {
@@ -3655,13 +4251,14 @@ textarea::selection {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  margin: var(--sp-4) var(--page-x) 0;
+  box-sizing: border-box;
+  margin: var(--sp-block-lg) var(--sp-page) 0;
   padding: var(--sp-3) var(--sp-4);
   border: var(--hairline) solid var(--c-stroke);
   border-left: 3px solid var(--c-warn);
   border-radius: var(--r-card);
   background: var(--c-bg-elev);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 .s-home-due__main {
@@ -3670,6 +4267,17 @@ textarea::selection {
   flex: 1 1 auto;
   gap: var(--sp-3);
   min-width: 0;
+}
+
+/* 待入账图标底座（home.js:378）：与标题同排的 24px 图标格，钉在左侧、不参与压缩；
+   用 warn 色呼应这张卡的左侧告警描边 */
+.s-home-due__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--size-icon);
+  height: var(--size-icon);
+  color: var(--c-warn);
 }
 
 .s-home-due__body {
@@ -3723,11 +4331,11 @@ textarea::selection {
 /* ---------------- 最近流水 ---------------- */
 
 .s-home-day {
-  padding: var(--sp-1) var(--page-x) 0;
+  padding: var(--sp-1) var(--sp-page) 0;
 }
 
 .s-home-day + .s-home-day {
-  margin-top: var(--sp-3);
+  margin-top: var(--sp-block);
 }
 
 .s-home-day__head {
@@ -3756,6 +4364,30 @@ textarea::selection {
   white-space: nowrap;
 }
 
+/* 首页流水行（kit.row 产出的 a.c-row）：去掉 iOS 点击时的灰色高亮块，
+   布局、分隔线、按压全归 .c-row 家族，这里不重写任何尺寸 */
+.s-home-row {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 无照片行的媒体格（kit 不可用时的本地兜底，home.js:488）：
+   与有照片行共用同一个 64px 媒体列，这里只保证 32px 分类图标居中。
+   注：背景保持透明 —— 同文件更靠后的 .c-photo-cell--icon 已是 transparent，
+   JS 顺手挂上的 c-tile--tone 本就不落地，这里把它写成显式约定。 */
+.s-home-row__icon {
+  display: grid;
+  place-items: center;
+  background: transparent;
+}
+
+/* 行内金额（moneyNode size:'md'）：正负号承担收支语义，文字恒深色，
+   等宽数字避免滚动时抖宽；口径与明细屏的 s-ledger-item__amount 一致 */
+.s-home-row__amount {
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
 .s-home-row__side {
   display: flex;
   flex-direction: column;
@@ -3775,10 +4407,11 @@ textarea::selection {
 /* ---------------- 空态 ---------------- */
 
 .s-home-empty {
-  margin: var(--sp-4) var(--page-x) 0;
+  margin: var(--sp-block-lg) var(--sp-page) 0;
+  border: var(--hairline) solid var(--c-stroke);
   border-radius: var(--r-card);
   background: var(--c-bg-elev);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 /* ---------------- 分类色槽（按 categories 顺序循环 1..12） ---------------- */
@@ -3796,7 +4429,91 @@ textarea::selection {
 .s-home-cat--11 { color: var(--cat-11); background: var(--cat-11-soft); }
 .s-home-cat--12 { color: var(--cat-12); background: var(--cat-12-soft); }
 
+/* ---------------- 交互状态（可点元素 hover / active / focus / disabled） ---------------- */
+
+@media (hover: hover) {
+  .s-home-budget:hover,
+  .s-home-due__link:hover {
+    background: var(--c-bg-elev-2);
+  }
+}
+
+.s-home-budget:active,
+.s-home-budget.is-pressed,
+.s-home-due__link:active,
+.s-home-due__link.is-pressed {
+  background: var(--c-bg-elev-2);
+}
+
+.s-home-budget:focus-visible,
+.s-home-due__link:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: calc(var(--focus-offset) * -1);
+  border-radius: var(--r-lg);
+}
+
+.s-home-due__link {
+  transition: background-color var(--dur-base) var(--ease-standard);
+}
+
+.s-home-budget[aria-disabled="true"],
+.s-home-quick__item[aria-disabled="true"] {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+/* ---------------- 响应式 ----------------
+ * 断点沿用 UI.md §5：xs 320–359 / sm 360–389 / md 390–767 / lg ≥768。
+ * ≤360px：左右留白 12px（--sp-page 在 tokens.css 的 body 块内覆盖）；
+ * 64px 媒体列、24px 图标、金额列一律不缩，让位只发生在 minmax(0,1fr) 文字区。
+ */
+
+@media (max-width: 360px) {
+  .s-home-head__value {
+    font-size: var(--fs-summary-min);
+  }
+
+  .s-home-quick {
+    padding: var(--sp-3) var(--sp-1);
+  }
+}
+
+@media (min-width: 768px) {
+  /* 黄底保持通栏：内容居中靠 padding 补偿，不从父级裁背景 */
+  .s-home-head {
+    padding-left: max(
+      var(--sp-page),
+      calc((100% - var(--content-max) - var(--sp-page) * 2) / 2 + var(--sp-page))
+    );
+    padding-right: max(
+      var(--sp-page),
+      calc((100% - var(--content-max) - var(--sp-page) * 2) / 2 + var(--sp-page))
+    );
+  }
+
+  .s-home-inner {
+    max-width: calc(var(--content-max) + var(--sp-page) * 2);
+    margin: 0 auto;
+  }
+}
+
 /* ---------------- 降级动效 ---------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .s-home-quick__item,
+  .s-home-quick__icon,
+  .s-home-budget,
+  .s-home-due__link,
+  .s-home-pull,
+  .s-home-fab {
+    transition: none;
+  }
+
+  .s-home-quick__item:active .s-home-quick__icon,
+  .s-home-quick__item.is-pressed .s-home-quick__icon {
+    transform: none;
+  }
+}
 
 </style>
   <style>
@@ -4353,8 +5070,10 @@ textarea::selection {
   padding: 5px;
   border: 0;
   background: transparent;
-  /* 恒在图片上，故用固定黑/白（UI.md §2.3 逐字给值），不随主题翻转 */
-  color: #FFFFFF;
+  /* 恒在图片上，前景固定用白：沿用 components.css 照片查看器同一枚恒定前景 token
+     （--c-toast-text 浅/深两套口径都是 #FFFFFF），不随主题翻转。
+     遮罩同理用 tokens.css 专为此键定义的 --c-photo-scrim（两套口径都是 #00000073）。 */
+  color: var(--c-toast-text);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -4367,7 +5086,7 @@ textarea::selection {
   width: 22px;
   height: 22px;
   border-radius: var(--r-full);
-  background: #00000073;
+  background: var(--c-photo-scrim);
 }
 
 .s-add-photos__del .c-icon,
@@ -4826,6 +5545,10 @@ textarea::selection {
 .s-add-photos--embedded .s-add-photos__head {
   display: none;
 }
+/* 账户选择 sheet：容器本体只做惰性块级占位，行样式在 __row */
+.s-add-accsheet {
+  display: block;
+}
 .s-add-accsheet__row {
   width: 100%;
 }
@@ -5071,6 +5794,38 @@ textarea::selection {
   font-weight: var(--fw-semibold);
 }
 
+/* chip 内文字：长账户名/长分类名截断，不撑破横滑栏（aria-label 仍是完整语义） */
+.s-add-props__label {
+  min-width: 0;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 转账方向纠错：转出/转入一键交换（一句话解析可能把方向判反，README 把它写成用户可见纠错路径） */
+.s-add-swap {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--tap);
+  height: var(--tap);
+  margin: var(--sp-1) 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--c-fill);
+  color: var(--c-tint);
+}
+.s-add-swap.is-swap {
+  animation: s-add-swap var(--dur-2) var(--ease-spring);
+}
+@keyframes s-add-swap {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(180deg); }
+}
+
 .s-add-keypad {
   display: block;
   width: 100%;
@@ -5081,6 +5836,33 @@ textarea::selection {
 .s-add-cal {
   margin: calc(-1 * var(--sp-1)) 0 0;
   border-radius: var(--r-2xl);
+}
+
+/* 日期快捷档位：今天/昨天/前天。与月历同一入口（sheet 页脚不再重复这三个按钮），点即定日期并关层 */
+.s-add-date__chips {
+  display: flex;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-2);
+}
+.s-add-date__chip {
+  min-height: var(--tap);
+  padding: 0 var(--sp-3);
+  border: var(--hairline) solid var(--c-separator);
+  border-radius: var(--r-full);
+  background: var(--c-bg-elev);
+  color: var(--c-text);
+  font-size: var(--fs-footnote);
+  font-family: var(--font-sans);
+  transition: transform var(--dur-press-out) var(--ease-spring);
+}
+.s-add-date__chip:active {
+  transform: scale(var(--press-btn));
+}
+.s-add-date__chip.is-active {
+  border-color: var(--c-tint);
+  background: var(--c-tint-soft);
+  color: var(--c-tint-soft-text);
+  font-weight: var(--fw-semibold);
 }
 
 /* ---------- 文字 / 空态 ---------- */
@@ -5113,7 +5895,8 @@ textarea::selection {
 /* ---------- 无障碍：减弱动态（只关缩放，保留底色/颜色反馈） ---------- */
 @media (prefers-reduced-motion: reduce) {
   .s-add-cat,
-  .s-add-cat__ico {
+  .s-add-cat__ico,
+  .s-add-swap.is-swap {
     animation: none !important;
     transition: none !important;
   }
@@ -5123,13 +5906,18 @@ textarea::selection {
   .s-add-props__chip.is-pressed,
   .s-add-dock__collapse:active,
   .s-add-dock__collapse.is-pressed,
-  .s-quick__icon:active,
-  .s-quick__icon.is-pressed {
+  .s-add-quick__icon:active,
+  .s-add-quick__icon.is-pressed,
+  .s-add-date__chip:active {
     transform: none !important;
   }
 }
 
 /* ---------- 「全部」分类面板（N1） ---------- */
+/* 「全部」分类面板（N1）：容器本体只做惰性块级占位 */
+.s-add-all {
+  display: block;
+}
 .s-add-all__search {
   margin-bottom: var(--sp-2);
 }
@@ -5183,16 +5971,20 @@ textarea::selection {
 }
 
 /* ---------- 自定义分类面板（宫格「自定义」格） ---------- */
-.s-quick__empty {
+/* 自定义分类面板（宫格「管理」格）：容器本体只做惰性块级占位，视觉全靠子类 */
+.s-add-quick {
+  display: block;
+}
+.s-add-quick__empty {
   margin: var(--sp-4) 0 0;
   color: var(--c-text-2);
   font-size: var(--fs-subhead);
   line-height: 1.6;
 }
-.s-quick__list {
+.s-add-quick__list {
   margin: 0 calc(-1 * var(--sp-2));
 }
-.s-quick__row {
+.s-add-quick__row {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
@@ -5203,18 +5995,18 @@ textarea::selection {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-.s-quick__row:active,
-.s-quick__row.is-pressed {
+.s-add-quick__row:active,
+.s-add-quick__row.is-pressed {
   background: var(--c-pressed);
 }
-.s-quick__main {
+.s-add-quick__main {
   display: flex;
   flex: 1;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
-.s-quick__name {
+.s-add-quick__name {
   overflow: hidden;
   color: var(--c-text);
   font-size: var(--fs-body);
@@ -5222,7 +6014,7 @@ textarea::selection {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.s-quick__meta {
+.s-add-quick__meta {
   overflow: hidden;
   color: var(--c-text-2);
   font-size: var(--fs-footnote);
@@ -5231,26 +6023,26 @@ textarea::selection {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.s-quick__hint {
+.s-add-quick__hint {
   margin: var(--sp-4) 0 0;
   color: var(--c-text-4);
   font-size: var(--fs-caption-1);
   line-height: var(--lh-caption-1);
 }
-.s-quick__new {
+.s-add-quick__new {
   margin-top: var(--sp-4);
 }
-.s-quick__danger {
+.s-add-quick__danger {
   margin-top: var(--sp-2);
 }
-.s-quick__label {
+.s-add-quick__label {
   display: block;
   margin: var(--sp-4) 0 var(--sp-2);
   color: var(--c-text-2);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
 }
-.s-quick__input {
+.s-add-quick__input {
   box-sizing: border-box;
   width: 100%;
   min-height: var(--h-btn-lg);
@@ -5262,21 +6054,21 @@ textarea::selection {
   font-family: var(--font-sans);
   font-size: var(--fs-body);
 }
-.s-quick__chips {
+.s-add-quick__chips {
   display: flex;
   gap: var(--sp-2);
   overflow-x: auto;
   padding-bottom: var(--sp-1);
   scrollbar-width: none;
 }
-.s-quick__chips::-webkit-scrollbar {
+.s-add-quick__chips::-webkit-scrollbar {
   display: none;
 }
-.s-quick__icons {
+.s-add-quick__icons {
   flex-wrap: wrap;
   overflow-x: visible;
 }
-.s-quick__icon {
+.s-add-quick__icon {
   display: grid;
   place-items: center;
   width: var(--tap);
@@ -5290,30 +6082,30 @@ textarea::selection {
   transition: transform var(--dur-press-out) var(--ease-spring),
     background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
-.s-quick__icon:active,
-.s-quick__icon.is-pressed {
+.s-add-quick__icon:active,
+.s-add-quick__icon.is-pressed {
   transform: scale(0.92);
   background: var(--c-fill-press);
   transition-duration: var(--dur-press-in);
   transition-timing-function: var(--ease-press);
 }
-.s-quick__icon.is-active {
+.s-add-quick__icon.is-active {
   border-color: var(--c-focus);
   background: var(--c-tint-soft);
   color: var(--c-tint-soft-text);
 }
 /* 选中格按压不落回灰色：保持品牌浅黄，只再压深一档 */
-.s-quick__icon.is-active:active,
-.s-quick__icon.is-active.is-pressed {
+.s-add-quick__icon.is-active:active,
+.s-add-quick__icon.is-active.is-pressed {
   background: var(--c-tint-soft-strong);
 }
 
 /* ---------- 2.6：新建分类的图标选择器容器 + 颜色色板 ---------- */
-.s-quick__picker {
+.s-add-quick__picker {
   margin: 2px 0 var(--sp-3);
 }
 
-.s-quick__swatches {
+.s-add-quick__swatches {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--sp-2);
@@ -5321,7 +6113,7 @@ textarea::selection {
   justify-items: center;
 }
 
-.s-quick__swatch {
+.s-add-quick__swatch {
   position: relative;
   width: 100%;
   max-width: 40px;
@@ -5337,24 +6129,24 @@ textarea::selection {
     box-shadow var(--dur-1) var(--ease-out);
 }
 
-.s-quick__swatch--1 { background: var(--cat-1); }
-.s-quick__swatch--2 { background: var(--cat-2); }
-.s-quick__swatch--3 { background: var(--cat-3); }
-.s-quick__swatch--4 { background: var(--cat-4); }
-.s-quick__swatch--5 { background: var(--cat-5); }
-.s-quick__swatch--6 { background: var(--cat-6); }
-.s-quick__swatch--7 { background: var(--cat-7); }
-.s-quick__swatch--8 { background: var(--cat-8); }
-.s-quick__swatch--9 { background: var(--cat-9); }
-.s-quick__swatch--10 { background: var(--cat-10); }
-.s-quick__swatch--11 { background: var(--cat-11); }
-.s-quick__swatch--12 { background: var(--cat-12); }
+.s-add-quick__swatch--1 { background: var(--cat-1); }
+.s-add-quick__swatch--2 { background: var(--cat-2); }
+.s-add-quick__swatch--3 { background: var(--cat-3); }
+.s-add-quick__swatch--4 { background: var(--cat-4); }
+.s-add-quick__swatch--5 { background: var(--cat-5); }
+.s-add-quick__swatch--6 { background: var(--cat-6); }
+.s-add-quick__swatch--7 { background: var(--cat-7); }
+.s-add-quick__swatch--8 { background: var(--cat-8); }
+.s-add-quick__swatch--9 { background: var(--cat-9); }
+.s-add-quick__swatch--10 { background: var(--cat-10); }
+.s-add-quick__swatch--11 { background: var(--cat-11); }
+.s-add-quick__swatch--12 { background: var(--cat-12); }
 
-.s-quick__swatch.is-active {
+.s-add-quick__swatch.is-active {
   box-shadow: 0 0 0 2px var(--c-bg-elev), 0 0 0 4px var(--c-tint);
 }
 
-.s-quick__swatch:active {
+.s-add-quick__swatch:active {
   transform: scale(0.94);
 }
 
@@ -5400,6 +6192,41 @@ textarea::selection {
   box-sizing: border-box;
   padding: var(--sp-1) calc(var(--page-x) + var(--safe-left)) 0
     calc(var(--page-x) + var(--safe-left));
+}
+
+/* 账本切换入口（明细屏头部 → #/books）：名字过长时先省略自己，
+   不挤走右侧的月份按钮与「支 ¥x · 收 ¥y」 */
+.s-ledger-book {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: var(--sp-1);
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-md);
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.s-ledger-book:active {
+  background: var(--c-pressed);
+}
+
+.s-ledger-book__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.s-ledger-book svg {
+  flex: none;
+  width: var(--icon-xs);
+  height: var(--icon-xs);
 }
 
 .s-ledger-arrow {
@@ -5486,6 +6313,13 @@ textarea::selection {
   text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
+}
+
+/* 头部收支结余（与统计入口是同一个元素）：flex 子项里让位但不换行，
+   宽度不够时先省略自身，不把月份行撑成两行 */
+.s-ledger-summary {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* 窄屏（≤360px）：月份行放不下「支 ¥x · 收 ¥y」一整行，原来后半段被省略号吃掉。
@@ -5774,7 +6608,7 @@ textarea::selection {
   position: absolute;
   top: 0;
   right: 0;
-  left: calc(var(--page-x) + 32px + var(--sp-3));
+  left: calc(var(--sp-page) + var(--size-media) + var(--sp-col));
   height: var(--hairline);
   background: var(--c-separator);
 }
@@ -5834,41 +6668,87 @@ textarea::selection {
   transition: none;
 }
 
+/* 三列度量与首页行共用同一组变量（tokens.css 里唯一定义）：
+   var(--size-media) 64px / var(--sp-col) 12px / var(--h-row-min) 80px。
+   本文件不写 64/12/80 字面值，窄屏也不压缩媒体列与金额列。 */
 .s-ledger-item__main {
-  display: flex;
+  display: grid;
+  grid-template-columns: var(--size-media) minmax(0, 1fr) auto;
+  column-gap: var(--sp-col);
   align-items: center;
-  gap: var(--sp-3);
   box-sizing: border-box;
-  min-height: var(--h-list-2);
-  padding: var(--sp-2) calc(var(--page-x) + var(--safe-right)) var(--sp-2)
-    calc(var(--page-x) + var(--safe-left));
+  min-height: var(--h-row-min);
+  padding: var(--sp-2) calc(var(--sp-page) + var(--safe-right)) var(--sp-2)
+    calc(var(--sp-page) + var(--safe-left));
   color: inherit;
   text-decoration: none;
   touch-action: pan-y;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
+  transition: background-color var(--dur-base) var(--ease-standard);
 }
 
-.s-ledger-item__main:active {
+@media (hover: hover) {
+  .s-ledger-item__main:hover {
+    background: var(--c-fill);
+  }
+}
+
+.s-ledger-item__main:active,
+.s-ledger-item__main.is-pressed {
   background: var(--c-pressed);
 }
 
-.s-ledger-item__icon {
+.s-ledger-item__main:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: calc(var(--focus-offset) * -1);
+  border-radius: var(--r-thumb);
+}
+
+.s-ledger-item__main[aria-disabled="true"] {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+/* 媒体列：无照片时也占这一格，分类图标居中 ⇒ 有图/无图两行文字左缘严格对齐。
+   有照片（__media）与无照片（__icon）共用同一条规则 ⇒ 两列宽高恒等，
+   文字区起点不受「这一行有没有照片」影响（UI.md §6.3）。 */
+.s-ledger-item__icon,
+.s-ledger-item__media {
   display: grid;
-  flex: 0 0 auto;
+  flex: none;
   place-items: center;
+  justify-self: center;
   box-sizing: border-box;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--r-sm);
+  width: var(--size-media);
+  height: var(--size-media);
+  border-radius: var(--r-thumb);
   background: var(--c-fill);
   color: var(--c-text-3);
 }
 
-.s-ledger-item__icon svg {
-  width: var(--icon-xs);
-  height: var(--icon-xs);
+/* 有照片的行：缩略图裁进圆角即可（object-fit:cover 由 .c-photo-cell__img 负责）；
+   详情面板大图仍是 contain（.c-photoviewer__img），两处不复用同一条规则 */
+.s-ledger-item__media {
+  overflow: hidden;
+}
+
+.s-ledger-item__icon svg,
+.s-ledger-item__media svg {
+  /* 32px = --size-icon(24) + --sp-3(8)：CONTRACT 未定义 32px 图标令牌，不新造名字。
+     无照片态就靠这条把 kit 图标（默认 19/22px）放大到与 64px 媒体列等重。 */
+  width: calc(var(--size-icon) + var(--sp-3));
+  height: calc(var(--size-icon) + var(--sp-3));
+}
+
+/* 无照片态里 JS 自建的分类色圆底（c-tile--lg）+ 32px 分类图标：
+   尺寸仍归 c-tile 家族，这里只补「居中、不被压缩」 */
+.s-ledger-item__cat {
+  display: grid;
+  flex: none;
+  place-items: center;
+  margin: 0;
 }
 
 .s-ledger-cat--1 { color: var(--cat-1); background: var(--cat-1-soft); }
@@ -5886,7 +6766,6 @@ textarea::selection {
 
 .s-ledger-item__text {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--sp-1);
   min-width: 0;
@@ -5895,9 +6774,9 @@ textarea::selection {
 .s-ledger-item__title {
   overflow: hidden;
   color: var(--c-text);
-  font-size: var(--fs-headline);
-  font-weight: var(--fw-medium);
-  line-height: var(--lh-headline);
+  font-size: var(--fs-row);
+  font-weight: var(--fw-row);
+  line-height: var(--lh-body);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -5905,19 +6784,29 @@ textarea::selection {
 .s-ledger-item__sub {
   overflow: hidden;
   color: var(--c-text-2);
-  font-size: var(--fs-footnote);
-  line-height: var(--lh-footnote);
+  font-size: var(--fs-aux-lg);
+  line-height: var(--lh-body);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .s-ledger-item__trail {
   display: flex;
-  flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-end;
   gap: var(--sp-1);
-  max-width: 42%;
+  justify-self: end;
+  min-width: 0;
+  max-width: 45%;
+}
+
+/* 金额列：__trail 给布局（列语义、右对齐、不缩），__value 给金额口径；
+   两者同一元素，这里只补 __trail 没覆盖的三条 */
+.s-ledger-item__value {
+  color: var(--c-text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 .s-ledger-item__amount {
@@ -5933,12 +6822,14 @@ textarea::selection {
   font-feature-settings: "tnum" 1;
 }
 
+/* 金额列一律 --c-text，不用红/绿区分收支（UI.md §6.6；红色只留给删除/错误/超支）。
+   M1 先收敛列表行，M2 再把统计页同步过来。 */
 .s-ledger-item__amount--expense {
-  color: var(--c-expense);
+  color: var(--c-text);
 }
 
 .s-ledger-item__amount--income {
-  color: var(--c-income);
+  color: var(--c-text);
 }
 
 .s-ledger-item__amount--transfer {
@@ -6369,37 +7260,8 @@ textarea::selection {
   vertical-align: 1px;
 }
 
-/* 照片角标（D1）：复用上面的盒子，只覆盖配色与内联方向。
-   不沿用 warn 底色 —— warn 是「待报」的固定语义，同色会让同一条流水上的两件事看起来是一件事（UI.md §2.4）。
-   盒子尺寸刻意一律不改：明细行仍 64px。 */
-.s-ledger-item__flag--photo {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 2px;
-  padding: 0 3px;
-  background: var(--c-fill);
-  color: var(--c-text-2);
-  /* 角标不是命中区：点按交给整行既有链接（≥64px）。14px 高的角标不做 44px 热区，
-     否则会溢出副标题行、压到相邻行；此处用 pointer-events 明确放行到行链接。 */
-  pointer-events: none;
-  user-select: none;
-}
-
-.s-ledger-item__flag--photo .c-icon {
-  width: 11px;
-  height: 11px;
-}
-
-.s-ledger-item__flag-count {
-  flex: 0 0 auto;
-  font-variant-numeric: tabular-nums;
-}
-
-/* N = 1 时不写数字（只留图标），空节点不占 gap */
-.s-ledger-item__flag-count:empty {
-  display: none;
-}
+/* D1 的照片角标规则已随词表下线：多图数量角标改由共用媒体基元 c-photo-badge
+   （components.css）承担 —— 同一个视觉不再留两套样式，旧类名也就没有死规则可查。 */
 
 .s-ledger-chip--flag.is-active {
   border-color: var(--c-warn);
@@ -6525,6 +7387,21 @@ textarea::selection {
   word-break: break-all;
 }
 
+/* 照片区读取失败时的重试：JS 只在 failed 时取消 hidden，与 __val 同排、不参与压缩 */
+.s-ledger-detail__retry {
+  flex: none;
+  align-self: center;
+}
+
+/* 备注必须完整（不截断、不折摘要）：__val 默认 break-all 会把西文按字母拆开，
+   备注改回 normal + anywhere —— 长串照样换行，单词不被逐字母切开；换行符原样保留 */
+.s-ledger-detail__val--note {
+  word-break: normal;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  text-align: left;
+}
+
 /* ---------------- 详情面板照片区（D1；紧邻 __detail 家族，UI.md §2.5.1 / §2.10） ---------------- */
 .s-ledger-detail__photos {
   display: grid;
@@ -6559,6 +7436,73 @@ textarea::selection {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* ---------------- 详情面板照片行（kit.js mediaCell()/photoBadge() 产出的 DOM） ---------------- */
+
+.s-ledger-detail__row--photos {
+  align-items: flex-start;
+}
+
+.s-ledger-detail__photo-skel {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--r-md);
+}
+
+/* ---------------- 两段式删除确认（kit sheet；第一段只弹层，第二段才落库） ---------------- */
+
+.s-ledger-delete {
+  display: block;
+  min-width: 0;
+}
+
+/* 「分类 + 金额」= 用户真正要确认的那一条，用主文字色 + 半粗顶到最前 */
+.s-ledger-delete__target {
+  margin: 0;
+  color: var(--c-text);
+  font-size: var(--fs-subhead);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* 「删除后 5 秒内可以撤销」：次要说明，灰一级 */
+.s-ledger-delete__hint {
+  margin: var(--sp-2) 0 0;
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+}
+
+/* 确认层（sheet open 的 className 落在 .c-sheet 元素上）：不可逆操作，面板顶部压一条危险色内描边。
+   用 inset box-shadow 而不是 border-top —— 不多出 1px 高度、不动 .c-sheet 的圆角与 overflow:hidden；
+   .c-sheet 自身没有 box-shadow，这条不覆盖任何既有阴影。 */
+.s-ledger-delete-sheet {
+  box-shadow: inset 0 var(--hairline) 0 var(--c-danger);
+}
+
+/* ---------------- 响应式（断点沿用 UI.md §5，不另起一套） ----------------
+ * ≤360px 的左右留白由 tokens.css 的 body 块统一降到 12px；
+ * 64px 媒体列与金额列在任何视口都不缩，让位只发生在 minmax(0,1fr) 文字区。
+ */
+
+@media (min-width: 768px) {
+  /* 内容按 --content-max 居中；sticky 条与列表同宽，桌面端不左右飘 */
+  .s-ledger-monthrow,
+  .s-ledger-search,
+  .s-ledger-chips,
+  .s-ledger-days,
+  .s-ledger-more {
+    max-width: calc(var(--content-max) + var(--sp-page) * 2);
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .s-ledger-item__main {
+    transition: none;
+  }
 }
 
 </style>
@@ -6763,6 +7707,20 @@ textarea::selection {
 .s-stats-trend__box {
   width: 100%;
   min-height: 180px;
+}
+
+/* ---------------- 分类构成环图 ---------------- */
+
+.s-stats-share__total {
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-stats-share__box {
+  width: 100%;
+  min-height: 200px;
 }
 
 /* ---------------- 分类排行 ---------------- */
@@ -8263,6 +9221,12 @@ textarea::selection {
   padding-bottom: var(--sp-2);
 }
 
+/* 待入账区块（plan.js:1490）：与上面三个 section 同间距，否则它会和上一段贴在一起。
+   紧跟同族选择器放置 —— 同为单类名、同特异性，靠顺序取胜。 */
+.s-plan-section--pending {
+  padding-bottom: var(--sp-2);
+}
+
 .s-plan-heading {
   margin: var(--sp-4) var(--page-x) 0;
   color: var(--c-text-2);
@@ -8546,8 +9510,10 @@ textarea::selection {
   appearance: none;
 }
 
+/* 分类色由 plan.js 以自定义属性 --cat-color 内联下达（JS 不写内联色值）；
+   未设置时退回默认色调，视觉与改前一致。 */
 .s-plan-cat__icon {
-  color: var(--c-tint-soft-text);
+  color: var(--cat-color, var(--c-tint-soft-text));
 }
 
 .s-plan-cat__trail {
@@ -8601,9 +9567,10 @@ textarea::selection {
   color: var(--c-warn);
 }
 
+/* 超支态：底色转危险色；分类色仍优先（与改前内联 color 覆盖同效），取不到时才用危险色。 */
 .s-plan-cat--over .s-plan-cat__icon {
   background: var(--c-danger-soft);
-  color: var(--c-danger);
+  color: var(--cat-color, var(--c-danger));
 }
 
 /* ---------- 存钱目标 ---------- */
@@ -8663,6 +9630,14 @@ textarea::selection {
 }
 
 .s-plan-goal__edit {
+  flex: none;
+}
+
+/* 卡片头部右侧的动作（plan.js:740 编辑 / plan.js:1174 详情）：
+   .c-card__head 是 space-between 的 flex 行，标题很长时这两个按钮必须保持自身宽度。
+   与上面的 __edit 同一处置 —— 三者都没有其它规则声明 flex，搬动不改变级联结果。 */
+.s-plan-edit,
+.s-plan-goal__detail {
   flex: none;
 }
 
@@ -8853,7 +9828,6 @@ textarea::selection {
 }
 
 .s-plan-rules {
-.s-plan-rules {
   display: flex;
   flex-direction: column;
 }
@@ -8861,6 +9835,13 @@ textarea::selection {
 .s-plan-rule {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* 规则行左侧的 44px 图标格（c-row__icon--lg，plan.js:1574）：窄屏长标题下不被挤小。
+   没有其它规则声明它的 flex / align-self，紧跟基类放置不改变级联结果。 */
+.s-plan-rule__icon {
+  flex: none;
+  align-self: center;
 }
 
 .s-plan-rule__title {
@@ -9607,6 +10588,8 @@ textarea::selection {
   place-items: center;
   width: 100%;
   aspect-ratio: 1 / 1;
+  /* 6 列网格下实测约 54px；这里是触控下限，网格再窄也不低于 44px */
+  min-height: var(--h-compact);
   padding: 0;
   border: 0;
   border-radius: 13px;
@@ -9819,7 +10802,7 @@ textarea::selection {
 }
 
 .s-settings-foot__line--quiet {
-  /* 页脚底色是 #F6F6F6，--c-text-4 在这层灰上只有 4.20:1，达不到 4.5:1，这里升一档 */
+  /* 页脚这层浅灰底不是纯白：--c-text-4 在灰上只有 4.20:1，达不到 4.5:1，这里升一档 */
   color: var(--c-text-3);
 }
 
@@ -10218,11 +11201,12 @@ textarea::selection {
   <div id="app" aria-busy="true">
     <main id="view-root"></main>
 
-    <!-- 固定标签栏：概览 / 明细 / 统计 / 我的；图标由 app.js 注入 -->
+    <!-- 固定标签栏：首页 / 明细 / 统计 / 我的；图标由 app.js 注入。
+         2.14.0 起「概览」统一改称「首页」，与 router.js 的视图标题保持一致 -->
     <nav id="tabbar" class="c-tabbar app-tabbar" aria-label="主导航">
       <a class="c-tabbar__item" href="#/home" data-tab="home">
         <span class="c-tabbar__icon" data-tab-icon="home" aria-hidden="true"></span>
-        <span class="c-tabbar__label">概览</span>
+        <span class="c-tabbar__label">首页</span>
       </a>
       <a class="c-tabbar__item" href="#/ledger" data-tab="ledger">
         <span class="c-tabbar__icon" data-tab-icon="list" aria-hidden="true"></span>
@@ -25952,7 +26936,8 @@ textarea::selection {
   <script>
 /* 小账本 2.0 · js/ui/kit.js
  * 屏幕构建器的唯一入口：el / icon / tile / money / section / group / row / pill
- * / delta / bar / empty / btn / stagger。
+ * / delta / bar / empty / btn / stagger；加上照片链路（M4 前置）：photoIdList /
+ * photoSlots / photoPick / badgePlan / badgeText / photoState / mediaCell。
  *
  * 存在理由：v2.0 的 8 个屏幕各自写了一份 el / make / clear / appendAll /
  * iconNode / centsText，约 600 行重复，且每画一个图标就 new 一次 DOMParser。
@@ -25960,6 +26945,9 @@ textarea::selection {
  *
  * 公开：XZB.ui.kit（镜像 XZB.UI.kit）
  * 约束：不读业务数据、不写库、不用 innerHTML；用户文本一律 textContent。
+ *       照片段（文件末）里的 photo* 全是**纯函数**：只做数组/对象推导，不发请求、
+ *       不碰 IndexedDB、不操作 DOM；只有 mediaCell() 一个 DOM 构建器，且它只吃
+ *       纯函数的结果（传入已取好的 url），不做任何读取。
  */
 (function (global) {
   'use strict';
@@ -26344,6 +27332,13 @@ textarea::selection {
       node.classList.add('c-row--with-tile');
     } else if (o.lead) {
       node.appendChild(o.lead);
+    } else if (o.media) {
+      /* 照片媒体区（缩略图 / 骨架 / 占位 / 分类图标）：纯增量分支 —— 旧调用点
+         从不传 o.media，行为与改前完全一致（CONTRACT §缩略图选择规则的可断言口径）。 */
+      node.appendChild(o.media);
+      /* 词表唯一：CSS 里存在的修饰符是 .c-row--media（components.css §2.14）；
+         `c-row--with-media` 是自造名，无任何规则命中 ⇒ 媒体分支会退化成普通 c-row 单列。 */
+      node.classList.add('c-row--media');
     }
 
     var main = el('span', { className: 'c-row__main' });
@@ -26445,6 +27440,298 @@ textarea::selection {
     return items;
   }
 
+  /* ============================================================
+     照片链路（M4 前置 · CONTRACT §照片批量读取契约 / §缩略图选择规则 /
+     §数量角标规则 / §三态状态机）
+     这一段的 photo* 全部是**纯函数**：入参进、结构出；不读库、不发请求、
+     不调用 XZB.app.photos、不碰 DOM。屏幕层负责「一次批量读取 → 把 records
+     交给这里 → 按返回结构渲染」。唯一 DOM 构建器是 mediaCell()。
+     ============================================================ */
+
+  var PHOTO_ID_MAX = 64;        /* 与 screens/ledger.js 的 photoIdList 上限同源 */
+  var PHOTO_MAX_PER_TX = 999;   /* schema.LIMITS.txPhotos：校验上界，不是展示上限 */
+  var BADGE_MAX = 99;           /* 角标数字上限：>99 显示「99+」 */
+
+  /* 状态机取值（CONTRACT §三态状态机 + 全部缺失降级） */
+  var PHOTO_STATE = Object.freeze({
+    IDLE: 'idle',
+    LOADING: 'loading',
+    READY: 'ready',
+    UNAVAILABLE: 'unavailable',
+    FAILED: 'failed'
+  });
+
+  /* 用户可见文案 —— 与 CONTRACT §文案总表逐字一致，不得改写。 */
+  var PHOTO_TEXT = Object.freeze({
+    unavailable: '照片不可用',
+    loading: '照片加载中',
+    failed: '照片加载失败',
+    retry: '重试',
+    none: '未添加'
+  });
+
+  /* ---- 键：只转交给 blob-url.js 的唯一构造函数（本文件不自己拼键） ---- */
+
+  function photoKey(photoId, variant) {
+    var bloburl = UI.bloburl || (XZB.ui && XZB.ui.bloburl) || null;
+    if (!bloburl || typeof bloburl.key !== 'function') { return ''; }
+    var made = bloburl.key(photoId, variant);
+    return made ? String(made) : '';
+  }
+
+  /* ---- photoIdList：tx | string[] | null → 去重、保首现顺序、剔空串与非字符串 ---- */
+
+  function photoIdList(input) {
+    var raw = null;
+    if (Array.isArray(input)) {
+      raw = input;
+    } else if (input && typeof input === 'object' && Array.isArray(input.photoIds)) {
+      raw = input.photoIds;                     /* transaction.photoIds：结构不改、含义不改 */
+    } else {
+      return [];                                /* null / undefined / 数字 / 字符串 / 普通对象 */
+    }
+    var max = PHOTO_MAX_PER_TX;
+    var seen = Object.create(null);
+    var out = [];
+    for (var i = 0; i < raw.length && out.length < max; i += 1) {
+      var value = raw[i];
+      if (typeof value !== 'string') { continue; }   /* 非字符串一律跳过（含 null / 对象） */
+      var id = value.replace(/^\s+|\s+$/g, '');
+      if (!id || id.length > PHOTO_ID_MAX) { continue; }
+      if (seen[id]) { continue; }
+      seen[id] = true;
+      out.push(id);
+    }
+    return out;
+  }
+
+  /* ---- photoSlots：ids + 批量读取结果 → 与 ids 同序同长的槽位数组 ---- */
+  /* 关键：**不可读位保留 null**，绝不 filter 洗位（洗位会让「第 2 张可读」被当成
+     「第 1 张可读」，角标与查看器序号全错）。records 短于 ids 时按 null 补齐。 */
+
+  function photoRecordList(records) {
+    if (Array.isArray(records)) { return records; }
+    if (records && typeof records === 'object' && Array.isArray(records.records)) {
+      return records.records;                   /* 容错：直接传 { ok, records } 也行 */
+    }
+    return [];
+  }
+
+  function photoSlotOf(id, record, index) {
+    if (!id || !record || typeof record !== 'object') { return null; }
+    var thumb = record.thumb && typeof record.thumb === 'object' ? record.thumb : null;
+    var full = record.blob && typeof record.blob === 'object' ? record.blob : null;
+    var blob = thumb || full;                   /* 缩略图优先；thumb 缺失回退原件 */
+    if (!blob) { return null; }                 /* 记录在但两件都缺 ⇒ 按不可读处理 */
+    return {
+      id: String(id),
+      blob: blob,
+      thumb: thumb,
+      full: full || thumb,                      /* 大图优先原件，缺失才退缩略图 */
+      compressed: record.compressed !== false,  /* false 才代表原件 */
+      bytes: typeof record.bytes === 'number' ? record.bytes : undefined,
+      index: index
+    };
+  }
+
+  function photoSlots(input, maybeRecords) {
+    var ids = [];
+    var records = maybeRecords;
+    if (input && typeof input === 'object' && !Array.isArray(input) && Array.isArray(input.ids)) {
+      ids = input.ids;                          /* 对象式：{ ids, records } */
+      records = input.records;
+    } else if (Array.isArray(input)) {
+      ids = input;                              /* 位置式：photoSlots(ids, records) */
+    }
+    var recs = photoRecordList(records);
+    var out = [];
+    for (var i = 0; i < ids.length; i += 1) {
+      var id = ids[i] === undefined || ids[i] === null ? '' : String(ids[i]);
+      out.push(photoSlotOf(id, recs[i], i));
+    }
+    return out;
+  }
+
+  /* ---- 缩略图选择：取第一张**可读取**的照片；失败位跳过，不整行失败 ---- */
+
+  function photoPick(input, maybeRecords) {
+    var slots = photoSlots(input, maybeRecords);
+    var total = slots.length;
+    if (!total) { return null; }
+    var readable = 0;
+    var first = -1;
+    for (var i = 0; i < total; i += 1) {
+      if (!slots[i]) { continue; }
+      readable += 1;
+      if (first < 0) { first = i; }
+    }
+    if (first < 0) { return null; }             /* 一张都读不出来 ⇒ 交给 photoState 判定降级 */
+    var slot = slots[first];
+    return {
+      photoId: slot.id,
+      variant: slot.thumb ? 'thumb' : 'full',   /* 该用哪个键取 URL：thumb 在就取缩略图 */
+      blob: slot.blob,
+      slot: slot,
+      index: first,
+      count: total,                             /* N = 照片总数（不是可读张数） */
+      readable: readable,
+      missing: total - readable,
+      partial: readable < total
+    };
+  }
+
+  /* ---- 数量角标：N>1 才出数字；N 为照片总数，取值 <=99 原样、>99 记 99+ ---- */
+
+  function badgeText(count) {
+    var n = Math.floor(Number(count));
+    if (!isFinite(n) || n <= 0) { return ''; }
+    return n > BADGE_MAX ? BADGE_MAX + '+' : String(n);
+  }
+
+  function badgePlan(input) {
+    var count = photoIdList(input).length;      /* 去重后的张数（CONTRACT：不是可读张数） */
+    if (!count) { return null; }
+    return {
+      count: count,
+      showCount: count > 1,                     /* 1 张不画数字，只留缩略图 */
+      text: count > 1 ? badgeText(count) : '',
+      label: '含 ' + count + ' 张照片'           /* 无障碍标签永远用真实张数 */
+    };
+  }
+
+  /* 行 aria-label：在屏幕给的基串（如「查看详情」）之后追加「含 N 张照片」。
+     N 为 0 ⇒ 原样返回（无照片行不得出现「照片」字样）。 */
+  function photoAriaLabel(base, count) {
+    var head = base === undefined || base === null ? '' : String(base);
+    var n = Math.floor(Number(count));
+    if (!(n > 0) || !isFinite(n)) { return head; }
+    return (head ? head + '，' : '') + '含 ' + n + ' 张照片';
+  }
+
+  /* ---- 三态（+ 全部缺失降级）：纯推导，不发请求、不操作 DOM ---- */
+  /* photoState({ ids|tx, records, loading, failed }) →
+     { state, total, readable, missing, partial, failed, media, label, missingLabel,
+       badge, retry, slots }
+     state  : idle（无 photoIds）| loading（已发起未回包）| ready（≥1 可读）|
+              unavailable（批量成功但全部读不出 ⇒ 按无照片渲染 + 详情提示缺失）|
+              failed（整批 ok:false / E_PHOTO_READ ⇒ 统一占位，行仍可点开）
+     media  : thumb | skeleton | icon | placeholder（屏幕据此挑渲染分支）
+     partial: state=ready 且含 null 位 ⇒ 正常展示 + 详情「缺失 N 张」 */
+  function photoState(input, maybeRecords, maybeFlags) {
+    var ids = null;
+    var records = maybeRecords;
+    var flags = maybeFlags || {};
+    if (input && typeof input === 'object' && !Array.isArray(input) &&
+        (input.ids !== undefined || input.tx !== undefined || input.photoIds !== undefined ||
+         input.records !== undefined || input.loading !== undefined || input.failed !== undefined)) {
+      ids = input.ids !== undefined ? input.ids : (input.tx !== undefined ? input.tx : input.photoIds);
+      records = input.records;
+      flags = input;
+    } else {
+      ids = input;
+    }
+
+    var list = photoIdList(ids);
+    var total = list.length;
+    var slots = photoSlots(list, records);
+    var readable = 0;
+    for (var i = 0; i < total; i += 1) {
+      if (slots[i]) { readable += 1; }
+    }
+    var missing = total - readable;
+
+    var out = {
+      state: PHOTO_STATE.IDLE,
+      total: total,
+      readable: readable,
+      missing: missing,
+      partial: false,
+      failed: false,
+      media: 'icon',
+      label: '',
+      missingLabel: '',
+      badge: badgePlan(list),
+      retry: false,
+      slots: slots
+    };
+    if (!total) { return out; }                 /* 无照片：分类图标 + 不发请求 */
+
+    if (flags.loading) {                        /* 已发起未回包：64px 骨架 */
+      out.state = PHOTO_STATE.LOADING;
+      out.media = 'skeleton';
+      out.label = PHOTO_TEXT.loading;
+      return out;
+    }
+    if (flags.failed) {                         /* 整批读取失败：绝不当成「无照片」 */
+      out.state = PHOTO_STATE.FAILED;
+      out.media = 'placeholder';
+      out.label = PHOTO_TEXT.unavailable;
+      out.failed = true;
+      out.retry = true;
+      return out;
+    }
+    if (!readable) {                            /* 批量成功但全部读不出：按无图降级 */
+      out.state = PHOTO_STATE.UNAVAILABLE;
+      out.media = 'icon';
+      out.missingLabel = '缺失 ' + total + ' 张';
+      return out;
+    }
+    out.state = PHOTO_STATE.READY;              /* ≥1 可读：正常展示可用照片 */
+    out.media = 'thumb';
+    out.partial = missing > 0;
+    if (missing > 0) { out.missingLabel = '缺失 ' + missing + ' 张'; }
+    return out;
+  }
+
+  /* ---- 唯一的 DOM 构建器：媒体区（缩略图 / 角标 / 骨架 / 占位 / 分类图标） ---- */
+  /* 只吃纯函数的结果；url 由屏幕先经 bloburl.urlOf(photoKey(id, variant), blob) 取好。
+     spec: { media, url, photoId, variant, count, icon, tone, alt } */
+  function mediaCell(spec) {
+    var s = spec || {};
+    var kind = s.media;
+    if (kind !== 'thumb' && kind !== 'skeleton' && kind !== 'icon' && kind !== 'placeholder') {
+      kind = s.url ? 'thumb' : (s.icon ? 'icon' : 'placeholder');
+    }
+    var cell = el('span', { className: cls('c-photo-cell', 'c-photo-cell--' + kind) });
+
+    if (kind === 'thumb' && s.url) {
+      var img = el('img', { className: 'c-photo-cell__img' });
+      img.setAttribute('src', String(s.url));
+      img.setAttribute('alt', s.alt ? String(s.alt) : '');   /* 行 aria-label 已含张数，图不重复播报 */
+      img.setAttribute('decoding', 'async');
+      img.setAttribute('loading', 'lazy');
+      if (s.photoId) { img.setAttribute('data-photo-id', String(s.photoId)); }
+      if (s.variant) { img.setAttribute('data-photo-variant', String(s.variant)); }
+      cell.appendChild(img);
+      var badge = photoBadge(s);
+      if (badge) { cell.appendChild(badge); }
+      return cell;
+    }
+    if (kind === 'skeleton') {
+      cell.appendChild(el('span', { className: 'c-photo-skel' }));
+      cell.appendChild(el('span', { className: 'u-sr-only', text: PHOTO_TEXT.loading }));
+      return cell;
+    }
+    if (kind === 'icon') {
+      cell.appendChild(tile(s.icon || 'image', { tone: s.tone || '', size: s.iconSize ? 'lg' : 'md' }));
+      return cell;
+    }
+    cell.appendChild(el('span', { className: 'c-photo-empty', text: PHOTO_TEXT.unavailable }));
+    return cell;
+  }
+
+  /* 角标节点：只有 N>1 才产出；数字节点对读屏隐藏（张数由行 aria-label 播报） */
+  function photoBadge(spec) {
+    var s = spec || {};
+    var count = Number(s.count);
+    if (!(count > 1)) { return null; }
+    var label = s.text ? String(s.text) : badgeText(count);
+    if (!label) { return null; }
+    var node = el('span', { className: 'c-photo-badge', text: label });
+    node.setAttribute('aria-hidden', 'true');
+    return node;
+  }
+
   var api = Object.freeze({
     el: el,
     append: append,
@@ -26469,7 +27756,20 @@ textarea::selection {
     row: row,
     empty: empty,
     btn: btn,
-    stagger: stagger
+    stagger: stagger,
+    /* 照片链路（纯函数 + 唯一 DOM 构建器，见文件末段） */
+    photoKey: photoKey,
+    photoIdList: photoIdList,
+    photoSlots: photoSlots,
+    photoPick: photoPick,
+    photoState: photoState,
+    photoBadge: photoBadge,
+    photoAriaLabel: photoAriaLabel,
+    mediaCell: mediaCell,
+    badgePlan: badgePlan,
+    badgeText: badgeText,
+    PHOTO_STATE: PHOTO_STATE,
+    PHOTO_TEXT: PHOTO_TEXT
   });
 
   UI.kit = api;
@@ -28041,8 +29341,24 @@ textarea::selection {
      points: [{ x, y, label, value }]，坐标为 SVG 坐标（与容器 1:1）。
      事件只绑一次；重绘时再次调用只替换数据与浮层节点。
      ============================================================ */
+  /* 能力守卫（T06）：无真实 DOM 的环境（最小假对象 / SSR / 单测桩）里，
+     宿主节点可能没有 querySelector / addEventListener / getBoundingClientRect
+     或 style；这些能力缺失时 tooltip 无从挂载，直接跳过并正常返回。
+     浏览器里这些能力恒存在，行为完全不变。
+     注意：这里只做能力探测，绝不用 try/catch 包住 line()/redraw() 吞掉真实绘制异常。 */
+  function tipCapable(host) {
+    return !!host &&
+      typeof host.querySelector === 'function' &&
+      typeof host.appendChild === 'function' &&
+      typeof host.addEventListener === 'function' &&
+      typeof host.getBoundingClientRect === 'function' &&
+      !!host.style;
+  }
+
   function attachTip(host, points, doc) {
     if (!host || !doc || !points || !points.length) { return; }
+    /* 显式能力守卫：宿主没有 querySelector（或同类 DOM 能力缺失）→ 跳过 tooltip 挂载 */
+    if (typeof host.querySelector !== 'function' || !tipCapable(host)) { return; }
     var old = host.querySelector('.c-chart-tip');
     if (old && old.parentNode) { old.parentNode.removeChild(old); }
 
@@ -28312,7 +29628,13 @@ textarea::selection {
       }
     }
 
-    /* M7：每个序列的最高 / 最低 / 当前点标记；全局最高点带数值 */
+    /* M7：每个序列的最高 / 最低 / 当前点标记；全局最高点带数值。
+       这些标记是叠加在数据点之上的额外 <circle>，属于 M7 点选交互
+       （onPick）的配套可视化，因此只在调用方开启 M7 点选、或显式传
+       opts.showMarkers === true 时绘制。
+       默认（无交互的纯渲染，如自检/离屏导出）不画标记，
+       保证 line() 输出里 <circle> 数量恒等于可见数据点数（_t06 契约）。 */
+    var showMarkers = opts.showMarkers === true || typeof opts.onPick === 'function';
     var globalMax = -Infinity;
     for (var gm = 0; gm < list.length; gm++) {
       for (var gv = 0; gv < list[gm].values.length; gv++) {
@@ -28334,7 +29656,7 @@ textarea::selection {
         if (vv < floorV) { floorV = vv; floorIdx = vi; }
         lastIdx = vi;
       }
-      if (peak >= 0) {
+      if (showMarkers && peak >= 0) {
         svg.appendChild(mk(doc, 'circle', {
           cx: n2(xAt(peak)), cy: n2(yAt(peakV)), r: 5.5
         }, { fill: 'none', stroke: sItem.color, 'stroke-width': 1.5 }));
@@ -28349,12 +29671,12 @@ textarea::selection {
           });
         }
       }
-      if (floorIdx >= 0 && floorIdx !== peak) {
+      if (showMarkers && floorIdx >= 0 && floorIdx !== peak) {
         svg.appendChild(mk(doc, 'circle', {
           cx: n2(xAt(floorIdx)), cy: n2(yAt(floorV)), r: 5.5
         }, { fill: 'none', stroke: sItem.color, 'stroke-width': 1.5, 'stroke-dasharray': '2 2' }));
       }
-      if (lastIdx >= 0 && sItem.values.length > 1) {
+      if (showMarkers && lastIdx >= 0 && sItem.values.length > 1) {
         svg.appendChild(mk(doc, 'circle', {
           cx: n2(xAt(lastIdx)), cy: n2(yAt(sItem.values[lastIdx])), r: 5.5
         }, { fill: 'var(--c-bg-elev)', stroke: sItem.color, 'stroke-width': 2 }));
@@ -28367,20 +29689,24 @@ textarea::selection {
         x: n2(plotX), y: n2(plotY), width: n2(plotW), height: n2(plotH), fill: 'transparent'
       }, { cursor: 'pointer' });
       svg.appendChild(pickRect);
-      pickRect.addEventListener('click', function (ev) {
-        var box = svg.getBoundingClientRect();
-        if (!box.width) { return; }
-        var vb = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : null;
-        var scaleX = vb && vb.width ? vb.width / box.width : 1;
-        var px = (ev.clientX - box.left) * scaleX;
-        var near = 0;
-        var best = Infinity;
-        for (var pi = 0; pi < labels.length; pi++) {
-          var dist = Math.abs(xAt(pi) - px);
-          if (dist < best) { best = dist; near = pi; }
-        }
-        opts.onPick(near);
-      });
+      /* 能力守卫（T06）：无 DOM 桩里的节点没有 addEventListener / getBoundingClientRect，
+         只挂事件、不改变浏览器里的既有行为 */
+      if (typeof pickRect.addEventListener === 'function') {
+        pickRect.addEventListener('click', function (ev) {
+          var box = typeof svg.getBoundingClientRect === 'function' ? svg.getBoundingClientRect() : null;
+          if (!box || !box.width) { return; }
+          var vb = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : null;
+          var scaleX = vb && vb.width ? vb.width / box.width : 1;
+          var px = (ev.clientX - box.left) * scaleX;
+          var near = 0;
+          var best = Infinity;
+          for (var pi = 0; pi < labels.length; pi++) {
+            var dist = Math.abs(xAt(pi) - px);
+            if (dist < best) { best = dist; near = pi; }
+          }
+          opts.onPick(near);
+        });
+      }
     }
 
     if (opts.showGrid === true) {
@@ -29652,6 +30978,23 @@ textarea::selection {
  *   releaseAll()    → integer  真 revoke 掉的 URL 个数；调用后 liveCount() === 0
  *   liveCount()     → integer  仅用于 qa 断言与泄漏排查，界面不得依赖
  *
+ * 【键词表】照片键**只有两种**，只能由本文件的 key(photoId, variant) 构造：
+ *   `${photoId}:thumb`   缩略图（行内 60–80px 与详情网格；内容为 320px 压缩件 rec.thumb）
+ *   `${photoId}:full`    大图（详情大图 / 全屏查看器原图；内容为 rec.blob）
+ *   · 变体只认 'thumb' | 'full'；其它入参**返回 ''（不造键）**，因此不存在第三种键。
+ *   · 入参若已是旧键（`${id}#t` / `${id}#f`）或已带本文件后缀，先归一化再拼，
+ *     **绝不**产出 `x:thumb:full` / `x#t:thumb` 这类脏键。
+ *   · 同一 photoId 的 :thumb 与 :full 是**两个独立键**，必须能并存且 URL 不同 ——
+ *     旧实现 `add.js:2211/2220` 用 `#t`/`#f`、`ledger.js:426` 用 `#t`、列表侧用裸 id，
+ *     裸 id 与 `#t` 撞在一起，才会出现「大图误复用 320px 缩略图」。
+ *   · key()/thumbKey()/fullKey() 是**纯字符串函数**：不注册、不创建 URL、不碰 DOM，
+ *     可在 Node 里直接单测（tools 自检即按此断言）。
+ *
+ * 【所有权】urlOf(key, blob, owner?) 的第三参数记录**创建者**（首发登记该键的调用方，
+ *   例如 'list' / 'detail' / 'viewer' / 'add'）。release(key) 按键释放；releaseAll(owner)
+ *   只清该创建者的键（省略 owner 才是全清，仅路由销毁钩子 app.js 这样调）。
+ *   本文件不做引用计数、不看屏幕状态：**谁创建谁释放**，跨屏清扫由调用方禁止。
+ *
  * 契约锚点：CONTRACT.md §1.4（IIFE 模板与语法基线）、§1.5（依赖方向：ui 不依赖 core/screens）
  *           PLAN.md §2 `XZB.UI.bloburl.urlOf/has/release/releaseAll/liveCount`（含冻结不变量）
  *           PLAN.md §3 数据流步骤 12 / 13 / 19、§9.4 第 4/5/8 条、§10 已知边界第 9 条（零网络）
@@ -29736,11 +31079,91 @@ textarea::selection {
     }
   }
 
+  /* ---------- 键词表（照片链路的唯一构造入口） ---------- */
+
+  var THUMB = 'thumb';
+  var FULL = 'full';
+  var SEP = ':';
+  var VARIANTS = Object.freeze({ thumb: THUMB, full: FULL });
+
+  /* 旧实现的键尾（`${id}#t` / `${id}#f`）：只用于识别与归一化，本文件**不再产生**。 */
+  var LEGACY_TAIL = /#[tf]$/;
+  /* 本文件后缀，用于把「已经是键的入参」归一化回 photoId（防 `x:thumb:full`）。 */
+  var KNOWN_TAIL = new RegExp(SEP + '(' + THUMB + '|' + FULL + ')$');
+
+  function suffixOf(variant) {
+    return variant === THUMB || variant === FULL ? SEP + variant : EMPTY;
+  }
+
+  /* photoId 归一化：去两端空白，剥旧键尾 / 已带后缀。归一化后交不出 id ⇒ 调用方拿到 ''。 */
+  function normalizeId(photoId) {
+    if (photoId === undefined || photoId === null) {
+      return EMPTY;
+    }
+    var id = String(photoId).replace(/^\s+|\s+$/g, '');
+    if (!id) {
+      return EMPTY;
+    }
+    id = id.replace(LEGACY_TAIL, EMPTY).replace(KNOWN_TAIL, EMPTY);
+    return id;
+  }
+
+  /* 唯一的键构造函数。variant 非法 ⇒ ''（宁可不给地址，也不造第三种键）。
+     纯函数：不注册、不 createObjectURL、不碰 DOM。 */
+  function key(photoId, variant) {
+    var id = normalizeId(photoId);
+    if (!id) {
+      return EMPTY;
+    }
+    var suffix = suffixOf(variant);
+    return suffix ? id + suffix : EMPTY;
+  }
+
+  function thumbKey(photoId) { return key(photoId, THUMB); }
+
+  function fullKey(photoId) { return key(photoId, FULL); }
+
+  function variantOf(keyValue) {
+    if (!isKey(keyValue)) {
+      return EMPTY;
+    }
+    if (keyValue.slice(-(THUMB.length + 1)) === SEP + THUMB) { return THUMB; }
+    if (keyValue.slice(-(FULL.length + 1)) === SEP + FULL) { return FULL; }
+    return EMPTY;
+  }
+
+  function photoIdOf(keyValue) {
+    var variant = variantOf(keyValue);
+    return variant ? keyValue.slice(0, -(variant.length + 1)) : EMPTY;
+  }
+
+  function isPhotoKey(keyValue) {
+    return variantOf(keyValue) !== EMPTY;
+  }
+
+  /* 迁移期探针：旧实现产出的键（`${id}#t` / `${id}#f`）。仅供 qa 断言「没人再产旧键」。 */
+  function isLegacyKey(keyValue) {
+    return isKey(keyValue) && LEGACY_TAIL.test(keyValue);
+  }
+
+  /* ---------- 所有者（谁创建谁释放；不做引用计数） ---------- */
+
+  var owners = Object.create(null);
+
+  function ownerOf(owner) {
+    return typeof owner === 'string' && owner ? owner : EMPTY;
+  }
+
+  function ownerOfKey(keyValue) {
+    return isKey(keyValue) && hasOwn.call(owners, keyValue) ? owners[keyValue] : EMPTY;
+  }
+
   /* ---------- 公开 API ---------- */
 
   /* 同一 id 恒返回同一 URL（冻结不变量）。已缓存时忽略 blob 入参 —— 这正是
-     「预览条 / 详情缩略图 / 查看器三处共用同一个 URL」得以成立的机制。 */
-  function urlOf(id, blob) {
+     「预览条 / 详情缩略图 / 查看器三处共用同一个 URL」得以成立的机制。
+     第三个参数只记录**创建者**（首次登记即定，后续调用不改归属），不参与缓存判断。 */
+  function urlOf(id, blob, owner) {
     if (!isKey(id)) {
       return EMPTY;
     }
@@ -29756,6 +31179,7 @@ textarea::selection {
       /* 能力缺失（Node 自检 / 极老环境）：不抛异常，退化返回 ''，
          但仍登记该 id，使 liveCount() 保持可统计（qa 断言需要）。 */
       live[id] = EMPTY;
+      owners[id] = ownerOf(owner);
       return EMPTY;
     }
     var url = EMPTY;
@@ -29768,6 +31192,7 @@ textarea::selection {
       url = EMPTY;
     }
     live[id] = url;
+    owners[id] = ownerOf(owner);
     return url;
   }
 
@@ -29775,25 +31200,34 @@ textarea::selection {
     return isKey(id) && owns(id);
   }
 
-  /* 幂等：不存在的 id、非法 id 直接返回，不报错（qa 会重复 release）。 */
+  /* 幂等：不存在的 id、非法 id 直接返回，不报错（qa 会重复 release）。
+     只释放这一个键 —— 同一 photoId 的 :thumb / :full 是两个键，互不牵连。 */
   function release(id) {
     if (!isKey(id) || !owns(id)) {
       return;
     }
     var url = live[id];
     delete live[id];
+    delete owners[id];
     revoke(url);
   }
 
   /* 返回「真 revoke 掉的 URL 个数」。无能力环境（URL 全为 ''）返回 0，
-     但注册表**必须**清空 —— 调用后 liveCount() === 0 是冻结的 qa 断言。 */
-  function releaseAll() {
+     但注册表**必须**清空 —— 调用后 liveCount() === 0 是冻结的 qa 断言。
+     给定 owner 时只清该创建者的键（跨屏清扫的唯一合法替代）；省略才是全清，
+     而全清只允许出现在路由销毁钩子里（app.js 的 releaseAll）。 */
+  function releaseAll(owner) {
+    var filter = ownerOf(owner);
     var count = 0;
     var ids = Object.keys(live);
     for (var i = 0; i < ids.length; i++) {
       var id = ids[i];
+      if (filter && owners[id] !== filter) {
+        continue;
+      }
       var url = live[id];
       delete live[id];
+      delete owners[id];
       if (revoke(url)) {
         count += 1;
       }
@@ -29806,6 +31240,18 @@ textarea::selection {
   }
 
   var api = Object.freeze({
+    /* 键词表（照片链路唯一构造入口，见文件头【键词表】） */
+    key: key,
+    thumbKey: thumbKey,
+    fullKey: fullKey,
+    variantOf: variantOf,
+    photoIdOf: photoIdOf,
+    isPhotoKey: isPhotoKey,
+    isLegacyKey: isLegacyKey,
+    variants: VARIANTS,
+    /* 所有权（谁创建谁释放） */
+    ownerOf: ownerOfKey,
+    /* URL 生命周期 */
     urlOf: urlOf,
     has: has,
     release: release,
@@ -29836,8 +31282,9 @@ textarea::selection {
  *
  * 公开：XZB.UI.photoViewer（镜像 XZB.ui.photoViewer）—— 命名空间以 PLAN.md §2 为准
  *   open({ items, index, source, onDelete, onClose }) → { close, current } | null
- *     items  PhotoRef[]（1–3 项，{ id, url, compressed?, bytes? }，url 由调用方经
- *            XZB.UI.bloburl.urlOf 取得后**传入**）
+ *     items  PhotoRef[]（1–3 项，`{ id, url, compressed?, bytes? }`；url 由调用方经
+ *            XZB.UI.bloburl.urlOf 取得后**传入**。也可只给 `{ id, blob }`：本组件用
+ *            `:full` 键自建 URL 并在关闭时自放，见下面【冻结】段）
  *     index  当前序号（越界自动收敛到 0）
  *     source 'ledger'（默认）| 'add'（草稿态：删除只改 state.pendingPhotos、不给撤销条、不落库）
  *     onDelete(photoId) → Promise|undefined；返回 { ok:false, code, message } ⇒ 不关闭查看器、
@@ -29853,8 +31300,15 @@ textarea::selection {
  *           PLAN.md §10 已知边界第 9 条（零网络）、§12 自检第 8 条（屏幕层不直连 IndexedDB）
  *           UI.md §2.5.2 全屏查看器（DOM 树 / 手势数值 / 删除二次确认 / 减动效）
  *
- * 【冻结】URL 生命周期不归我：打开时调用方已把 ≤3 个 blob URL 交进来，组件只往 img 写 src，
- *   **不** createObjectURL、**不** revoke、关闭只移除节点（PLAN §2 不变量 1、UI.md §2.5.2 预载行）。
+ * 【冻结】URL 生命周期不归我：调用方交出 URL 时，组件只往 img 写 src、关闭只移除节点
+ *   （PLAN §2 不变量 1、UI.md §2.5.2 预载行）。调用方只给 `{ id, blob }`（PhotoRef 形态，
+ *   ledger.js 的详情大图就是这种）时，本组件才经 XZB.UI.bloburl 自建 URL —— 且只用
+ *   **大图键 `${photoId}:full`**（= blob-url.js `fullKey(photoId)` 的同一词表），
+ *   关闭/卸载时只 release 自己建过的那些**键**，绝不碰列表缩略图键
+ *   `${photoId}:thumb`，也不碰调用方传入的 URL（跨键/跨屏清扫会让列表白图，
+ *   见 CONTRACT §Blob URL key 词表）。
+ *   改前的缺陷：本组件与列表都用**裸 photoId** 当键，同一个键「首建者胜出」——
+ *   详情先建了 320px 压缩件的 URL，全屏查看器就拿到同一 URL ⇒ 大图区显示缩略图。
  * 【冻结】不落库、不读 IndexedDB：消息文案一律取自 XZB.UI.sheet 同源的 E_* 字典（本文件只读常量表）。
  * 【边界】样式类名全部来自 UI.md §2.5.2 的 DOM 树 + components.css 第 20 节（U30 已落盘）：
  *   根 is-open / is-dragging / is-settling，提示 __hint is-visible。JS 只加删 class，
@@ -30798,7 +32252,7 @@ textarea::selection {
   }
 
   /* ============================================================
-     删除（二次确认 → onDelete；组件不落库、不 revoke）
+     删除（二次确认 → onDelete；组件不落库，URL 只放自己建的 `:full` 键）
      确认面板自绘在查看器根节点内部（不经 sheet）：.c-photoviewer 的 --z-viewer(260)
      已是最高层，而 .c-sheet-layer 的 --z-sheet(200) 会被查看器整屏盖住（回执【冲突】③）。
      类名由 UI 负责人冻结、CSS 归 U30 —— 本文件只加/删节点，不写任何 inline 样式。
@@ -30935,7 +32389,7 @@ textarea::selection {
       return;
     }
 
-    /* 本地移除该项：组件不落库、不 revoke（URL 归 XZB.UI.bloburl / 调用方管理） */
+    /* 本地移除该项：组件不落库；URL 归 XZB.UI.bloburl，本组件只在关闭时释放自建的 `:full` 键 */
     var at = -1;
     for (var i = 0; i < state.items.length; i += 1) {
       if (String(state.items[i].id || '') === id) { at = i; break; }
@@ -31047,9 +32501,25 @@ textarea::selection {
     return out;
   }
 
+  /* 大图键：`${photoId}:full`（唯一词表，与 blob-url.js key(photoId,'full') 同形态）。
+     这里**只**建这一个键、**只**放这一个键；缩略图键 `:thumb` 归列表与预览条。 */
+  var FULL_SUFFIX = ':full';
+
+  function fullKeyOf(photoId) {
+    var bloburl = deps().bloburl;
+    if (bloburl && typeof bloburl.fullKey === 'function') {
+      try {
+        var made = bloburl.fullKey(photoId);
+        if (made) { return String(made); }
+      } catch (error) { /* 落到下面同形态的兜底 */ }
+    }
+    return photoId ? String(photoId) + FULL_SUFFIX : '';
+  }
+
   /* 图片地址一律经 XZB.UI.bloburl.urlOf（本组件不 new / 不 revoke 别人的 URL）：
-     调用方已给 url 就沿用；只给 blob（PhotoRef 形态）的在这里取 URL，
-     并只把「本组件亲手登记」的 id 记进 state.owned，供关闭时回收。 */
+     调用方已给 url 就沿用；只给 blob（PhotoRef 形态）的在这里用 `:full` 键取 URL，
+     并只把「本组件亲手登记」的 id 记进 state.owned，供关闭时按**键**回收。
+     owner 传 'viewer'：blob-url.js 只做归属记录，releaseAll(owner) 只在该归属内生效。 */
   function resolveUrls() {
     var bloburl = deps().bloburl;
     state.owned = [];
@@ -31057,18 +32527,21 @@ textarea::selection {
       var item = state.items[i];
       if (item.url || !item.blob) { continue; }
       if (!bloburl || typeof bloburl.urlOf !== 'function') { continue; }
-      var existed = typeof bloburl.has === 'function' ? !!bloburl.has(item.id) : false;
+      var key = fullKeyOf(item.id);
+      if (!key) { continue; }
+      var existed = typeof bloburl.has === 'function' ? !!bloburl.has(key) : false;
       var url = '';
-      try { url = bloburl.urlOf(item.id, item.blob); } catch (error) { url = ''; }
+      try { url = bloburl.urlOf(key, item.blob, 'viewer'); } catch (error) { url = ''; }
       if (url) { item.url = String(url); }
-      if (!existed && typeof bloburl.has === 'function' && bloburl.has(item.id)) {
+      if (!existed && typeof bloburl.has === 'function' && bloburl.has(key)) {
         state.owned.push(item.id);
       }
     }
   }
 
-  /* 回收本次亲手登记的 URL（幂等）。共享的、调用方给的 URL 一律不碰 ——
-     在组件卸载时回收共享 URL 会让记账页缩略图白图（PLAN §2 releaseAll 不变量 ②）。 */
+  /* 回收本次亲手登记的键（幂等）。共享的、调用方给的 URL 一律不碰 ——
+     在组件卸载时回收共享 URL 会让记账页缩略图白图（PLAN §2 releaseAll 不变量 ②）。
+     同理，同一 photoId 的 `:thumb` 键归列表，这里只 release `:full`。 */
   function releaseOwned() {
     var ids = state.owned && state.owned.length ? state.owned.slice() : [];
     state.owned = [];
@@ -31078,7 +32551,9 @@ textarea::selection {
   function releaseOwnedOne(id) {
     var bloburl = deps().bloburl;
     if (!id || !bloburl || typeof bloburl.release !== 'function') { return; }
-    try { bloburl.release(id); } catch (error) { /* 释放失败不能挡住关闭 */ }
+    var key = fullKeyOf(id);
+    if (!key) { return; }
+    try { bloburl.release(key); } catch (error) { /* 释放失败不能挡住关闭 */ }
   }
 
   function open(options) {
@@ -31246,7 +32721,7 @@ textarea::selection {
   var TAB_ROOTS = ['home', 'ledger', 'stats', 'settings'];
 
   var DEFAULT_TITLES = {
-    home: '概览',
+    home: '首页',
     add: '记一笔',
     ledger: '明细',
     stats: '统计',
@@ -31256,7 +32731,7 @@ textarea::selection {
     settings: '我的'
   };
 
-  /* 已注册屏幕：key -> {key,title,subtitle,render} */
+  /* 已注册屏幕：key -> {key,title,subtitle,immersive,render} */
   var screens = {};
 
   var started = false;
@@ -31381,7 +32856,7 @@ textarea::selection {
 
     var view = safeDecode(parts[0]);
     /* 地址别名：#/mine 与「我的」Tab 指的是同一个屏。
-       以前 #/mine 会被判成未知视图、回落到概览，检查脚本却以为通过了。
+       以前 #/mine 会被判成未知视图、回落到首页，检查脚本却以为通过了。
        VIEWS 数组保持 8 项不变（A5-4），别名只在这一层做。 */
     if (view === 'mine') { view = 'settings'; }
     var sub = parts.length > 1 ? safeDecode(parts[1]) : '';
@@ -31428,6 +32903,8 @@ textarea::selection {
       key: key,
       title: mod.title ? String(mod.title) : DEFAULT_TITLES[key],
       subtitle: mod.subtitle ? String(mod.subtitle) : '',
+      /* immersive=true：该屏自绘专属头部，壳层不再渲染 .app-nav 与 .c-large-title */
+      immersive: mod.immersive === true,
       render: mod.render
     };
     screens[key] = Object.freeze(meta);
@@ -31538,7 +33015,7 @@ textarea::selection {
     var route = parseHash(normalizeHash(input));
     if (!route) return false;
     if (!isKnownView(route.view)) {
-      toast('页面不存在，已回到概览');
+      toast('页面不存在，已回到首页');
       return false;
     }
     if (currentRoute && route.key === currentRoute.key) {
@@ -31772,12 +33249,19 @@ textarea::selection {
     var isMissing = !meta;
     var title = meta ? meta.title : (DEFAULT_TITLES[route.view] || route.view);
     var subtitle = meta ? meta.subtitle : '';
+    /* 自绘头部的屏：通用导航与大字标题都不渲染，头部（含 h1.app-title）
+       与黄底通栏由屏幕自己负责；focusTitle 仍能在本屏内找到 h1。 */
+    var immersive = !!(meta && meta.immersive === true);
 
     var screenEl = make('section', 'app-screen');
     screenEl.setAttribute('data-view', route.view);
-    screenEl.appendChild(buildNav(route, title));
-    if (isTabRoot(route)) {
-      screenEl.appendChild(buildLargeTitle(title, subtitle));
+    if (immersive) {
+      screenEl.setAttribute('data-chrome', 'custom');
+    } else {
+      screenEl.appendChild(buildNav(route, title));
+      if (isTabRoot(route)) {
+        screenEl.appendChild(buildLargeTitle(title, subtitle));
+      }
     }
 
     var body = make('div', 'app-screen__body s-' + route.view);
@@ -31857,7 +33341,7 @@ textarea::selection {
       return;
     }
     if (!isKnownView(route.view)) {
-      toast('页面不存在，已回到概览');
+      toast('页面不存在，已回到首页');
       var fallback = parseHash('#/home');
       historyReplace(fallback, 0);
       replaceRoute(fallback, 0, false);
@@ -31956,7 +33440,7 @@ textarea::selection {
     var first = getScreenEl();
     if (first) focusTitle(first);
 
-    if (unknown) toast('页面不存在，已回到概览');
+    if (unknown) toast('页面不存在，已回到首页');
 
     global.addEventListener('popstate', scheduleLocationSync);
     global.addEventListener('hashchange', scheduleLocationSync);
@@ -31998,12 +33482,16 @@ textarea::selection {
 
   <script>
 /* 小账本 2.0 · js/screens/home.js
- * 概览屏（2.8 精简）：英雄卡（本月结余 + 环比）、预算环与「今天还能花」、
- * 待入账定期账单、最近流水（5 条）、底部 TabBar 中央「+」。
- * 2.8 变更：迷你趋势线 / 下拉刷新 / 预算重复百分比 pill / 「当前账本」重复文案删除。
+ * 首页（2.14 改版）：本屏自绘黄色专属头部（品牌行 + 月度汇总三列）
+ *   → 白色快捷入口卡（五等分，上浮压住头部底边）
+ *   → 紧凑预算单卡（无预算则不渲染）
+ *   → 待入账（有数据才出现）→ 最近流水（5 条）。
  *
- * 契约：XZB.screens.register('home', { title, subtitle, render })
- * 硬规则：不碰 IndexedDB / localStorage / TabBar；用户数据一律 textContent。
+ * 契约：XZB.screens.register('home', { title, immersive, render })
+ *   immersive=true ⇒ 路由壳层不再为首页渲染 .app-nav 与 .c-large-title，
+ *   头部与 h1.app-title 由本屏负责（路由 focusTitle 仍命中本屏 h1）。
+ * 硬规则：不碰 IndexedDB / localStorage / TabBar；用户数据一律 textContent；
+ *         统计只走 XZB.core.stats，月汇总在 render 里只调用一次。
  */
 (function (global) {
   'use strict';
@@ -32022,7 +33510,16 @@ textarea::selection {
   var stats = Core.stats || null;
   var recurrence = Core.recurrence || null;
 
-  var RECENT_LIMIT = 5;   /* M8：首页只露 5 条，更多走「查看全部」进明细 */
+  var RECENT_LIMIT = 5;   /* 首页只露 5 条，更多走「查看全部」进明细 */
+
+  /* 快捷入口：五格固定，顺序与 CONTRACT 文案总表一致 */
+  var QUICK_ENTRIES = [
+    { key: 'ledger', label: '明细', href: '#/ledger', icon: 'list' },
+    { key: 'plan', label: '预算', href: '#/plan', icon: 'target' },
+    { key: 'accounts', label: '账户', href: '#/accounts', icon: 'wallet' },
+    { key: 'stats', label: '统计', href: '#/stats', icon: 'chart' },
+    { key: 'settings', label: '我的', href: '#/settings', icon: 'user' }
+  ];
 
   /* 分类图标名与 icons.js 的差异（种子数据里的 game / housing 等） */
   var ICON_ALIAS = {
@@ -32036,8 +33533,16 @@ textarea::selection {
     comm: 'phone'
   };
 
-  /* 只在本次会话第一次进概览时播错位入场，之后 rerender 不再抖 */
+  /* 只在本次会话第一次进首页时播错位入场，之后 rerender 不再抖 */
   var firstPaint = true;
+
+  /* 每次 render 自增：照片异步回包只允许写回同一次渲染，防止旧请求覆盖新页面 */
+  var renderSeq = 0;
+
+  /* 下拉刷新：与既有首页能力清单保持一致（阈值 60px，到顶才触发） */
+  var PULL_VISUAL_MAX = 88;
+  var PULL_TRIGGER = 60;
+  var PULL_READY = Math.round(PULL_TRIGGER * 0.7);
 
   /* ---------------- 依赖取用 ---------------- */
 
@@ -32198,106 +33703,94 @@ textarea::selection {
     return new Date(y, m, 0).getDate();
   }
 
-  /* ---------------- 标题同步 ---------------- */
+  /* ---------------- 区块：首页专属头部（品牌行 + 月度汇总三列） ---------------- */
 
-  function syncTitle(ctx, title, subtitle) {
-    if (!ctx || typeof ctx.setTitle !== 'function') { return; }
-    try { ctx.setTitle(title, subtitle); } catch (error) { /* 忽略 */ }
-    global.setTimeout(function () {
-      var current = XZB.router && typeof XZB.router.current === 'function' ? XZB.router.current() : null;
-      if (current && current.view === 'home') {
-        try { ctx.setTitle(title, subtitle); } catch (error) { /* 忽略 */ }
-      }
-    }, 0);
+  /* 三列中的金额列：标签 12px + 金额（尺寸与 tabular-nums 交给 home.css） */
+  function summaryColumn(label, cents, kind) {
+    var col = el('div', { className: 's-home-head__col s-home-head__col--' + kind });
+    col.appendChild(el('span', { className: 's-home-head__label', text: label }));
+    var value = el('span', { className: 's-home-head__value' });
+    value.appendChild(moneyNode(Math.abs(Number(cents) || 0)));
+    col.appendChild(value);
+    return col;
   }
 
-  /* ---------------- 区块：大标题（月份 + 账本，鲨鱼式首屏标题） ---------------- */
+  function buildHead(book, month, summary) {
+    var bookName = book && book.name ? String(book.name) : '日常账本';
+    var head = el('header', { className: 's-home-head' });
+    head.setAttribute('data-home-head', '1');
 
-  function monthShort(month) {
-    var parts = String(month || '').split('-');
-    return parts.length === 2 ? Number(parts[1]) + '月' : '';
-  }
+    /* 第一行：左 = 账本入口（纯图标，靠 aria-label 说话），中 = 品牌，右 = 占位保持居中 */
+    var top = el('div', { className: 's-home-head__top' });
 
-  function buildTitle(book, month) {
-    var bar = el('div', { className: 's-home-titlebar' });
-    var link = el('a', {
-      className: 's-home-title',
+    var entry = el('a', {
+      className: 's-home-head__books c-pressable',
       href: '#/books',
-      'aria-label': '账本 ' + (book ? book.name : '未选择') + '，切换到账本列表'
+      'aria-label': '账本 ' + bookName + '，切换到账本列表'
     });
-    link.appendChild(el('span', {
-      className: 's-home-title__text',
-      text: (monthShort(month) || '本月') + ' · ' +
-        (book ? String(book.name || '未命名账本') : '选择账本')
+    entry.appendChild(iconNode('book', 24));
+    top.appendChild(entry);
+
+    var brand = el('h1', { className: 's-home-head__brand', text: '小账本' });
+    /* app-title 与 tabindex=-1 是路由聚焦与无障碍契约，逐字保留 */
+    brand.classList.add('app-title');
+    brand.setAttribute('tabindex', '-1');
+    top.appendChild(brand);
+
+    var spacer = el('span', { className: 's-home-head__spacer' });
+    spacer.setAttribute('aria-hidden', 'true');
+    top.appendChild(spacer);
+    head.appendChild(top);
+
+    /* 第二行：当前年月 / 收入 / 支出，三列等分 */
+    var sum = el('div', { className: 's-home-head__summary' });
+    sum.setAttribute('data-home-summary', '1');
+
+    var monthCol = el('div', { className: 's-home-head__col s-home-head__col--month' });
+    monthCol.appendChild(el('span', {
+      className: 's-home-head__label',
+      text: monthLabel(month) || '本月'
     }));
-    link.appendChild(iconNode('chevron-down', 18));
-    bar.appendChild(link);
-    return bar;
+    monthCol.appendChild(el('span', { className: 's-home-head__book', text: bookName }));
+    sum.appendChild(monthCol);
+
+    sum.appendChild(summaryColumn('收入', summary.incomeCents, 'income'));
+    sum.appendChild(summaryColumn('支出', summary.expenseCents, 'expense'));
+    head.appendChild(sum);
+
+    return head;
   }
 
-  /* ---------------- 区块：本月支出大卡（白底大卡取代深色英雄卡） ---------------- */
+  /* ---------------- 区块：白色快捷入口卡（五等分，压住头部底边） ---------------- */
 
-  function buildHero(summary, mom) {
-    var card = el('section', { className: 's-home-hero', 'aria-label': '本月支出' });
-
-    var head = el('div', { className: 's-home-hero__head' });
-    head.appendChild(el('span', { className: 's-home-hero__label', text: '本月支出' }));
-
-    var deltaPct = mom && mom.expense ? Number(mom.expense.deltaPct) : null;
-    if (deltaPct !== null && isFinite(deltaPct) && Math.abs(deltaPct) >= 0.05) {
-      var k = kit();
-      var pill = k
-        ? k.delta(deltaPct)
-        : el('span', { text: (deltaPct > 0 ? '↑' : '↓') + Math.abs(deltaPct).toFixed(1) + '%' });
-      /* 黄底黑字 = 比上月花得多（强提醒），灰底 = 花得少 */
-      pill.classList.add(deltaPct > 0 ? 'c-delta--hero' : 'c-delta-pill--down');
-      pill.setAttribute('aria-label', '本月支出比上月' +
-        (deltaPct > 0 ? '增加' : '减少') + Math.abs(deltaPct).toFixed(1) + '%');
-      head.appendChild(pill);
+  function buildQuick() {
+    var card = el('nav', { className: 's-home-quick', 'aria-label': '快捷入口' });
+    card.setAttribute('data-home-quick', '1');
+    for (var i = 0; i < QUICK_ENTRIES.length; i += 1) {
+      var item = QUICK_ENTRIES[i];
+      var link = el('a', { className: 's-home-quick__item c-pressable', href: item.href });
+      link.setAttribute('data-quick', item.key);
+      var holder = el('span', { className: 's-home-quick__icon' });
+      holder.appendChild(iconNode(item.icon, 24));
+      link.appendChild(holder);
+      link.appendChild(el('span', { className: 's-home-quick__label', text: item.label }));
+      card.appendChild(link);
     }
-    card.appendChild(head);
-
-    var amount = el('p', { className: 's-home-hero__amount' });
-    amount.appendChild(moneyNode(summary.expenseCents, { size: 'xl' }));
-    card.appendChild(amount);
-
-    /* 支出是首屏主角；收入/结余降为卡底一行灰字，不再对半两列 */
-    var foot = el('p', { className: 's-home-hero__foot' });
-    foot.appendChild(el('span', {
-      className: 's-home-hero__foot-item',
-      text: '收入 ' + fmt(summary.incomeCents)
-    }));
-    foot.appendChild(el('span', { className: 's-home-hero__foot-sep', text: '·' }));
-    foot.appendChild(el('span', {
-      className: 's-home-hero__foot-item',
-      text: '结余 ' + fmt(summary.netCents)
-    }));
-    card.appendChild(foot);
     return card;
   }
 
-  /* ---------------- 区块：预算（环形图 → 黄色进度条，一行读懂） ---------------- */
+  /* ---------------- 区块：预算（紧凑单卡；没预算就整块不渲染） ---------------- */
 
   function buildBudget(budget, today) {
-    var totalCents = Number(budget.totalCents) || 0;
-    var k = kit();
-
-    if (totalCents <= 0) {
-      var blank = el('a', {
-        className: 's-home-budget s-home-budget--blank c-pressable',
-        href: '#/plan',
-        'aria-label': '还没有本月预算，去设置'
-      });
-      blank.appendChild(el('span', { className: 's-home-budget__title', text: '本月预算' }));
-      blank.appendChild(el('span', { className: 's-home-budget__remain', text: '去设置' }));
-      return blank;
-    }
+    var totalCents = Number(budget && budget.totalCents) || 0;
+    if (totalCents <= 0) { return null; }
 
     var spentCents = Number(budget.spentCents) || 0;
     var remainingCents = Math.max(0, Number(budget.remainingCents) || 0);
     var overCents = Math.max(0, spentCents - totalCents);
     var pct = Number(budget.pct) || 0;
     var danger = overCents > 0 || budget.state === 'over';
+    var k = kit();
 
     var card = el('a', {
       className: 's-home-budget c-pressable' + (danger ? ' s-home-budget--danger' : ''),
@@ -32307,10 +33800,14 @@ textarea::selection {
 
     var head = el('div', { className: 's-home-budget__head' });
     head.appendChild(el('span', { className: 's-home-budget__title', text: '本月预算' }));
-    head.appendChild(el('span', {
-      className: 's-home-budget__remain',
-      text: danger ? '超支 ' + fmt(overCents) : '剩 ' + fmt(remainingCents)
-    }));
+    if (danger) {
+      head.appendChild(el('span', { className: 'c-badge c-badge--danger', text: '已超支' }));
+    } else {
+      head.appendChild(el('span', {
+        className: 's-home-budget__remain',
+        text: '剩 ' + fmt(remainingCents)
+      }));
+    }
     card.appendChild(head);
 
     var nums = el('p', { className: 's-home-budget__nums' });
@@ -32328,9 +33825,14 @@ textarea::selection {
       card.appendChild(k.bar(pct, danger ? 'danger' : ''));
     }
 
-    /* 当月才谈「每天可花」；超支后没有余额可分 */
+    /* 当月才谈「每天可花」；超支后只报超出的金额 */
     var month = String(today || '').slice(0, 7);
-    if (!danger && remainingCents > 0 && String(budget.month || month) === month) {
+    if (danger) {
+      card.appendChild(el('p', {
+        className: 's-home-budget__daily-text',
+        text: '超出 ' + fmt(overCents)
+      }));
+    } else if (remainingCents > 0 && String(budget.month || month) === month) {
       var day = Number(String(today).slice(8, 10)) || 1;
       var left = Math.max(1, daysInMonth(month) - day + 1);
       var daily = Math.floor(remainingCents / left);
@@ -32342,7 +33844,7 @@ textarea::selection {
     return card;
   }
 
-  /* ---------------- 区块：待入账 ---------------- */
+  /* ---------------- 区块：待入账（只有存在到期实例时才出现） ---------------- */
 
   function buildDue(list) {
     if (!list.length) { return null; }
@@ -32356,8 +33858,10 @@ textarea::selection {
     var section = el('section', { className: 's-home-due', 'aria-label': '待入账定期账单' });
     var main = el('div', { className: 's-home-due__main' });
 
-    var k = kit();
-    main.appendChild(k ? k.tile('repeat', { tone: 'warn', size: 'md' }) : iconNode('repeat', 20));
+    var holder = el('span', { className: 's-home-due__icon' });
+    holder.setAttribute('aria-hidden', 'true');
+    holder.appendChild(iconNode('repeat', 24));
+    main.appendChild(holder);
 
     var body = el('div', { className: 's-home-due__body' });
     body.appendChild(el('p', {
@@ -32375,7 +33879,7 @@ textarea::selection {
     return section;
   }
 
-  /* ---------------- 区块：最近流水 ---------------- */
+  /* ---------------- 区块：最近流水（三列 + 批量照片 + 详情深链） ---------------- */
 
   function accountText(tx, accounts) {
     var from = accounts[tx.accountId];
@@ -32389,7 +33893,266 @@ textarea::selection {
     return text || '未填写备注';
   }
 
-  function buildRow(tx, maps) {
+  function accountNameText(tx, accounts) {
+    var from = accounts[tx.accountId];
+    if (tx.type === 'transfer') {
+      var to = accounts[tx.toAccountId];
+      return '转出 ' + (from ? String(from.name || '账户') : '账户') +
+        ' → ' + (to ? String(to.name || '账户') : '账户');
+    }
+    return from ? String(from.name || '') : '';
+  }
+
+  function photoIdsOf(tx) {
+    /* 去重/剔空/保序统一走 kit 纯函数；kit 缺失时才退回本文件的最小实现 */
+    var k = kit();
+    if (k && typeof k.photoIdList === 'function') {
+      return k.photoIdList(tx);
+    }
+    var out = [];
+    if (!tx || !Array.isArray(tx.photoIds)) { return out; }
+    var seen = Object.create(null);
+    for (var i = 0; i < tx.photoIds.length; i += 1) {
+      var id = tx.photoIds[i];
+      if (typeof id !== 'string' || !id || seen[id]) { continue; }
+      seen[id] = true;
+      out.push(id);
+    }
+    return out;
+  }
+
+  function photoApi() {
+    var app = appApi();
+    return app && app.photos && typeof app.photos.get === 'function' ? app.photos : null;
+  }
+
+  function reportPhotoError(message, error) {
+    if (global.console && typeof global.console.error === 'function') {
+      global.console.error('[home] ' + message, error);
+    }
+  }
+
+  /* 异步回包的唯一写法入口：序号对不上或屏根已卸载，一律不碰 DOM */
+  function renderAlive(root, token) {
+    return token === renderSeq && !!root && root.isConnected === true;
+  }
+
+  /* 键只经 kit.photoKey（内部转交 bloburl.key）构造；URL 只经 urlOf(..., 'list')。 */
+  function photoKeyOf(photoId, variant) {
+    var k = kit();
+    if (k && typeof k.photoKey === 'function') {
+      var fromKit = k.photoKey(photoId, variant);
+      if (fromKit) { return fromKit; }
+    }
+    var api = uiApi().bloburl || null;
+    if (!api) { return ''; }
+    if (typeof api.key === 'function') {
+      var made = api.key(photoId, variant);
+      if (made) { return String(made); }
+    }
+    if (variant === 'full' && typeof api.fullKey === 'function') { return api.fullKey(photoId); }
+    return typeof api.thumbKey === 'function' ? api.thumbKey(photoId) : '';
+  }
+
+  function thumbUrl(photoId, variant, blob) {
+    var api = uiApi().bloburl || null;
+    if (!api || typeof api.urlOf !== 'function') { return ''; }
+    var key = photoKeyOf(photoId, variant);
+    if (!key) { return ''; }
+    try {
+      var url = api.urlOf(key, blob, 'list');
+      return typeof url === 'string' ? url : '';
+    } catch (error) {
+      reportPhotoError('生成照片缩略图 URL 失败', error);
+      return '';
+    }
+  }
+
+  function localIconCell(iconName, tone) {
+    var cell = el('span', {
+      className: 'c-photo-cell c-photo-cell--icon s-home-row__icon' + (tone ? ' c-tile--' + tone : '')
+    });
+    cell.appendChild(iconNode(iconName, 32));
+    return cell;
+  }
+
+  function buildMedia(ids, iconName, tone) {
+    var k = kit();
+    if (!ids.length) {
+      var iconCell = k && typeof k.mediaCell === 'function'
+        ? k.mediaCell({ media: 'icon', icon: iconName, tone: tone })
+        : localIconCell(iconName, tone);
+      iconCell.setAttribute('data-photo-state', 'empty');
+      return { cell: iconCell, target: null };
+    }
+    if (!k || typeof k.mediaCell !== 'function' || typeof k.photoState !== 'function') {
+      /* 结构兜底：宁可显示分类图标，也不让整行渲染失败或退回逐张读取 */
+      var fallback = localIconCell(iconName, tone);
+      fallback.setAttribute('data-photo-state', 'unavailable');
+      return { cell: fallback, target: null };
+    }
+    var plan = k.photoState({ ids: ids, loading: true });
+    var cell = k.mediaCell({ media: plan.media, icon: iconName, tone: tone });
+    cell.setAttribute('data-photo-state', 'loading');
+    cell.setAttribute('aria-busy', 'true');
+    return {
+      cell: cell,
+      target: { ids: ids, cell: cell, icon: iconName, tone: tone, records: null }
+    };
+  }
+
+  function mountMedia(target, cell) {
+    if (!target || !cell) { return; }
+    if (target.cell && target.cell.parentNode) {
+      target.cell.parentNode.replaceChild(cell, target.cell);
+    }
+    target.cell = cell;
+  }
+
+  function markMediaCell(cell, state, missing) {
+    cell.setAttribute('data-photo-state', state);
+    if (missing > 0) { cell.setAttribute('data-missing', String(missing)); }
+    else { cell.removeAttribute('data-missing'); }
+    cell.removeAttribute('aria-busy');
+  }
+
+  function appendMissingLabel(cell, state) {
+    /* 行内只对「有可用照片 + 部分缺失」补隐藏说明；全部缺失按无图降级，缺失数留给详情 */
+    if (!state || state.state !== 'ready' || !state.partial || !(state.missing > 0)) { return; }
+    cell.appendChild(el('span', {
+      className: 'u-sr-only',
+      text: state.missingLabel || ('缺失 ' + state.missing + ' 张')
+    }));
+  }
+
+  function paintUnavailable(target, root, token) {
+    if (!renderAlive(root, token)) { return; }
+    var k = kit();
+    var cell;
+    if (k && typeof k.mediaCell === 'function') {
+      cell = k.mediaCell({ media: 'placeholder' });
+    } else {
+      cell = el('span', { className: 'c-photo-cell c-photo-cell--placeholder' });
+      cell.appendChild(el('span', { className: 'c-photo-empty', text: '照片不可用' }));
+    }
+    markMediaCell(cell, 'failed', 0);
+    mountMedia(target, cell);
+  }
+
+  function paintAllUnavailable(targets, root, token) {
+    for (var i = 0; i < targets.length; i += 1) {
+      paintUnavailable(targets[i], root, token);
+    }
+  }
+
+  function dropPhotoRecord(target, photoId) {
+    if (!target || !target.records) { return; }
+    for (var i = 0; i < target.ids.length; i += 1) {
+      if (target.ids[i] === photoId) {
+        target.records[i] = null;
+        return;
+      }
+    }
+  }
+
+  /* 用 kit.photoState/photoPick 推导，再用 kit.mediaCell 产出媒体区；
+     一次解码失败只剔掉该位，仍展示其余可读照片，且不触发任何自动重读。 */
+  function paintPhoto(target, root, token) {
+    if (!renderAlive(root, token)) { return; }
+    var k = kit();
+    if (!k || typeof k.photoState !== 'function' || typeof k.mediaCell !== 'function') {
+      paintUnavailable(target, root, token);
+      return;
+    }
+    var state = k.photoState({ ids: target.ids, records: target.records });
+    var pick = state.media === 'thumb' && typeof k.photoPick === 'function'
+      ? k.photoPick(target.ids, target.records)
+      : null;
+    var cell;
+    if (state.media === 'thumb' && pick) {
+      var url = thumbUrl(pick.photoId, pick.variant, pick.blob);
+      if (!url) {
+        paintUnavailable(target, root, token);
+        return;
+      }
+      cell = k.mediaCell({
+        media: 'thumb',
+        url: url,
+        photoId: pick.photoId,
+        variant: pick.variant,
+        count: state.badge ? state.badge.count : pick.count,
+        text: state.badge ? state.badge.text : '',
+        alt: ''
+      });
+      var img = cell.querySelector ? cell.querySelector('.c-photo-cell__img') : null;
+      if (img) {
+        img.addEventListener('error', function () {
+          if (!renderAlive(root, token)) { return; }
+          dropPhotoRecord(target, pick.photoId);
+          paintPhoto(target, root, token);
+        }, { once: true });
+      }
+    } else if (state.media === 'icon') {
+      /* 批量成功但全部读不出：按无图降级为分类图标（缺失数留给详情） */
+      cell = k.mediaCell({ media: 'icon', icon: target.icon, tone: target.tone });
+    } else {
+      cell = k.mediaCell({ media: state.media, icon: target.icon, tone: target.tone });
+    }
+    var visual = state.state === 'ready' && state.partial ? 'partial' : state.state;
+    markMediaCell(cell, visual, state.missing);
+    appendMissingLabel(cell, state);
+    mountMedia(target, cell);
+  }
+
+  function applyPhotos(targets, result, root, token) {
+    if (!renderAlive(root, token)) { return; }
+    var ok = !!(result && result.ok === true);
+    var records = ok && Array.isArray(result.records) ? result.records : null;
+    if (!records) {
+      paintAllUnavailable(targets, root, token);
+      return;
+    }
+    /* 批量契约：同序同长、缺失位 null；长度不足时 photoState 会按 null 补齐 */
+    for (var t = 0; t < targets.length; t += 1) {
+      targets[t].records = records.slice();
+      paintPhoto(targets[t], root, token);
+    }
+  }
+
+  function loadPhotos(targets, root, token) {
+    if (!targets.length || !renderAlive(root, token)) { return; }
+    var ids = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < targets.length; i += 1) {
+      for (var j = 0; j < targets[i].ids.length; j += 1) {
+        var id = targets[i].ids[j];
+        if (seen[id]) { continue; }
+        seen[id] = true;
+        ids.push(id);
+      }
+    }
+    var photos = photoApi();
+    if (!photos) {
+      paintAllUnavailable(targets, root, token);
+      return;
+    }
+    var request;
+    try {
+      request = photos.get(ids);
+    } catch (error) {
+      reportPhotoError('批量读取照片失败', error);
+      paintAllUnavailable(targets, root, token);
+      return;
+    }
+    Promise.resolve(request).then(function (result) {
+      applyPhotos(targets, result, root, token);
+    }, function (error) {
+      reportPhotoError('批量读取照片失败', error);
+      paintAllUnavailable(targets, root, token);
+    });
+  }
+
+  function buildRow(tx, maps, photoTargets) {
     var category = maps.categories[tx.categoryId] || null;
     var isTransfer = tx.type === 'transfer';
     var isIncome = tx.type === 'income';
@@ -32397,42 +34160,76 @@ textarea::selection {
     var iconName = isTransfer ? 'transfer' : (category && category.icon ? category.icon : 'ellipsis');
     var tone = isTransfer ? 'tint' : (maps.tones[tx.categoryId] || 'cat-12');
     var amountCents = Math.abs(Number(tx.amountCents) || 0);
+    var ids = photoIdsOf(tx);
+    var shortAccount = accountNameText(tx, maps.accounts);
+    var note = String(tx.note || '').trim();
+    var direction = isTransfer ? '转账' : (isIncome ? '收入' : '支出');
+    var k = kit();
+    var ariaHead = title + '，' + accountText(tx, maps.accounts) + '，' + direction + ' ' +
+      fmt(amountCents) + '，查看详情';
+    var aria = k && typeof k.photoAriaLabel === 'function'
+      ? k.photoAriaLabel(ariaHead, ids.length)
+      : ariaHead + (ids.length ? '，含 ' + ids.length + ' 张照片' : '');
+    var detailHref = '#/ledger?detail=' + encodeURIComponent(String(tx.id || ''));
+    var media = buildMedia(ids, iconName, tone);
 
-    var side = el('span', { className: 's-home-row__side' });
-    /* 金额黑粗：支出带 −、收入带 +、转账灰，不再用红绿区分首页流水 */
-    side.appendChild(moneyNode(isTransfer ? amountCents : (isIncome ? amountCents : -amountCents), {
+    var side = el('span', { className: 'c-row__value s-home-row__side' });
+    /* 金额一律深色 + 正负号，不再按收支着色 */
+    var amount = moneyNode(isTransfer ? amountCents : (isIncome ? amountCents : -amountCents), {
       size: 'md',
-      tone: isTransfer ? 'transfer' : '',
       sign: isIncome
-    }));
+    });
+    amount.classList.add('s-home-row__amount');
+    side.appendChild(amount);
     side.appendChild(el('span', {
       className: 's-home-row__time',
       text: String(tx.time || '') || '全天'
     }));
 
-    var k = kit();
-    var row;
-    if (k) {
+    var row = null;
+    if (k && typeof k.row === 'function') {
+      /* 行工厂统一产出 c-row 三列（媒体 / 文字 / 金额），明细页共用同一结构 */
       row = k.row({
-        href: '#/add?id=' + encodeURIComponent(String(tx.id || '')),
-        icon: ICON_ALIAS[iconName] || iconName,
-        tone: tone,
-        iconSize: 19,
+        href: detailHref,
+        media: media.cell,
         title: title,
-        sub: accountText(tx, maps.accounts),
+        sub: shortAccount,
         trailing: side,
-        ariaLabel: title + ' ' + (isTransfer ? '' : (isIncome ? '收入 ' : '支出 ')) +
-          fmt(amountCents) + '，点击编辑'
+        ariaLabel: aria
       });
-      row.classList.add('c-row--two-line');
+      var main = row.querySelector ? row.querySelector('.c-row__main') : null;
+      if (main && note) {
+        main.appendChild(el('span', { className: 'c-row__note', text: note }));
+      }
     } else {
-      row = el('a', { className: 'c-row', href: '#/add?id=' + encodeURIComponent(String(tx.id || '')) });
-      row.appendChild(el('span', { className: 'c-row__title', text: title }));
+      row = el('a', { className: 'c-row c-row--tappable' });
+      row.setAttribute('href', detailHref);
+      row.appendChild(media.cell);
+      var plainMain = el('span', { className: 'c-row__main' });
+      plainMain.appendChild(el('span', { className: 'c-row__title', text: title }));
+      if (shortAccount) {
+        plainMain.appendChild(el('span', { className: 'c-row__sub', text: shortAccount }));
+      }
+      if (note) {
+        plainMain.appendChild(el('span', { className: 'c-row__note', text: note }));
+      }
+      row.appendChild(plainMain);
+      row.appendChild(side);
     }
+    row.classList.add('s-home-row');
+    if (!row.getAttribute('aria-label')) { row.setAttribute('aria-label', aria); }
+    /* 链接原生支持 Enter；Space 在部分浏览器不触发 click，这里补齐 */
+    row.addEventListener('keydown', function (event) {
+      if (event.key !== ' ' && event.key !== 'Spacebar') { return; }
+      event.preventDefault();
+      if (typeof row.click === 'function') { row.click(); }
+    });
+
+    if (media.target) { photoTargets.push(media.target); }
     return row;
   }
 
-  function buildRecent(list, maps) {
+  function buildRecent(list, maps, photoTargets) {
     var k = kit();
     var section = k
       ? k.section({ title: '最近流水', action: { label: '查看全部', href: '#/ledger' } })
@@ -32485,7 +34282,7 @@ textarea::selection {
 
       var group = el('div', { className: 'c-group' });
       for (var r = 0; r < day.items.length; r += 1) {
-        group.appendChild(buildRow(day.items[r], maps));
+        group.appendChild(buildRow(day.items[r], maps, photoTargets));
       }
       dayBox.appendChild(group);
       section.appendChild(dayBox);
@@ -32493,9 +34290,81 @@ textarea::selection {
     return section;
   }
 
+  /* ---------------- 下拉刷新 ---------------- */
+
+  function bindPullRefresh(scroller, pull) {
+    var app = appApi();
+    if (!scroller || !pull || !app || typeof app.refresh !== 'function') { return; }
+
+    var startY = 0;
+    var tracking = false;
+    var distance = 0;
+    var ready = false;
+    var busy = false;
+
+    function setVisual(height, text) {
+      pull.style.height = height + 'px';
+      pull.textContent = text;
+    }
+
+    scroller.addEventListener('touchstart', function (event) {
+      if (busy || scroller.scrollTop > 0) { return; }
+      var touch = event.touches && event.touches[0];
+      if (!touch) { return; }
+      startY = touch.clientY;
+      tracking = true;
+      distance = 0;
+      ready = false;
+    }, { passive: true });
+
+    scroller.addEventListener('touchmove', function (event) {
+      if (!tracking || busy) { return; }
+      var touch = event.touches && event.touches[0];
+      if (!touch) { return; }
+      distance = touch.clientY - startY;
+      if (distance <= 0 || scroller.scrollTop > 0) {
+        ready = false;
+        setVisual(0, '下拉刷新');
+        if (scroller.scrollTop > 0) { tracking = false; }
+        return;
+      }
+      var visual = Math.min(PULL_VISUAL_MAX, Math.round(distance * 0.7));
+      ready = visual >= PULL_READY;
+      setVisual(visual, ready ? '松开刷新' : '下拉刷新');
+    }, { passive: true });
+
+    scroller.addEventListener('touchend', function () {
+      if (!tracking || busy) { return; }
+      tracking = false;
+      if (!ready) {
+        setVisual(0, '下拉刷新');
+        return;
+      }
+      busy = true;
+      setVisual(PULL_READY, '正在刷新…');
+      var result = null;
+      try { result = app.refresh(); } catch (error) { result = null; }
+      var finish = function () {
+        busy = false;
+        setVisual(0, '下拉刷新');
+        toast('已刷新', { type: 'success' });
+      };
+      if (result && typeof result.then === 'function') { result.then(finish, finish); }
+      else { global.setTimeout(finish, 360); }
+    }, { passive: true });
+
+    scroller.addEventListener('touchcancel', function () {
+      tracking = false;
+      ready = false;
+      if (!busy) { setVisual(0, '下拉刷新'); }
+    }, { passive: true });
+  }
+
   /* ---------------- 屏幕 ---------------- */
 
   function render(root, ctx) {
+    renderSeq += 1;
+    var token = renderSeq;
     root = root || document.createElement('div');
     var db = readDb(ctx);
     var today = todayStr();
@@ -32508,19 +34377,19 @@ textarea::selection {
       if (books[i] && books[i].id === bookId) { book = books[i]; break; }
     }
     if (!book && books.length) { book = books[0] || null; }
-    var bookName = book && book.name ? String(book.name) : '日常账本';
 
     var scope = bookId ? { bookId: bookId } : undefined;
+    /* 月汇总唯一调用点：头部三列与后续所有区块共用这一份结果 */
     var summary = stats && typeof stats.monthSummary === 'function'
       ? stats.monthSummary(db, month, scope)
       : { incomeCents: 0, expenseCents: 0, netCents: 0, count: 0 };
+    if (!summary || typeof summary !== 'object') {
+      summary = { incomeCents: 0, expenseCents: 0, netCents: 0, count: 0 };
+    }
     var budget = stats && typeof stats.budgetProgress === 'function'
       ? stats.budgetProgress(db, month, scope)
       : { totalCents: 0, spentCents: 0, remainingCents: 0, pct: 0, state: 'none' };
     if (budget && budget.month === undefined) { budget.month = month; }
-    var mom = stats && typeof stats.mom === 'function'
-      ? stats.mom(db, month, scope)
-      : null;
 
     var due = recurrence && typeof recurrence.dueInstances === 'function'
       ? recurrence.dueInstances(db, today) || []
@@ -32540,16 +34409,19 @@ textarea::selection {
       tones: k ? k.categoryTones(categories) : {}
     };
 
-    /* M8：标题副标题只保留月份（账本名在账本条上） */
-    syncTitle(ctx, '概览', monthLabel(month));
+    /* 头部整块属于本屏（immersive），直接挂在屏根上以便黄底通栏；
+       其余内容进 s-home-inner 吃页面左右留白。 */
+    root.setAttribute('data-home-view', '1');
+    var pull = el('div', { className: 's-home-pull', text: '下拉刷新' });
+    pull.style.height = '0px';
+    root.appendChild(pull);
+    var head = buildHead(book, month, summary);
+    root.appendChild(head);
 
     var inner = el('div', { className: 's-home-inner' });
 
-    var titleBar = buildTitle(book, month);
-    inner.appendChild(titleBar);
-
-    var heroCard = buildHero(summary, mom);
-    inner.appendChild(heroCard);
+    var quickCard = buildQuick();
+    inner.appendChild(quickCard);
 
     var budgetCard = buildBudget(budget, today);
     if (budgetCard) { inner.appendChild(budgetCard); }
@@ -32557,15 +34429,27 @@ textarea::selection {
     var dueCard = buildDue(due);
     if (dueCard) { inner.appendChild(dueCard); }
 
-    var recentSection = buildRecent(recent, maps);
+    var photoTargets = [];
+    var recentSection = buildRecent(recent, maps, photoTargets);
     inner.appendChild(recentSection);
 
-    /* D8：纯本地应用无外部数据源，下拉刷新与「右下角 +」的错误提示删除；
-       空态已由 buildRecent 的 c-empty 承担（含「记下第一笔」CTA）。 */
     root.appendChild(inner);
 
+    /* 右下角 FAB：与静态 TabBar 中央「+」同为目标 #/add，键盘可直接聚焦 */
+    var fab = el('a', { className: 's-home-fab' });
+    fab.setAttribute('href', '#/add');
+    fab.setAttribute('aria-label', '记一笔');
+    fab.appendChild(iconNode('plus', 24));
+    root.appendChild(fab);
+
+    var scroller = root.closest ? root.closest('.app-screen') : null;
+    bindPullRefresh(scroller, pull);
+
+    /* 文字与金额已可用，照片后到再填充媒体区 */
+    loadPhotos(photoTargets, root, token);
+
     if (firstPaint && k && !reducedMotion()) {
-      k.stagger([titleBar, heroCard, budgetCard, recentSection], { step: 34 });
+      k.stagger([quickCard, budgetCard, dueCard, recentSection], { step: 34 });
       firstPaint = false;
     }
 
@@ -32575,14 +34459,14 @@ textarea::selection {
   }
 
   var screen = {
-    title: '概览',
-    subtitle: '当前账本',
+    title: '首页',
+    immersive: true,
+    subtitle: '',
     render: render
   };
 
   XZB.screens.register('home', screen);
 }(window));
-
 </script>
   <script>
 /* 小账本 2.0 · js/screens/add.js · owner: 前端#1（T11 记一笔）
@@ -33242,11 +35126,16 @@ textarea::selection {
       return chip;
     }
     var accChip = propChip('s-add-props__chip', '选择账户');
+    /* 转账方向纠错：一句话解析可能把转出/转入判反，这枚按钮一键交换（仅转账时出现） */
+    var swapBtn = button('s-add-swap', '', '交换转出与转入账户');
+    swapBtn.appendChild(iconNode('transfer', 20));
+    swapBtn.hidden = true;
     var toAccChip = propChip('s-add-props__chip', '选择转入账户');
     toAccChip.hidden = true;
     var dateChip = propChip('s-add-props__chip', '选择日期');
     var noteChip = propChip('s-add-props__chip s-add-props__chip--note', '添加备注');
     propsRow.appendChild(accChip);
+    propsRow.appendChild(swapBtn);
     propsRow.appendChild(toAccChip);
     propsRow.appendChild(dateChip);
     propsRow.appendChild(noteChip);
@@ -33301,6 +35190,15 @@ textarea::selection {
         return isFinite(n) ? n : 0;
       } catch (error) {
         return 0;
+      }
+    }
+
+    /* 读主题恒定 token 的字符串值（分类色要写回 DB，必须是固定色值） */
+    function readTokenText(name) {
+      try {
+        return String(global.getComputedStyle(global.document.documentElement).getPropertyValue(name) || '').trim();
+      } catch (error) {
+        return '';
       }
     }
 
@@ -33540,6 +35438,7 @@ textarea::selection {
         ? '转出 ' + (account ? account.name : '选账户')
         : (account ? account.name : '选账户'));
       toAccChip.hidden = !isTransfer;
+      swapBtn.hidden = !isTransfer;
       if (isTransfer) {
         var to = accountById(state.toAccountId);
         setChipLabel(toAccChip, '转入 ' + (to ? to.name : '选账户'));
@@ -33578,6 +35477,19 @@ textarea::selection {
         return;
       }
       state.toAccountId = id;
+      syncProps();
+      syncAmount();
+    }
+
+    /* 交换转出/转入：一句话解析可能判反方向，用户一键纠正（README 记为用户可见纠错路径） */
+    function swapAccounts() {
+      if (state.type !== 'transfer') return;
+      var temp = state.accountId;
+      state.accountId = state.toAccountId;
+      state.toAccountId = temp;
+      swapBtn.classList.remove('is-swap');
+      void swapBtn.offsetWidth;
+      swapBtn.classList.add('is-swap');
       syncProps();
       syncAmount();
     }
@@ -33872,8 +35784,27 @@ textarea::selection {
         return cursor.year + '-' + (cursor.month < 10 ? '0' + cursor.month : String(cursor.month)) + '-01';
       }
 
+      /* 日期快捷档位：今天/昨天/前天。sheet 页脚不再重复同样三个按钮，快捷入口只有一个 */
+      var QUICK_DATES = [['今天', 0], ['昨天', -1], ['前天', -2]];
+
       function paint() {
         clear(holder);
+        var quick = make('div', 's-add-date__chips');
+        quick.setAttribute('role', 'group');
+        quick.setAttribute('aria-label', '日期快捷');
+        for (var qi = 0; qi < QUICK_DATES.length; qi += 1) {
+          var quickDate = dates.addDays(today, QUICK_DATES[qi][1]);
+          var quickChip = button('s-add-date__chip', QUICK_DATES[qi][0]);
+          quickChip.setAttribute('data-offset', String(QUICK_DATES[qi][1]));
+          if (quickDate === state.date) {
+            quickChip.classList.add('is-active');
+            quickChip.setAttribute('aria-pressed', 'true');
+          } else {
+            quickChip.setAttribute('aria-pressed', 'false');
+          }
+          quick.appendChild(quickChip);
+        }
+        holder.appendChild(quick);
         var head = make('div', 'c-cal__header');
         var prev = button('c-cal__nav', '', '上个月');
         prev.setAttribute('data-nav', '-1');
@@ -33937,6 +35868,12 @@ textarea::selection {
           paint();
           return;
         }
+        var quickChip = target.closest('.s-add-date__chip');
+        if (quickChip) {
+          setDate(dates.addDays(today, Number(quickChip.getAttribute('data-offset')) || 0));
+          sheet.close('pick');
+          return;
+        }
         var day = target.closest('.c-cal__day');
         if (day && !day.disabled) {
           var picked = day.getAttribute('data-date');
@@ -33949,9 +35886,7 @@ textarea::selection {
         title: '选择日期',
         content: holder,
         actions: [
-          { label: '前天', kind: 'default', onClick: function () { setDate(dates.addDays(today, -2)); } },
-          { label: '昨天', kind: 'default', onClick: function () { setDate(dates.addDays(today, -1)); } },
-          { label: '今天', kind: 'default', onClick: function () { setDate(today); } }
+          { label: '取消', kind: 'default' }
         ]
       });
     }
@@ -33967,8 +35902,16 @@ textarea::selection {
      * 2.6：图标候选换成专属库（8 组 × 12 枚，与系统分类零交集），
      * 选择器与设置页共用 XZB.ui.iconPicker；颜色也给用户自己选，不再自动轮换。
      */
-    var CAT_PALETTE = ['#C2410C', '#1D4ED8', '#BE185D', '#0F766E', '#7C3AED', '#B91C1C',
-      '#0369A1', '#A16207', '#0E7490', '#15803D', '#4338CA', '#52525B'];
+    /* 分类色写回 DB 必须是固定值（读 --cat-N 会随主题翻转，深色下保存一次就漂色），
+       所以这里只列主题恒定 token 名，色值的单一真源在 tokens.css 的 --cat-raw-1..12 */
+    var CAT_PALETTE = ['--cat-raw-1', '--cat-raw-2', '--cat-raw-3', '--cat-raw-4', '--cat-raw-5', '--cat-raw-6',
+      '--cat-raw-7', '--cat-raw-8', '--cat-raw-9', '--cat-raw-10', '--cat-raw-11', '--cat-raw-12'];
+    /* 色板档位类名：与 add.css 的 .s-add-quick__swatch--N 一一对应，逐字列出，
+       便于「JS 用到的类都在 CSS 里定义」这条静态自检逐名核对 */
+    var TONE_CLASSES = ['s-add-quick__swatch--1', 's-add-quick__swatch--2', 's-add-quick__swatch--3',
+      's-add-quick__swatch--4', 's-add-quick__swatch--5', 's-add-quick__swatch--6',
+      's-add-quick__swatch--7', 's-add-quick__swatch--8', 's-add-quick__swatch--9',
+      's-add-quick__swatch--10', 's-add-quick__swatch--11', 's-add-quick__swatch--12'];
     var TONE_LABELS = ['橙', '蓝', '粉', '青', '紫', '红', '蓝绿', '金', '湖蓝', '绿', '靛', '灰'];
     var RECENT_ICON_PREF = 'recentCategoryIcons';
 
@@ -34007,7 +35950,7 @@ textarea::selection {
         showToast('自定义分类暂时不可用', { type: 'warning' });
         return;
       }
-      var holder = make('div', 's-quick');
+      var holder = make('div', 's-add-quick');
 
       function freshCategories() {
         var source = app && typeof app.db === 'function' ? app.db() : db;
@@ -34022,30 +35965,30 @@ textarea::selection {
           if (all[i] && all[i].system !== true) { customs.push(all[i]); }
         }
         if (!customs.length) {
-          holder.appendChild(make('p', 's-quick__empty',
+          holder.appendChild(make('p', 's-add-quick__empty',
             '还没有自定义分类。建一个（比如「烟钱」「猫粮」），它会一直留在宫格最后，以后直接点它记账。'));
         } else {
-          var list = make('div', 's-quick__list');
+          var list = make('div', 's-add-quick__list');
           for (var j = 0; j < customs.length; j += 1) {
             list.appendChild(customRow(customs[j]));
           }
           holder.appendChild(list);
         }
-        var newBtn = button('c-btn c-btn--primary c-btn--block s-quick__new', '＋ 新建分类');
+        var newBtn = button('c-btn c-btn--primary c-btn--block s-add-quick__new', '＋ 新建分类');
         newBtn.addEventListener('click', function () { paintForm(); });
         holder.appendChild(newBtn);
-        holder.appendChild(make('p', 's-quick__hint', '新建的分类固定排在宫格最后，记账时直接点图标就行。'));
+        holder.appendChild(make('p', 's-add-quick__hint', '新建的分类固定排在宫格最后，记账时直接点图标就行。'));
       }
 
       function customRow(category) {
-        var row = make('div', 's-quick__row');
+        var row = make('div', 's-add-quick__row');
         var tile = make('span', 'c-tile c-tile--lg');
         tile.classList.add('c-tile--cat-' + toneOf(category));
         tile.appendChild(iconNode(category.icon || 'tag', 22));
         row.appendChild(tile);
-        var main = make('span', 's-quick__main');
-        main.appendChild(make('span', 's-quick__name', category.name || '未命名'));
-        main.appendChild(make('span', 's-quick__meta', category.kind === 'income' ? '收入分类' : '支出分类'));
+        var main = make('span', 's-add-quick__main');
+        main.appendChild(make('span', 's-add-quick__name', category.name || '未命名'));
+        main.appendChild(make('span', 's-add-quick__meta', category.kind === 'income' ? '收入分类' : '支出分类'));
         row.appendChild(main);
         var del = button('c-btn c-btn--sm c-btn--danger', '删除');
         del.addEventListener('click', function (event) {
@@ -34099,7 +36042,7 @@ textarea::selection {
         }
         draft.icon = defaultIcon(draft.kind);
 
-        var kindRow = make('div', 's-quick__chips');
+        var kindRow = make('div', 's-add-quick__chips');
         holder.appendChild(kindRow);
         function paintKindChips() {
           clear(kindRow);
@@ -34118,16 +36061,16 @@ textarea::selection {
         }
         paintKindChips();
 
-        holder.appendChild(make('span', 's-quick__label', '名称'));
-        var nameInput = make('input', 's-quick__input');
+        holder.appendChild(make('span', 's-add-quick__label', '名称'));
+        var nameInput = make('input', 's-add-quick__input');
         nameInput.type = 'text';
         nameInput.maxLength = 8;
         nameInput.placeholder = '例如：烟钱、猫粮、奶茶';
         nameInput.setAttribute('enterkeyhint', 'done');
         holder.appendChild(nameInput);
 
-        holder.appendChild(make('span', 's-quick__label', '图标'));
-        var pickerHost = make('div', 's-quick__picker');
+        holder.appendChild(make('span', 's-add-quick__label', '图标'));
+        var pickerHost = make('div', 's-add-quick__picker');
         holder.appendChild(pickerHost);
         var pickerCtl = null;
         function remountPicker() {
@@ -34144,16 +36087,16 @@ textarea::selection {
         }
         remountPicker();
 
-        holder.appendChild(make('span', 's-quick__label', '颜色'));
-        var swatchRow = make('div', 's-quick__swatches');
+        holder.appendChild(make('span', 's-add-quick__label', '颜色'));
+        var swatchRow = make('div', 's-add-quick__swatches');
         holder.appendChild(swatchRow);
         function paintSwatches() {
           clear(swatchRow);
           for (var i = 0; i < CAT_PALETTE.length; i += 1) {
             (function (index) {
               var tone = index + 1;
-              var dot = button('s-quick__swatch' + (draft.tone === tone ? ' is-active' : ''));
-              dot.classList.add('s-quick__swatch--' + tone);
+              var dot = button('s-add-quick__swatch' + (draft.tone === tone ? ' is-active' : ''));
+              if (TONE_CLASSES[index]) dot.classList.add(TONE_CLASSES[index]);
               dot.setAttribute('aria-label', '颜色 ' + (TONE_LABELS[index] || tone));
               dot.setAttribute('aria-pressed', draft.tone === tone ? 'true' : 'false');
               dot.addEventListener('click', function () {
@@ -34166,7 +36109,7 @@ textarea::selection {
         }
         paintSwatches();
 
-        var saveBtn = button('c-btn c-btn--primary c-btn--block s-quick__new', '创建分类');
+        var saveBtn = button('c-btn c-btn--primary c-btn--block s-add-quick__new', '创建分类');
         saveBtn.addEventListener('click', createCategory);
         holder.appendChild(saveBtn);
 
@@ -34195,7 +36138,7 @@ textarea::selection {
               kind: draft.kind,
               name: name,
               icon: icon,
-              color: CAT_PALETTE[draft.tone - 1] || CAT_PALETTE[0],
+              color: readTokenText(CAT_PALETTE[draft.tone - 1]) || readTokenText(CAT_PALETTE[0]),
               sort: maxSort + 10,
               hidden: false,
               system: false,
@@ -34786,25 +36729,28 @@ textarea::selection {
         limit: photoLimit()
       });
     }
-    /* 预览条用**缩略图** URL。键名带 '#t' 后缀：同一张照片的「缩略图」与「原图」必须是
-       两个不同的 blob URL 键。若两者共用 item.id，bloburl 的「同一 id 恒返回同一 URL」
+    /* 预览条用**缩略图** URL。键必须是 `${photoId}:thumb`：同一张照片的「缩略图」与「原图」
+       是两个不同的 blob URL 键。若两者共用 item.id，bloburl 的「同一 id 恒返回同一 URL」
        会让查看器拿到预览条先注册的那张 320px 缩略图 —— 点开大图就是糊的小图（真机实测的
        「点击照片不是全屏打开 / 画质太低」根因）。add.js 从不单独 revoke，路由销毁 releaseAll 全清。 */
+    /* 键只由 ui/blob-url.js 的 thumbKey / fullKey 构造（本文件不定义后缀表，也不拿裸 id 当键）。 */
     function photoUrlOf(item) {
       var bloburl = ui('bloburl');
       if (!item || !isPhotoId(item.id)) return '';
       if (!bloburl || typeof bloburl.urlOf !== 'function') return '';
+      if (typeof bloburl.thumbKey !== 'function') return '';
       var blob = item.thumbBlob || item.fullBlob;
-      return blob ? bloburl.urlOf(item.id + '#t', blob) : '';
+      return blob ? bloburl.urlOf(bloburl.thumbKey(item.id), blob) : '';
     }
-    /* 全屏查看器用**原图** URL（键 '#f'）：keepOriginal 下 fullBlob === 手机相册原始文件，
+    /* 全屏查看器用**原图** URL（`${photoId}:full`）：keepOriginal 下 fullBlob === 手机相册原始文件，
        零重编码 ⇒ 放到全屏也是相册原画质，绝不用缩略图放大冒充。 */
     function photoFullUrlOf(item) {
       var bloburl = ui('bloburl');
       if (!item || !isPhotoId(item.id)) return '';
       if (!bloburl || typeof bloburl.urlOf !== 'function') return '';
+      if (typeof bloburl.fullKey !== 'function') return '';
       var blob = item.fullBlob || item.thumbBlob;
-      return blob ? bloburl.urlOf(item.id + '#f', blob) : '';
+      return blob ? bloburl.urlOf(bloburl.fullKey(item.id), blob) : '';
     }
     function fmtPhotoBytes(bytes) {
       var photos = photoStore();
@@ -35717,6 +37663,7 @@ textarea::selection {
     /* 属性横滑栏：各 chip 弹对应 sheet */
     accChip.addEventListener('click', function () { openAccountSheet(false); });
     toAccChip.addEventListener('click', function () { openAccountSheet(true); });
+    swapBtn.addEventListener('click', swapAccounts);
     dateChip.addEventListener('click', openCalendar);
     noteChip.addEventListener('click', openNoteSheet);
 
@@ -36039,7 +37986,7 @@ textarea::selection {
   var TITLE_MAX = 24;
   /* F31 照片：张数上限真源 = schema.LIMITS.txPhotos（2.13.0 起「不限张数」⇒ 999，只是校验安全上界）。
      本屏**不再**按 3 截断：超过 3 张也要全部渲染、全部进查看器。
-     角标图标用 icons.js:63 的 camera（icons.js:975 有 photo→camera 别名）。 */
+     2.14 起列表行直接展示 64px 缩略图（角标只负责 N>1 的数字），不再是「camera 小图标代表有照片」。 */
   var PHOTO_MAX_FALLBACK = 999;
   function photoMaxPerTx() {
     var Core = XZB && XZB.Core ? XZB.Core : null;
@@ -36047,8 +37994,6 @@ textarea::selection {
     var value = limits ? limits.txPhotos : null;
     return Number.isInteger(value) && value > 0 ? value : PHOTO_MAX_FALLBACK;
   }
-  var PHOTO_FLAG_ICON = 'camera';
-  var PHOTO_FLAG_ICON_SIZE = 11;
   var PHOTO_ID_MAX = 64;
   var ICON_ALIAS = {
     game: 'fun',
@@ -36225,8 +38170,18 @@ textarea::selection {
 
   /* --- 纯函数（无 DOM、无 IO；tools/_t20_selfcheck.cjs 经 screen.photoTestKit 取用） --- */
 
-  /* 归一化 tx.photoIds：非数组 → []；去重（不限张数，仅受 schema 校验上界保护）、丢弃非字符串/空串/超长项 */
+  function kitApi() {
+    return global.XZB && XZB.ui && XZB.ui.kit ? XZB.ui.kit : null;
+  }
+
+  /* 归一化 tx.photoIds：非数组 → []；去重、保首现顺序、丢弃非字符串/空串/超长项。
+   * 唯一的纯函数实现已落在 XZB.ui.kit（CONTRACT §缩略图选择规则）；本屏只做薄委托，
+   * 老包缺 kit 时退回本地同语义实现，保证不白屏。 */
   function photoIdList(tx) {
+    var kit = kitApi();
+    if (kit && typeof kit.photoIdList === 'function') {
+      try { return kit.photoIdList(tx); } catch (error) { /* 坏入参：走本地兜底 */ }
+    }
     var raw = tx && tx.photoIds;
     if (!Array.isArray(raw) || !raw.length) { return []; }
     var max = photoMaxPerTx();
@@ -36241,35 +38196,64 @@ textarea::selection {
     return out;
   }
 
-  /* 角标决策（UI.md §2.4）：无图 → null（该行不渲染任何新节点，SPEC A14 逐字节一致）；
-   * 有图 → 张数；N=1 只出图标，N>1 才出数字（UI.md：1 张 [📷] / 2 张 [📷2]） */
+  /* 角标决策（UI.md §2.4 / CONTRACT §数量角标规则）：N=0 → null；N>1 才出数字（数字＝总数）。
+   * 纯函数来自 kit（含 99+ 与真实张数的 aria-label），老包缺件时退回本地版本。 */
   function badgePlan(tx) {
+    var kit = kitApi();
+    if (kit && typeof kit.badgePlan === 'function') {
+      try {
+        var plan = kit.badgePlan(tx);
+        if (plan) { return plan; }
+        return null;
+      } catch (error) { /* 走本地兜底 */ }
+    }
     var count = photoIdList(tx).length;
     if (!count) { return null; }
-    return { count: count, showCount: count > 1, label: '含 ' + count + ' 张照片' };
+    return { count: count, showCount: count > 1, text: count > 99 ? '99+' : String(count), label: '含 ' + count + ' 张照片' };
   }
 
-  /* 记录按位对齐：photoGetMany 的 records 与入参同序同长、缺失元素是 null（PLAN §2）
-   * ⇒ 逐位判空跳过即可，绝不抛错；整批缺失 → 返回 []（调用方按「无图」降级） */
+  /* 记录按位对齐：photoGetMany 的 records 与入参同序同长、缺失元素是 null（CONTRACT）。
+   * kit.photoSlots 返回**同序同长**的槽位数组（不可读位是 null，绝不 filter 洗位）；
+   * 老包缺件时本地实现也保持同长，调用方必须逐位判空。 */
   function photoSlots(ids, records) {
-    var list = Array.isArray(ids) ? ids : [];
-    var recs = Array.isArray(records) ? records : [];
+    /* 兼容 CONTRACT 的对象式调用 photoSlots({ ids, records }) 与位置式 (ids, records)；
+     * 对象式不能先被归一成 []，否则 kit 拿到空 ids 直接返回空数组。 */
+    var pack = ids && !Array.isArray(ids) && typeof ids === 'object' ? ids : null;
+    var list = pack ? (Array.isArray(pack.ids) ? pack.ids : []) : (Array.isArray(ids) ? ids : []);
+    var recs = pack ? pack.records : records;
+    var kit = kitApi();
+    if (kit && typeof kit.photoSlots === 'function') {
+      try { return kit.photoSlots(list, recs); } catch (error) { /* 走本地兜底 */ }
+    }
     var out = [];
     var max = photoMaxPerTx();
-    for (var i = 0; i < list.length && out.length < max; i += 1) {
-      var rec = recs[i];
-      if (!rec || typeof rec !== 'object') { continue; }        /* null 位：降级 */
-      var blob = rec.thumb || rec.blob || null;                 /* 缩略图优先，退原件（PLAN §3 步骤 12） */
-      if (!blob) { continue; }                                  /* 记录在但没图：同样按无图 */
+    for (var i = 0; i < list.length && i < max; i += 1) {
+      var rec = recs && recs[i];
+      if (!rec || typeof rec !== 'object') { out.push(null); continue; }
+      var thumb = rec.thumb && typeof rec.thumb === 'object' ? rec.thumb : null;
+      var full = rec.blob && typeof rec.blob === 'object' ? rec.blob : null;
+      var blob = thumb || full;
+      if (!blob) { out.push(null); continue; }
       out.push({
-        id: String(rec.id || list[i] || ''),
+        id: String(list[i]),
         blob: blob,
-        /* 大图必须用原尺寸压缩件（rec.blob），不能用列表缩略图（rec.thumb）放大冒充 */
-        full: rec.blob || blob,
+        thumb: thumb,
+        full: full || thumb,
         compressed: rec.compressed !== false,
-        bytes: Number(rec.bytes) || 0,
+        bytes: typeof rec.bytes === 'number' ? rec.bytes : undefined,
         index: i
       });
+    }
+    return out;
+  }
+
+  /* 可读槽（跳 null）——只给查看器/详情这类「按可读张数顺序」的场景用；
+   * 列表选择第一张可读时必须用上面的同长数组，靠索引找。 */
+  function readableSlots(slots) {
+    var out = [];
+    if (!Array.isArray(slots)) { return out; }
+    for (var i = 0; i < slots.length; i += 1) {
+      if (slots[i]) { out.push(slots[i]); }
     }
     return out;
   }
@@ -36290,39 +38274,94 @@ textarea::selection {
     if (key && photoKeys.indexOf(key) < 0) { photoKeys.push(key); }
   }
 
-  /* 释放时机：列表重绘后 / 详情关闭 / 查看器关闭 / 路由重入。
-   * 详情或查看器仍打开时一律推迟 —— 它们可能正显示同一批 URL，提前 revoke 会白图（PLAN §9.4.1）。 */
+  /* 键词表唯一入口：${photoId}:thumb / ${photoId}:full（CONTRACT §Blob URL key 词表）。
+   * 全部经 XZB.UI.bloburl 纯字符串函数构造；老包缺函数时返回 ''（空图，不抛错）。 */
+  function photoKeyOf(photoId, variant) {
+    var id = photoId === undefined || photoId === null ? '' : String(photoId);
+    if (!id) { return ''; }
+    var bloburl = blobUrlApi();
+    if (bloburl && typeof bloburl.key === 'function') {
+      try {
+        var made = bloburl.key(id, variant);
+        return made ? String(made) : '';
+      } catch (error) { return ''; }
+    }
+    return '';
+  }
+
+  function thumbKeyOf(photoId) {
+    var bloburl = blobUrlApi();
+    if (bloburl && typeof bloburl.thumbKey === 'function') {
+      try {
+        var key = bloburl.thumbKey(photoId);
+        return key ? String(key) : '';
+      } catch (error) { /* 缺件：空图 */ }
+    }
+    return photoKeyOf(photoId, 'thumb');
+  }
+
+  function fullKeyOf(photoId) {
+    var bloburl = blobUrlApi();
+    if (bloburl && typeof bloburl.fullKey === 'function') {
+      try {
+        var key = bloburl.fullKey(photoId);
+        return key ? String(key) : '';
+      } catch (error) { /* 缺件：空图 */ }
+    }
+    return photoKeyOf(photoId, 'full');
+  }
+
+  /* 当前文档里仍被引用的键（列表行媒体区 + 详情缩略图都写了 data-photo-key）。
+   * flush 只扫描**已上屏**的 DOM，因此必须等 swapDom 之后调用，避免把新页面的键误判成孤儿。 */
+  function livePhotoKeySet() {
+    var set = Object.create(null);
+    var doc = global.document;
+    if (!doc || typeof doc.querySelectorAll !== 'function') { return set; }
+    var nodes = doc.querySelectorAll('[data-photo-key]');
+    for (var i = 0; i < nodes.length; i += 1) {
+      var key = nodes[i] && typeof nodes[i].getAttribute === 'function'
+        ? nodes[i].getAttribute('data-photo-key')
+        : '';
+      if (key) { set[key] = true; }
+    }
+    return set;
+  }
+
+  /* 释放时机：列表重绘后（DOM 已上屏）/ 详情关闭 / 查看器关闭。
+   * 只释放「本屏创建 + 当前 DOM 已无人引用」的键；详情或查看器打开时一律推迟。
+   * 禁止组件卸载 release、禁止引用计数归零 revoke、禁止 releaseAll（路由 teardown 除外）。 */
   function flushPhotoUrls() {
     if (!photoKeys.length) { return 0; }
     if (photoDetailOpen || photoViewerOpen) { return 0; }
+    var live = livePhotoKeySet();
     var bloburl = blobUrlApi();
+    var kept = [];
     var released = 0;
-    while (photoKeys.length) {
-      var key = photoKeys.pop();
+    for (var i = 0; i < photoKeys.length; i += 1) {
+      var key = photoKeys[i];
+      if (live[key]) { kept.push(key); continue; }
       if (bloburl && typeof bloburl.release === 'function') {
-        /* 契约方法：bloburl.release(key)（PLAN §2）；只放本屏自己建过的键，不做 releaseAll */
         try { bloburl.release(key); } catch (error) { /* 释放失败不阻塞界面 */ }
       }
       released += 1;
     }
+    photoKeys = kept;
     return released;
   }
 
-  /* 取 URL：一律经 XZB.UI.bloburl.urlOf；缺件 / 抛错 → 返回 ''（调用方按无图渲染，不抛错）。
-   * 冻结签名是位置式 urlOf(id, blob)（id 在前）；同时兼容 urlOf({id, blob}) 的对象写法，二选一都试。 */
+  /* 取 URL：一律经 XZB.UI.bloburl.urlOf(key, blob)，key 必须是本屏词表内的 :thumb/:full。
+   * 缺件 / 非法键 / 抛错 → 返回 ''（调用方按无图渲染，不抛错、不自造第二套键）。 */
   function photoUrlOf(key, blob) {
     var bloburl = blobUrlApi();
     if (!bloburl || typeof bloburl.urlOf !== 'function' || !key) { return ''; }
+    if (!/(:thumb|:full)$/.test(String(key))) { return ''; }
     var hadBefore = typeof bloburl.has === 'function' ? bloburl.has(key) === true : false;
     var url = '';
     try {
-      url = bloburl.urlOf(key, blob);
+      url = bloburl.urlOf(String(key), blob);
     } catch (error) { url = ''; }
-    if (!url) {
-      try { url = bloburl.urlOf({ id: key, blob: blob }); } catch (error2) { url = ''; }
-    }
     url = url ? String(url) : '';
-    if (ownsUrl(hadBefore, url)) { notePhotoKey(key); }
+    if (ownsUrl(hadBefore, url)) { notePhotoKey(String(key)); }
     return url;
   }
 
@@ -36357,6 +38396,8 @@ textarea::selection {
       var slots = photoSlots(list, records);
       var items = [];
       for (var i = 0; i < slots.length; i += 1) {
+        /* 同序同长数组：缺失位是 null，逐位跳过，绝不把 null 当记录用 */
+        if (!slots[i]) { continue; }
         /* 大图查看器**自己**持有 URL（photo-viewer.js 的 PhotoRef 形态：item.blob ⇒ urlOf 并记入 owned）。
            这里只传 blob、**不传 url**：否则本屏先 urlOf 注册 ⇒ 查看器判定 existed=true 不接管所有权
            ⇒ 本屏 flushPhotoUrls 一跑就把查看器正在显示的 URL 回收 ⇒ 图变白（真机实测 ERR_FILE_NOT_FOUND）。
@@ -36369,7 +38410,15 @@ textarea::selection {
         toast(photoErrorText(), { type: 'danger' });
         return;
       }
-      var start = Number(index) || 0;
+      /* 从被点的那张开始：二次读取若有缺失位，下标会压缩，必须按 photoId 重新定位 */
+      var wantedIndex = Math.max(0, Number(index) || 0);
+      var wantedId = list[wantedIndex] !== undefined ? String(list[wantedIndex]) : '';
+      var start = 0;
+      if (wantedId) {
+        for (var s = 0; s < items.length; s += 1) {
+          if (String(items[s].id) === wantedId) { start = s; break; }
+        }
+      }
       if (start < 0 || start >= items.length) { start = 0; }
       photoViewerOpen = true;
       try {
@@ -36390,28 +38439,39 @@ textarea::selection {
     });
   }
 
-  /* --- 详情面板照片区（UI.md §2.5.1：文本行 + 缩略图行；无图时两块都不渲染） --- */
+  /* --- 详情面板照片区（UI.md §2.5.1 / CONTRACT §三态状态机） --- */
 
   function dropDetailPhotoArea(row, grid) {
     if (grid && grid.parentNode) { grid.parentNode.removeChild(grid); }
     if (row && row.parentNode) { row.parentNode.removeChild(row); }
   }
 
+  /* 详情缩略图与列表共用同一个 :thumb 键（CONTRACT §Blob URL key 词表）；
+   * thumb 缺失时退 rec.blob，此时必须走 :full，不能把原图挂到 :thumb 名下。 */
   function buildDetailPhoto(st, tx, ids, slot, index, total) {
-    /* 缩略图必须与「大图」用**两条不同的注册键**（2.13.0 真机实测的坑）：
-     * blob-url.js 的 urlOf 对同一 id **恒返回同一个 URL**，已缓存时忽略新 blob ——
-     * 这里若用裸 slot.id 注册缩略图，查看器拿 rec.blob（原件）去 urlOf(slot.id, 原件) 只会
-     * 拿回这个缩略图 URL ⇒ 点开大图看到的还是 320 缩略图（真机 D5/D6 复现）。
-     * 于是缩略图走 id + '#t'，把裸 id 留给查看器的原图（与 add.js 的 #t / #f 分键同约定）。 */
-    var url = photoUrlOf(slot.id + '#t', slot.blob);
+    var variant = slot.thumb ? 'thumb' : 'full';
+    var key = variant === 'thumb' ? thumbKeyOf(slot.id) : fullKeyOf(slot.id);
+    var url = key ? photoUrlOf(key, slot.blob) : '';
     var btn = el('button', {
       className: 's-ledger-detail__photo',
       type: 'button',
       'aria-label': '查看照片 ' + (index + 1) + '，共 ' + total + ' 张'
     });
+    if (key) { btn.setAttribute('data-photo-key', key); }
+    if (key) { btn.setAttribute('data-photo-id', String(slot.id)); }
     if (url) {
       /* alt="" 由 aria-label 承载信息（UI.md §7 第 12 条）；src 只来自 blob 注册表，不拼任何用户数据 */
-      btn.appendChild(el('img', { alt: '', src: url, draggable: 'false' }));
+      var img = el('img', { alt: '', src: url, draggable: 'false' });
+      img.addEventListener('error', function () {
+        /* 单张破图：移除 img，保留按钮其余语义；不重排、不自动重试、不拖垮其它照片 */
+        if (img.parentNode === btn) { btn.removeChild(img); }
+        btn.setAttribute('data-photo-error', '1');
+        btn.setAttribute('aria-label', '照片不可用');
+      });
+      btn.appendChild(img);
+    } else {
+      btn.setAttribute('data-photo-error', '1');
+      btn.setAttribute('aria-label', '照片不可用');
     }
     btn.addEventListener('click', function (event) {
       event.preventDefault();
@@ -36421,46 +38481,113 @@ textarea::selection {
     return btn;
   }
 
-  function fillDetailPhotoArea(st, tx, ids, result, row, grid, val) {
-    if (st && st.dead) { return; }
-    var records = result && Array.isArray(result.records) ? result.records : [];
-    var slots = photoSlots(ids, records);
-    if (!slots.length) {
-      dropDetailPhotoArea(row, grid);            /* 全 null 位 → 整块按「无图」降级移除，不报错、不留空框 */
-      return;
-    }
-    var originals = 0;
-    for (var i = 0; i < slots.length; i += 1) {
-      if (!slots[i].compressed) { originals += 1; }
-    }
-    /* 文本行与缩略图行保持同口径（UI.md §2.5.1）；有原件时补「（含 K 张原件）」 */
-    val.textContent = slots.length + ' 张' + (originals > 0 ? '（含 ' + originals + ' 张原件）' : '');
-    clearNode(grid);
-    for (var j = 0; j < slots.length; j += 1) {
-      grid.appendChild(buildDetailPhoto(st, tx, ids, slots[j], j, slots.length));
-    }
-  }
-
-  /* 返回照片区句柄（无图 → null，调用方据此决定是否让照片区参与 URL 生命周期） */
+  /* 返回照片区句柄（无图 → null；有图时初始 loading，失败只在用户点「重试」时重读，自动重试 = 0） */
   function attachDetailPhotos(st, tx, list, body) {
     var ids = photoIdList(tx);
-    if (!ids.length) { return null; }
-    var row = el('div', { className: 's-ledger-detail__row' });
-    var val = el('span', { className: 's-ledger-detail__val', text: ids.length + ' 张' });
+
+    var row = el('div', { className: 's-ledger-detail__row s-ledger-detail__row--photos' });
     row.appendChild(el('span', { className: 's-ledger-detail__key', text: '照片' }));
+    var val = el('span', { className: 's-ledger-detail__val' });
+    val.setAttribute('aria-live', 'polite');
+    var retryBtn = el('button', {
+      className: 's-ledger-detail__retry c-btn c-btn--text',
+      type: 'button',
+      text: '重试',
+      'aria-label': '重试读取照片'
+    });
+    retryBtn.hidden = true;
     row.appendChild(val);
+    row.appendChild(retryBtn);
     list.appendChild(row);
+
+    if (!ids.length) {
+      /* 无图：只显示「未添加」，不渲染空网格（CONTRACT §三态状态机） */
+      val.textContent = '未添加';
+      retryBtn.hidden = true;
+      return null;
+    }
+
     var grid = el('div', { className: 's-ledger-detail__photos' });
     body.appendChild(grid);
+
     var photos = photosApi();
-    if (photos) {
-      photos.get(ids).then(function (result) {
-        fillDetailPhotoArea(st, tx, ids, result, row, grid, val);
+    var seq = 0;
+    var busy = false;
+
+    function fail() {
+      retryBtn.hidden = false;
+      clearNode(grid);
+      grid.setAttribute('aria-busy', 'false');
+      val.textContent = '照片加载失败';
+    }
+
+    function render(result, mine) {
+      if (!st || st.dead || mine !== seq) { return; }
+      var records = result && Array.isArray(result.records) ? result.records : null;
+      if (!result || result.ok !== true || !records || records.length !== ids.length) {
+        fail();                                  /* 防御：返回长度不符/非数组也按失败，不炸 */
+        return;
+      }
+      var slots = photoSlots(ids, records);      /* 同序同长，缺失位 null */
+      if (!slots || slots.length !== ids.length) { fail(); return; }
+      var readable = readableSlots(slots);
+      if (!readable.length) { fail(); return; }  /* 整批都读不出：失败态 + 重试，不当成「未添加」 */
+      clearNode(grid);
+      grid.setAttribute('aria-busy', 'false');
+      retryBtn.hidden = true;
+      var originals = 0;
+      var readableIds = [];
+      for (var i = 0; i < readable.length; i += 1) {
+        readableIds.push(readable[i].id);
+        if (readable[i].compressed === false) { originals += 1; }
+      }
+      for (var j = 0; j < readable.length; j += 1) {
+        grid.appendChild(buildDetailPhoto(st, tx, readableIds, readable[j], j, readable.length));
+      }
+      var missing = ids.length - readable.length;
+      val.textContent = ids.length + ' 张'
+        + (missing > 0 ? '，缺失 ' + missing + ' 张' : '')
+        + (originals > 0 ? '（含 ' + originals + ' 张原件）' : '');
+    }
+
+    function load() {
+      if (!st || st.dead) { return; }
+      if (!photos || typeof photos.get !== 'function') { fail(); return; }
+      busy = true;
+      seq += 1;                                /* 每次显式触发 +1（连点重试也逐次计数），旧回包按 seq 丢弃 */
+      var mine = seq;
+      retryBtn.hidden = true;
+      clearNode(grid);
+      grid.setAttribute('aria-busy', 'true');
+      val.textContent = '照片加载中';
+      var skeletonCount = Math.min(ids.length, 3);
+      for (var i = 0; i < skeletonCount; i += 1) {
+        var skel = el('span', { className: 's-ledger-detail__photo-skel c-skeleton' });
+        skel.setAttribute('aria-hidden', 'true');
+        grid.appendChild(skel);
+      }
+      var pending;
+      try { pending = photos.get(ids.slice()); } catch (error) { pending = null; }
+      Promise.resolve(pending).then(function (result) {
+        busy = false;
+        render(result, mine);
       }, function () {
-        dropDetailPhotoArea(row, grid);
+        busy = false;
+        if (!st || st.dead || mine !== seq) { return; }
+        fail();
       });
     }
-    return { row: row, grid: grid, val: val, ids: ids };
+
+    retryBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      /* 只由用户点击触发，每次点击 +1 次读取；不做自动重试（CONTRACT D-11 / N7.4） */
+      load();
+    });
+
+    /* 打开详情时自动读一次（这是首次加载，不是自动重试；失败后只有用户点「重试」才会再读） */
+    load();
+    return { row: row, grid: grid, val: val, ids: ids, retry: retryBtn };
   }
 
   /* ---------------- 日期 / 金额 ---------------- */
@@ -36830,7 +38957,14 @@ textarea::selection {
       openItem: null,
       dead: false,
       nodes: {},
-      cleanups: []
+      cleanups: [],
+      /* M4 照片批量读取：本页待读行 + render token（旧请求回包必须丢弃） */
+      photoRows: [],
+      renderToken: 0,
+      /* M5 深链：同一 paint 生命周期只消费一次 detail；detailAction 防止删除/编辑动作被 onClose 当成普通关闭 */
+      detailConsumed: false,
+      detailParam: '',
+      detailAction: false
     };
     return st;
   }
@@ -36850,6 +38984,16 @@ textarea::selection {
     var sticky = el('div', { className: 's-ledger-sticky' });
 
     var row = el('div', { className: 's-ledger-monthrow' });
+    /* 账本切换入口：明细屏必须保留进入 #/books 的落点（任务书第二节） */
+    var bookLink = el('a', {
+      className: 's-ledger-book c-pressable',
+      href: '#/books',
+      'aria-label': '切换账本，当前 ' + st.bookName
+    }, [
+      iconNode('book', 16),
+      el('span', { className: 's-ledger-book__name u-ellipsis', text: st.bookName })
+    ]);
+    row.appendChild(bookLink);
     var monthBtn = el('button', {
       className: 's-ledger-month',
       type: 'button',
@@ -36861,7 +39005,7 @@ textarea::selection {
     /* 收支结余从三列汇总卡收成一行灰字（鲨鱼式两层头部） */
     var statText = el('span', { className: 's-ledger-stats-link__text u-tabular', text: '' });
     var statsLink = el('a', {
-      className: 's-ledger-stats-link',
+      className: 's-ledger-stats-link s-ledger-summary',
       href: '#/stats',
       'aria-label': '查看本月统计'
     }, [statText]);
@@ -37021,6 +39165,183 @@ textarea::selection {
     return 12;
   }
 
+  /* ---------------- M4：媒体列三态（列表行） ---------------- */
+
+  /* 唯一的媒体 DOM 入口：优先用 XZB.ui.kit.mediaCell（c-photo-cell 家族）；
+   * 老包缺件时退回同 class 的最小结构，保证三态在运行时都有可渲染的节点。 */
+  function mediaCellNode(spec) {
+    var kit = kitApi();
+    if (kit && typeof kit.mediaCell === 'function') {
+      try { return kit.mediaCell(spec); } catch (error) { /* 走本地兜底 */ }
+    }
+    var s = spec || {};
+    var kind = s.media === 'thumb' || s.media === 'skeleton' || s.media === 'icon' || s.media === 'placeholder'
+      ? s.media
+      : (s.url ? 'thumb' : (s.icon ? 'icon' : 'placeholder'));
+    var cell = el('span', { className: 'c-photo-cell c-photo-cell--' + kind });
+    if (kind === 'thumb' && s.url) {
+      var img = el('img', { className: 'c-photo-cell__img', alt: '', src: String(s.url) });
+      cell.appendChild(img);
+      if (Number(s.count) > 1) {
+        var badge = el('span', { className: 'c-photo-badge', text: Number(s.count) > 99 ? '99+' : String(s.count) });
+        badge.setAttribute('aria-hidden', 'true');
+        cell.appendChild(badge);
+      }
+      return cell;
+    }
+    if (kind === 'skeleton') {
+      cell.appendChild(el('span', { className: 'c-photo-skel' }));
+      cell.appendChild(el('span', { className: 'u-sr-only', text: '照片加载中' }));
+      return cell;
+    }
+    if (kind === 'icon') {
+      var tile = el('span', { className: 'c-tile c-tile--lg' + (s.tone ? ' c-tile--' + s.tone : '') });
+      tile.appendChild(iconNode(s.icon || 'ellipsis', 32));
+      cell.appendChild(tile);
+      return cell;
+    }
+    cell.appendChild(el('span', { className: 'c-photo-empty', text: '照片不可用' }));
+    return cell;
+  }
+
+  /* 无照片：44px 分类色圆底 + 32px 分类图标，居中放在同一个 64px 媒体列（UI.md §6.3） */
+  function renderIconMedia(cell, iconName, slot) {
+    clearNode(cell);
+    cell.removeAttribute('data-photo-key');
+    cell.setAttribute('data-photo-state', 'idle');
+    var kit = kitApi();
+    if (kit && typeof kit.mediaCell === 'function') {
+      try {
+        /* kit 的 icon 分支是 19/22px；这里要 32px，于是保留它的 c-photo-cell 外壳、内部自建 tile */
+        var shell = el('span', { className: 'c-photo-cell c-photo-cell--icon' });
+        var tile = el('span', { className: 's-ledger-item__cat c-tile c-tile--lg c-tile--cat-' + slot });
+        tile.appendChild(iconNode(iconName, 32));
+        shell.appendChild(tile);
+        cell.appendChild(shell);
+        return;
+      } catch (error) { /* 走本地兜底 */ }
+    }
+    cell.appendChild(mediaCellNode({ media: 'icon', icon: iconName, tone: 'cat-' + slot }));
+  }
+
+  function renderSkeletonMedia(cell) {
+    clearNode(cell);
+    cell.removeAttribute('data-photo-key');
+    cell.setAttribute('data-photo-state', 'loading');
+    cell.appendChild(mediaCellNode({ media: 'skeleton' }));
+  }
+
+  function renderUnavailableMedia(cell) {
+    clearNode(cell);
+    cell.removeAttribute('data-photo-key');
+    cell.setAttribute('data-photo-state', 'failed');
+    cell.appendChild(mediaCellNode({ media: 'placeholder' }));
+    /* 可见文案由占位块承载；再补一个无障碍标签，读屏也能听到失败语义 */
+    cell.setAttribute('aria-label', '照片不可用');
+  }
+
+  function renderThumbMedia(cell, ref, slot) {
+    var variant = slot.thumb ? 'thumb' : 'full';
+    var key = variant === 'thumb' ? thumbKeyOf(slot.id) : fullKeyOf(slot.id);
+    var url = key ? photoUrlOf(key, slot.blob) : '';
+    if (!url) { renderUnavailableMedia(cell); return; }
+    clearNode(cell);
+    cell.removeAttribute('aria-label');
+    cell.setAttribute('data-photo-key', key);
+    cell.setAttribute('data-photo-state', 'ready');
+    var node = mediaCellNode({
+      media: 'thumb',
+      url: url,
+      photoId: slot.id,
+      variant: variant,
+      count: ref.photoIds.length,
+      alt: ''
+    });
+    var img = node.querySelector ? node.querySelector('img') : null;
+    if (img) {
+      img.addEventListener('error', function () {
+        /* 破图：只替换这一个媒体区，行仍可点开详情；不自动重试、不影响其它行 */
+        if (!cell.isConnected) { return; }
+        clearNode(cell);
+        cell.removeAttribute('data-photo-key');
+        renderUnavailableMedia(cell);
+      });
+    }
+    cell.appendChild(node);
+  }
+
+  function failPhotoRows(refs) {
+    for (var i = 0; i < refs.length; i += 1) {
+      if (refs[i] && refs[i].cell && refs[i].cell.isConnected) { renderUnavailableMedia(refs[i].cell); }
+    }
+  }
+
+  /* 当前页一次性批量读取（CONTRACT §照片批量读取契约）：
+   *   · 只调一次 XZB.app.photos.get(ids)，绝不逐行 N+1；
+   *   · 回包必须校验 st.dead + renderToken，旧请求不得写进新页面；
+   *   · 返回长度不符 / 非数组 / ok:false 一律按失败态，坏包不炸。 */
+  function loadPhotosForRows(st, refs) {
+    if (!st || st.dead || !refs || !refs.length) { return; }
+    var ids = [];
+    var seen = Object.create(null);
+    var byId = Object.create(null);
+    for (var i = 0; i < refs.length; i += 1) {
+      var ref = refs[i];
+      if (!ref || !ref.photoIds || !ref.photoIds.length) { continue; }
+      for (var j = 0; j < ref.photoIds.length; j += 1) {
+        var id = String(ref.photoIds[j]);
+        if (seen[id]) { continue; }
+        seen[id] = true;
+        byId[id] = ids.length;
+        ids.push(id);
+      }
+    }
+    if (!ids.length) { return; }
+
+    var token = st.renderToken;
+    var photos = photosApi();
+    if (!photos || typeof photos.get !== 'function') {
+      failPhotoRows(refs);
+      return;
+    }
+    var pending;
+    try { pending = photos.get(ids.slice()); } catch (error) { pending = null; }
+    Promise.resolve(pending).then(function (result) {
+      /* A6：过期请求（换页 / 换筛选 / 离开路由）不写 DOM，也不释放当前屏的键 */
+      if (!st || st.dead || st.renderToken !== token) { return; }
+      var records = result && Array.isArray(result.records) ? result.records : null;
+      if (!result || result.ok !== true || !records || records.length !== ids.length) {
+        failPhotoRows(refs);
+        return;
+      }
+      var slots = photoSlots(ids, records);
+      if (!slots || slots.length !== ids.length) { failPhotoRows(refs); return; }
+      for (var k = 0; k < refs.length; k += 1) {
+        var rowRef = refs[k];
+        if (!rowRef || !rowRef.cell || !rowRef.cell.isConnected) { continue; }
+        var chosen = null;
+        var missingInRow = 0;
+        for (var m = 0; m < rowRef.photoIds.length; m += 1) {
+          var pos = byId[String(rowRef.photoIds[m])];
+          if (pos !== undefined && slots[pos]) {
+            if (!chosen) { chosen = slots[pos]; }
+          } else {
+            missingInRow += 1;
+          }
+        }
+        if (chosen) {
+          renderThumbMedia(rowRef.cell, rowRef, chosen);
+          if (missingInRow > 0) { rowRef.cell.setAttribute('data-photo-state', 'partial'); }
+        } else {
+          renderUnavailableMedia(rowRef.cell);
+        }
+      }
+    }, function () {
+      if (!st || st.dead || st.renderToken !== token) { return; }
+      failPhotoRows(refs);
+    });
+  }
+
   function buildItem(st, tx) {
     var maps = st.maps;
     var isTransfer = tx.type === 'transfer';
@@ -37034,6 +39355,7 @@ textarea::selection {
     if (!isTransfer && tx.note) { sub += ' \u00b7 ' + String(tx.note); }
     var iconName = isTransfer ? 'transfer' : (cat && cat.icon ? String(cat.icon) : 'ellipsis');
     var slot = isTransfer ? 2 : categorySlot(st, tx.categoryId);
+    var photoIds = photoIdList(tx);
 
     var wrap = el('div', {
       className: 's-ledger-item s-ledger-item--' + String(tx.type || 'expense'),
@@ -37056,62 +39378,50 @@ textarea::selection {
     wrap.appendChild(actions);
 
     var surface = el('div', { className: 's-ledger-item__surface' });
-    /* F31：角标决策只读 state 里的 photoIds 长度（PLAN §3 步骤 11：零异步 IO）；无图 → null，DOM 与改前逐字节一致 */
-    var badge = badgePlan(tx);
+    var amountText = isTransfer ? fmt(cents) : (isIncome ? '+' : '-') + fmt(cents);
     var mainLabel = title + ' ' + (isTransfer ? fmt(cents) : (isIncome ? '收入 ' : '支出 ') + fmt(cents));
-    if (badge) { mainLabel += '，' + badge.label; }          /* 角标 aria-hidden，信息补进主区 aria-label（UI.md §2.4） */
+    var kit = kitApi();
+    if (photoIds.length) {
+      mainLabel = kit && typeof kit.photoAriaLabel === 'function'
+        ? kit.photoAriaLabel(mainLabel, photoIds.length)
+        : mainLabel + '，含 ' + photoIds.length + ' 张照片';
+    }
+    /* 词表唯一：行容器与部件一律 s-ledger-item*（ledger.css 已有整套规则）。
+       外层 wrap 已是 s-ledger-item，这里不再重复挂；s-ledger-row 已作废。 */
     var main = el('a', {
       className: 's-ledger-item__main',
-      href: '#/add?id=' + encodeURIComponent(String(tx.id || '')),
+      href: '#/ledger?detail=' + encodeURIComponent(String(tx.id || '')),
       'aria-label': mainLabel
     });
 
-    var iconBox = el('span', { className: 's-ledger-item__icon s-ledger-cat--' + slot });
-    iconBox.appendChild(iconNode(iconName, 20));
-    main.appendChild(iconBox);
+    /* 第一列：64px 媒体区。无照片 = 分类图标；有照片 = 骨架 → 缩略图 / 占位（一行只放一张） */
+    var media = el('span', {
+      className: 's-ledger-item__media c-row__media',
+      dataset: { id: String(tx.id || '') }
+    });
+    if (photoIds.length) { renderSkeletonMedia(media); }
+    else { renderIconMedia(media, iconName, slot); }
+    main.appendChild(media);
 
-    var mainText = el('span', { className: 's-ledger-item__text' });
-    mainText.appendChild(el('span', { className: 's-ledger-item__title u-ellipsis', text: title }));
-    var subLine = el('span', { className: 's-ledger-item__sub u-ellipsis' });
+    /* 第二列：文字区；min-width:0 + 省略全部交给 CSS 类，不写内联样式 */
+    var mainText = el('span', { className: 's-ledger-item__text c-row__main' });
+    mainText.appendChild(el('span', {
+      className: 's-ledger-item__title c-row__title u-ellipsis',
+      text: title
+    }));
+    var subLine = el('span', { className: 's-ledger-item__sub c-row__sub u-ellipsis' });
     if (tx.reimburse === 'pending') {
       subLine.appendChild(el('span', { className: 's-ledger-item__flag', text: '待报' }));
-    }
-    /* F31 照片角标（UI.md §2.4）：插在「待报」之后、副标题文本之前；形态 1 张 [📷] / N 张 [📷N] */
-    if (badge) {
-      var photoFlag = el('span', {
-        className: 's-ledger-item__flag s-ledger-item__flag--photo',
-        'aria-hidden': 'true'
-      });
-      photoFlag.appendChild(iconNode(PHOTO_FLAG_ICON, PHOTO_FLAG_ICON_SIZE));
-      if (badge.showCount) {
-        photoFlag.appendChild(el('span', {
-          className: 's-ledger-item__flag-count',
-          text: String(badge.count),
-          'aria-hidden': 'true'
-        }));
-      }
-      /* 角标在 ledger.css 里是 pointer-events:none（UI.md §2.4：纯视觉、aria-hidden，
-       * 点按交给整行链接 ⇒ 真正的看大图入口是「行 → 详情面板 → 缩略图」，见 attachDetailPhotos）。
-       * 这里仍挂 click：一旦样式层放开命中区，点角标即可直达大图（F31 任务书第 2 条），且不会与行链接冲突。 */
-      photoFlag.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        openViewerFor(st, tx, photoIdList(tx), 0);
-      });
-      subLine.appendChild(photoFlag);
     }
     subLine.appendChild(document.createTextNode(sub));
     mainText.appendChild(subLine);
     main.appendChild(mainText);
 
-    var trail = el('span', { className: 's-ledger-item__trail' });
-    var amountClass = 's-ledger-item__amount u-tabular';
-    if (isTransfer) { amountClass += ' s-ledger-item__amount--transfer'; }
-    else if (isIncome) { amountClass += ' s-ledger-item__amount--income'; }
-    else { amountClass += ' s-ledger-item__amount--expense'; }
+    /* 第三列：金额区。正负号承担收支语义，文字恒深色（不再用红绿） */
+    var trail = el('span', { className: 's-ledger-item__trail s-ledger-item__value c-row__value' });
     trail.appendChild(el('span', {
-      className: amountClass,
-      text: isTransfer ? fmt(cents) : (isIncome ? '+' : '-') + fmt(cents)
+      className: 's-ledger-item__amount u-tabular',
+      text: amountText
     }));
     if (tx.time) {
       trail.appendChild(el('span', { className: 's-ledger-item__time u-tabular', text: String(tx.time) }));
@@ -37126,15 +39436,19 @@ textarea::selection {
     });
     delBtn.addEventListener('click', function (event) {
       event.stopPropagation();
-      deleteTx(st, tx);
+      attemptDelete(st, tx, 'swipe');
     });
-    /* N3：单击先看详情，编辑要明确的二次动作；href 保留给无 JS/新窗口场景 */
+    /* N3：单击先看详情；href 同时保留深链形态（home.js 产生的 #/ledger?detail= 同构） */
     main.addEventListener('click', function (event) {
       event.preventDefault();
       openDetailSheet(st, tx);
     });
     bindGesture(st, wrap, surface, tx);
 
+    /* 本页待批量读取的引用；appendPage 统一取走，避免跨页累积（单测/旧调用无 photoRows 时静默跳过） */
+    if (st && Array.isArray(st.photoRows)) {
+      st.photoRows.push({ tx: tx, cell: media, photoIds: photoIds });
+    }
     return wrap;
   }
 
@@ -37300,6 +39614,15 @@ textarea::selection {
 
   /* ---------------- 流水详情面板（N3）/ 删除 / 复制 ---------------- */
 
+  function clearDetailParam(st) {
+    if (!st || !st.detailParam) { return; }
+    st.detailParam = '';
+    var ctx = st.ctx;
+    if (ctx && typeof ctx.replace === 'function') {
+      try { ctx.replace('#/ledger'); } catch (error) { /* 清参失败不影响已关闭的面板 */ }
+    }
+  }
+
   function openDetailSheet(st, tx) {
     var sheet = sheetApi();
     if (!sheet || typeof sheet.open !== 'function') { return; }
@@ -37324,6 +39647,7 @@ textarea::selection {
         : (from ? from.name : '—')],
       ['时间', String(tx.date || '') + (tx.time ? ' ' + String(tx.time) : '')]
     ];
+    /* 备注必须是完整文本（SPEC N4.8 / N5.x）：不截断、不折成摘要，换行由 __val 的 word-break 承担 */
     if (tx.note) { lines.push(['备注', String(tx.note)]); }
     if (Array.isArray(tx.tags) && tx.tags.length) { lines.push(['标签', '#' + tx.tags.join(' #')]); }
     if (tx.reimburse === 'pending') { lines.push(['报销', '待报销（垫付）']); }
@@ -37331,21 +39655,28 @@ textarea::selection {
     lines.forEach(function (pair) {
       var row = el('div', { className: 's-ledger-detail__row' });
       row.appendChild(el('span', { className: 's-ledger-detail__key', text: pair[0] }));
-      row.appendChild(el('span', { className: 's-ledger-detail__val', text: pair[1] }));
+      var value = el('span', {
+        className: 's-ledger-detail__val' + (pair[0] === '备注' ? ' s-ledger-detail__val--note' : ''),
+        text: pair[1]
+      });
+      row.appendChild(value);
       list.appendChild(row);
     });
     body.appendChild(list);
 
-    /* F31 照片区（UI.md §2.5.1）：接在 s-ledger-detail__list 之后；无图 → 两块都不渲染（不出现禁用态） */
+    /* 照片区：无图 → 「未添加」文本行（不渲染空网格）；有图 → loading → ready/partial/failed */
     var photoArea = attachDetailPhotos(st, tx, list, body);
 
     photoDetailOpen = false;   /* 先落白：旧 sheet 的 onClose 可能在 sheet.open() 内部先触发 */
     sheet.open({
       title: '这笔流水',
       content: body,
-      onClose: function () {
+      onClose: function (reason) {
         photoDetailOpen = false;
-        flushPhotoUrls();      /* 面板已关，其缩略图 URL 若无人再持有则此刻释放（PLAN §9.4） */
+        flushPhotoUrls();      /* 面板已关，其缩略图 URL 若无人再持有则此刻释放 */
+        if (reason === 'replaced' || reason === 'route') { st.detailAction = false; return; }
+        if (st.detailAction) { st.detailAction = false; return; } /* 删除/编辑动作：由动作自己收尾 */
+        clearDetailParam(st);  /* 深链消费后关闭：replace 清参，不新增历史 */
       },
       actions: [
         { label: '取消', kind: 'text' },
@@ -37358,17 +39689,21 @@ textarea::selection {
           label: '编辑',
           kind: 'default',
           onClick: function () {
+            st.detailAction = true;
             navigate(st, '#/add?id=' + encodeURIComponent(String(tx.id || '')));
           }
         },
         {
           label: '删除',
           kind: 'danger',
-          onClick: function () { deleteTx(st, tx); }
+          onClick: function () {
+            st.detailAction = true;
+            attemptDelete(st, tx, 'detail');
+          }
         }
       ]
     });
-    photoDetailOpen = !!photoArea;   /* 关掉旧 sheet 之后，按本次内容落定 URL 持有状态 */
+    photoDetailOpen = !!photoArea && photoIdList(tx).length > 0;   /* 无照片时句柄为 null；再按张数兜底，绝不长期占住 flush */
   }
 
   /* 长按沿用同一张详情面板 */
@@ -37433,56 +39768,178 @@ textarea::selection {
     });
   }
 
-  function deleteTx(st, tx) {
+  /* ---------------- M6：删除两段式（先确认，再软删） ---------------- */
+
+  function deleteAmountText(tx) {
+    var cents = Math.abs(Number(tx && tx.amountCents) || 0);
+    if (tx && tx.type === 'income') { return '+' + fmt(cents); }
+    if (tx && tx.type === 'transfer') { return fmt(cents); }
+    return '-' + fmt(cents);
+  }
+
+  /* 第一段：只弹既有 sheet，不碰任何数据。取消/返回 = 零副作用。 */
+  function attemptDelete(st, tx, source) {
+    var sheet = sheetApi();
+    if (!sheet || typeof sheet.open !== 'function' || !tx) { return; }
+    var category = tx.type === 'transfer' ? '转账' : categoryName(tx, st.maps);
+    var body = el('div', { className: 's-ledger-delete' });
+    body.appendChild(el('p', {
+      className: 's-ledger-delete__target',
+      text: category + ' ' + deleteAmountText(tx)
+    }));
+    body.appendChild(el('p', {
+      className: 's-ledger-delete__hint',
+      text: '删除后 5 秒内可以撤销'
+    }));
+
+    var busy = false;
+    var settled = false;
+    var reopenDetail = false;
+    var handle = null;
+
+    function setBusy(on) {
+      busy = on;
+      if (!handle || !handle.element || typeof handle.element.querySelectorAll !== 'function') { return; }
+      var buttons = handle.element.querySelectorAll('.c-btn');
+      for (var i = 0; i < buttons.length; i += 1) {
+        buttons[i].disabled = on === true;
+        if (on) { buttons[i].setAttribute('aria-disabled', 'true'); }
+        else { buttons[i].removeAttribute('aria-disabled'); }
+      }
+    }
+
+    handle = sheet.open({
+      title: '删除这条记录？',
+      content: body,
+      className: 's-ledger-delete-sheet',
+      onClose: function (reason) {
+        if (settled || busy) { return; }
+        if (st) { st.detailAction = false; }
+        if (reopenDetail) {
+          /* 删除失败且来自详情：等确认层真正移除后再恢复详情，避免两层互相 replace */
+          reopenDetail = false;
+          if (st && !st.dead) { openDetailSheet(st, tx); }
+          return;
+        }
+        if (reason === 'replaced' || reason === 'route') { return; }
+        /* 取消/点背景/返回：只清深链参数，不修改数据 */
+        clearDetailParam(st);
+      },
+      actions: [
+        {
+          label: '取消',
+          kind: 'text',
+          onClick: function () { return busy ? false : true; }
+        },
+        {
+          label: '删除',
+          kind: 'danger',
+          onClick: function () {
+            if (busy) { return false; }              /* 确认期间防重复提交：连点只发一次 commit */
+            setBusy(true);
+            doDelete({ txId: tx.id, st: st, source: source }).then(function (result) {
+              if (result && result.ok) {
+                settled = true;
+                if (st) { st.detailAction = false; }
+                if (handle && typeof handle.close === 'function') { handle.close('deleted'); }
+                return;
+              }
+              /* 失败：原行、详情、存储都保持；恢复按钮；详情来源则回到详情（不弹空面板） */
+              setBusy(false);
+              if (source === 'detail' && st && !st.dead) {
+                reopenDetail = true;
+                if (handle && typeof handle.close === 'function') { handle.close('failed'); }
+              }
+            });
+            return false;                          /* 结果回来前不自动关层 */
+          }
+        }
+      ]
+    });
+    setBusy(false);
+  }
+
+  /* 第二段：唯一删除 commit 路径。只软删（deleted/deletedAt/updatedAt），
+   * 保留 photoIds 与 photos store —— 撤销后照片必须还能显示（SPEC A17/A19）。 */
+  function doDelete(options) {
+    var opts = options || {};
+    var txId = String(opts.txId || '');
+    var st = opts.st || live;
     var app = appApi();
-    var commit = st.ctx && typeof st.ctx.commit === 'function' ? st.ctx.commit : (app && app.commit);
+    var commit = st && st.ctx && typeof st.ctx.commit === 'function' ? st.ctx.commit : (app && app.commit);
     if (typeof commit !== 'function') {
       toast('删除失败，请重试', { type: 'danger' });
-      return;
+      return Promise.resolve({ ok: false, code: 'E_COMMIT' });
     }
     var nowIso = dates && typeof dates.nowIso === 'function' ? dates.nowIso() : new Date().toISOString();
-    var target = tx;
-    /* SPEC A17 / A19（Q3 裁决）：软删流水**不删照片** —— photos 保留、仍占配额，只是不再出现在列表与计数里；
-     * 物理删除只发生在「编辑态逐张移除」（XZB.app.photos.removeWithUndo）与清理孤儿（PH-A18）。
-     * 因此本函数只置 deleted/deletedAt，绝不触碰 photos store，也不清 photoIds（撤回软删后照片仍应可见）。 */
-    commit(function (working) {
-      var list = working && working.transactions ? working.transactions : null;
-      if (!list) { return { abort: true, code: 'E_STORE_TX', message: messageOf('E_STORE_TX') }; }
-      for (var i = 0; i < list.length; i += 1) {
-        if (list[i] && list[i].id === target.id) {
-          if (schema && typeof schema.normalizeTransaction === 'function') {
-            var patch = {};
-            var keys = Object.keys(list[i]);
-            for (var k = 0; k < keys.length; k += 1) { patch[keys[k]] = list[i][keys[k]]; }
-            patch.deleted = true;
-            patch.deletedAt = nowIso;
-            patch.updatedAt = nowIso;
-            list[i] = schema.normalizeTransaction(patch, nowIso);
-          } else {
-            list[i].deleted = true;
-            list[i].deletedAt = nowIso;
-            list[i].updatedAt = nowIso;
-          }
-          break;
+    var hadDetail = !!(st && st.detailParam);
+
+    var pending;
+    try {
+      pending = commit(function (working) {
+        var list = working && working.transactions ? working.transactions : null;
+        if (!list) { return { abort: true, code: 'E_STORE_TX', message: messageOf('E_STORE_TX') }; }
+        var target = null;
+        for (var i = 0; i < list.length; i += 1) {
+          if (list[i] && list[i].id === txId) { target = list[i]; break; }
         }
-      }
-      return { value: { id: target.id } };
-    }, { label: '删除流水' }).then(function (result) {
+        if (!target || target.deleted === true) {
+          return { abort: true, code: 'E_TX_NOT_FOUND', message: '记录已删除或不存在' };
+        }
+        if (schema && typeof schema.normalizeTransaction === 'function') {
+          var patch = {};
+          var keys = Object.keys(target);
+          for (var k = 0; k < keys.length; k += 1) { patch[keys[k]] = target[keys[k]]; }
+          patch.deleted = true;
+          patch.deletedAt = nowIso;
+          patch.updatedAt = nowIso;
+          /* photoIds 原样保留：这里绝不 delete/清空，也不触碰 photos store */
+          list[i] = schema.normalizeTransaction(patch, nowIso);
+        } else {
+          target.deleted = true;
+          target.deletedAt = nowIso;
+          target.updatedAt = nowIso;
+        }
+        return { value: { id: txId } };
+      }, { label: '删除流水' });
+    } catch (error) {
+      toast('删除失败，请重试', { type: 'danger' });
+      return Promise.resolve({ ok: false, code: 'E_COMMIT' });
+    }
+
+    return Promise.resolve(pending).then(function (result) {
       if (!result || !result.ok) {
-        toast(messageOf(result && result.code, result && result.message), { type: 'danger' });
-        return;
+        var text = result && result.code === 'E_TX_NOT_FOUND'
+          ? '记录已删除或不存在'
+          : messageOf(result && result.code, result && result.message);
+        toast(text, { type: 'danger' });
+        return { ok: false, code: result && result.code };
       }
       toast('已删除', {
         type: 'success',
         action: {
           label: '撤销',
           onClick: function () {
-            if (app && typeof app.undo === 'function') { app.undo(); }
+            if (app && typeof app.undo === 'function') {
+              var undone = app.undo();
+              /* 真机 manifest 的 undo 会 commit + 整屏重绘；若被测试桩替换成同步函数，这里补一次本地重绘 */
+              if (undone && typeof undone.then === 'function') {
+                undone.then(function () { if (st && !st.dead) { paint(st); } }, function () { /* undo 自己会提示 */ });
+              } else if (st && !st.dead) {
+                paint(st);
+              }
+            }
           }
         }
       });
+      /* 成功重绘由 ctx.commit 的 refresh→router.rerender 完成（日期组为空自然没有组头）。
+       * 深链来源还要清掉 ?detail，避免下一次进入又消费一次。 */
+      if (hadDetail) { clearDetailParam(st); }
+      else if (st && !st.dead) { paint(st); }
+      return { ok: true };
     }, function () {
       toast('删除失败，请重试', { type: 'danger' });
+      return { ok: false, code: 'E_COMMIT' };
     });
   }
 
@@ -38108,6 +40565,10 @@ textarea::selection {
     }
     days.appendChild(fragment);
     st.rendered = end;
+    /* 本页所有 photoIds 已由 buildItem 收集到 st.photoRows；这里只发起一次批量读取。
+     * 先上屏再读：文字/金额立即可用，照片区停在 64px 骨架，不阻塞整页（CONTRACT §三态）。 */
+    var refs = st.photoRows.splice(0);
+    loadPhotosForRows(st, refs);
     return added;
   }
 
@@ -38147,8 +40608,61 @@ textarea::selection {
 
   /* ---------------- 收支日历（D1 已删）：看每日节奏去统计页热力图 ---------------- */
 
+  /* ---------------- M5：深链 ?detail= 消费（render → 上屏 → paint 之后） ---------------- */
+
+  function raf(fn) {
+    if (global.requestAnimationFrame) { return global.requestAnimationFrame(fn); }
+    return global.setTimeout(fn, 16);
+  }
+
+  function consumeDetailParam(st) {
+    if (!st || st.dead || st.detailConsumed) { return; }
+    var params = st.ctx && st.ctx.params ? st.ctx.params : null;
+    var raw = params ? params.detail : '';
+    if (raw === undefined || raw === null || raw === '') { return; }
+    st.detailConsumed = true;                    /* 同一 paint 生命周期只消费一次，连点/重绘不重复打开 */
+    var txId = String(raw);
+    try { txId = decodeURIComponent(txId); } catch (error) { /* 已是明文就保持原样 */ }
+    var db = readDb(st.ctx);
+    var list = rows(db, 'transactions');
+    var target = null;
+    for (var i = 0; i < list.length; i += 1) {
+      if (list[i] && String(list[i].id) === txId && list[i].deleted !== true) { target = list[i]; break; }
+    }
+    if (!target) {
+      /* 软删/不存在：提示恰一次，不弹空详情，并清参（replace，不新增历史） */
+      st.detailParam = txId;
+      toast('记录已删除或不存在', { type: 'danger' });
+      clearDetailParam(st);
+      return;
+    }
+    st.detailParam = txId;
+    openDetailSheet(st, target);
+  }
+
+  /* paint 完成且 DOM 真正上屏后：先做一次 URL 回收，再消费深链。
+   * 必须等 swapDom，否则 flush 会把「旧屏 DOM 仍引用」的键误放、深链也会在 render 阶段抢跑。 */
+  function scheduleAfterPaint(st) {
+    var token = st.renderToken;
+    var attempts = 0;
+    function tick() {
+      if (!st || st.dead || st.renderToken !== token) { return; }
+      if (!st.root || st.root.isConnected !== true) {
+        attempts += 1;
+        if (attempts < 30) { raf(tick); }
+        return;
+      }
+      flushPhotoUrls();
+      consumeDetailParam(st);
+    }
+    raf(tick);
+  }
+
   function paint(st) {
     if (st.dead) { return; }
+    /* render token：本页异步照片回包只认最新一次 paint，旧请求一律丢弃（A6） */
+    st.renderToken += 1;
+    st.photoRows.length = 0;
     st.maps = {
       categories: indexById(rows(st.db, 'categories')),
       accounts: indexById(rows(st.db, 'accounts'))
@@ -38159,7 +40673,7 @@ textarea::selection {
     st.rendered = 0;
     st.openItem = null;
     clearNode(st.nodes.days);
-    flushPhotoUrls();   /* F31：列表被清空重绘，上一轮行内缩略图 URL 若已无人持有则此刻释放（详情/查看器打开时自动推迟） */
+    flushPhotoUrls();   /* 列表被清空重绘，上一轮行内缩略图 URL 若已无人持有则此刻释放（详情/查看器打开时自动推迟） */
     renderSummary(st);
     renderChips(st);
     syncTitle(st);
@@ -38168,11 +40682,13 @@ textarea::selection {
       st.nodes.days.appendChild(buildEmpty(st, hasFilters(st)));
       updateMore(st);
       scheduleMeasure(st);
+      scheduleAfterPaint(st);
       return;
     }
     appendPage(st);
     updateMore(st);
     scheduleMeasure(st);
+    scheduleAfterPaint(st);
   }
 
   /* ---------------- 事件绑定 ---------------- */
@@ -39003,6 +41519,80 @@ textarea::selection {
     return card;
   }
 
+  /* ---------------- 分类构成环图 ---------------- */
+
+  /* 2026-10-28 补回：统计屏四图之一（line/bars/donut/heatmap）。
+     数据源与「分类排行」同源（stats.categoryRank 已按 S.kind 口径给出分类占比），
+     颜色沿用 --cat-N 色槽兜底；0 值与负值由 charts.donut 自行剔除，空态交给 emptyText。 */
+  function buildShareCard(rank, kind, month) {
+    var isExpense = kind === 'expense';
+    var kindName = isExpense ? '支出' : '收入';
+    var card = el('section', {
+      className: 'c-card s-stats-share',
+      'aria-label': monthLabel(month) + kindName + '构成环形图'
+    });
+    var head = el('div', { className: 'c-card__head' });
+    head.appendChild(el('h2', { className: 'c-card__title', text: kindName + '构成' }));
+    var totalNode = el('span', { className: 's-stats-share__total u-tabular', text: '' });
+    head.appendChild(totalNode);
+    card.appendChild(head);
+
+    var box = el('div', { className: 's-stats-share__box' });
+    box.setAttribute('aria-hidden', 'false');
+    card.appendChild(box);
+
+    var items = rank && Array.isArray(rank.items) ? rank.items : [];
+    var otherCents = rank ? Math.abs(Number(rank.otherCents) || 0) : 0;
+    var data = [];
+    var sum = 0;
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i] || {};
+      var amount = Math.abs(Number(item.amountCents) || 0);
+      if (amount <= 0) { continue; }
+      var slot = Number(item.slot) || ((i % 12) + 1);
+      data.push({
+        label: String(item.name || '未分类'),
+        value: amount,
+        color: '--cat-' + ((slot - 1) % 12 + 1)
+      });
+      sum += amount;
+    }
+    /* 排行里被折成「其他」的尾部合计单独成段，环图不能漏账 */
+    if (otherCents > 0) {
+      data.push({ label: '其他', value: otherCents, color: '--c-text-3' });
+      sum += otherCents;
+    }
+    totalNode.textContent = sum > 0 ? kindName + '合计 ' + fmt(sum) : '';
+
+    var charts = chartsApi();
+    card.__paint = function () {
+      if (!charts || typeof charts.donut !== 'function') { return; }
+      var width = box.clientWidth || 320;
+      if (isExpense) {
+        /* 支出口径：按分类占比成环，中心读数是支出合计 */
+        charts.donut(box, data, {
+          width: width,
+          height: 200,
+          thickness: 18,
+          centerSub: '支出合计',
+          emptyText: '这个月还没有支出',
+          ariaLabel: monthLabel(month) + '支出构成环形图，共 ' + data.length + ' 个分类，合计 ' + fmt(sum)
+        });
+        return;
+      }
+      /* 收入口径：同一份占比表换收入口径的中心读数与空态文案 */
+      charts.donut(box, data, {
+        width: width,
+        height: 200,
+        thickness: 18,
+        centerSub: '收入合计',
+        emptyText: '这个月还没有收入',
+        ariaLabel: monthLabel(month) + '收入构成环形图，共 ' + data.length + ' 个分类，合计 ' + fmt(sum)
+      });
+    };
+    return card;
+  }
+
   /* ---------------- 环比卡 ---------------- */
 
   /* 月度小结：默认折叠成一行结论（› 展开），不挡首屏图表。 */
@@ -39468,6 +42058,10 @@ textarea::selection {
       var trendCard = buildTrendCard(db, month, bookId);
       inner.appendChild(trendCard);
       painters.push(trendCard);
+
+      var shareCard = buildShareCard(rank, S.kind, month);
+      inner.appendChild(shareCard);
+      painters.push(shareCard);
 
       inner.appendChild(buildRankCard(rank, prevRank, S.kind));
 
@@ -42930,7 +45524,9 @@ textarea::selection {
     });
     var iconBox = el('span', { className: 'c-row__icon s-plan-cat__icon' });
     var cat = findCategoryById(ctx, item.categoryId);
-    if (cat && cat.color) { iconBox.style.color = cat.color; }
+    /* 分类色只以自定义属性下达（--cat-color），由 plan.css 消费；JS 不写内联色值，
+       色值与主题口径的单一真源留在 CSS。取不到分类色时 CSS 侧退回默认色调。 */
+    if (cat && cat.color) { iconBox.style.setProperty('--cat-color', String(cat.color)); }
     iconBox.appendChild(iconNode(cat && cat.icon ? cat.icon : 'tag', 20));
     row.appendChild(iconBox);
 
@@ -44108,10 +46704,13 @@ textarea::selection {
   var CONFIRM_CLEAR = '清空';
   var SNAP_PAGE = 10;
   var TONE_COUNT = 12;
-  /* 写回数据库的色值用固定表（不读主题变量），否则深色模式下保存会把 #C2410C
-     写成 #FB923C，同一分类在两种主题间反复保存就会慢慢漂色。 */
-  var CAT_HEX = ['#C2410C', '#1D4ED8', '#BE185D', '#0F766E', '#7C3AED', '#B91C1C',
-    '#0369A1', '#A16207', '#0E7490', '#15803D', '#4338CA', '#52525B'];
+  /* 写回数据库的分类色必须落**固定色值**：读 --cat-N 这类会随主题翻转的变量，会在深色模式下
+     把浅色值写成深色值，同一分类在两种主题间反复保存就会慢慢漂色。
+     所以本文件不留第二份色值表，只记「主题恒定 token 名」——真色值只在 tokens.css 的
+     --cat-raw-N 里定义一处（深色块刻意不覆盖），取值统一走 cssVar()。 */
+  var CAT_RAW_TOKENS = ['--cat-raw-1', '--cat-raw-2', '--cat-raw-3', '--cat-raw-4',
+    '--cat-raw-5', '--cat-raw-6', '--cat-raw-7', '--cat-raw-8', '--cat-raw-9',
+    '--cat-raw-10', '--cat-raw-11', '--cat-raw-12'];
 
   /* 惰性读取：settings.js 先于 app.js 执行，此刻 XZB.version 还没就位，
      必须等渲染时再取，否则「关于」页会一直读到空版本。
@@ -44189,6 +46788,18 @@ textarea::selection {
       if (list && list.length) { return list; }
     }
     return FALLBACK_SYSTEM_ICONS;
+  }
+
+  /* 契约名：分类「图标选择器」候选的唯一真源（就是系统分类那套双色图标）。
+     本文件不维护第二份 key 列表，列表来自 XZB.ui.icons 注册表。 */
+  function CAT_ICON_CHOICES() {
+    return systemIconChoices();
+  }
+
+  /* 契约名：分类「颜色选择器」候选的唯一真源（12 色槽的主题恒定 token 名，
+     真色值见 tokens.css 的 --cat-raw-N）。 */
+  function CAT_COLOR_CHOICES() {
+    return CAT_RAW_TOKENS;
   }
 
   function iconLabelOf(name) {
@@ -45398,6 +48009,11 @@ textarea::selection {
     return photos.missingRefs.length;
   }
 
+  /* 「跳过 N 条」的唯一措辞（v1 迁移与 2.x 导入共用一句，避免两处文案各自漂移）。 */
+  function skippedText(skipped) {
+    return '跳过 ' + skipped + ' 条（与已有记录重复，或数据缺少唯一标识，未导入）';
+  }
+
   function runImport(ctx, backup, text, mode, handle) {
     if (live.busy) { return; }
     live.busy = true;
@@ -45413,7 +48029,7 @@ textarea::selection {
       var skipped = report.skipped || 0;
       /* 「跳过」里有一部分是被判成重复的真实流水（v1 数据缺 id 时尤其常见），
          所以有跳过就不能报成全部成功，提示里要说明这些记录没进来。 */
-      var missed = '有 ' + skipped + ' 条未导入（与已有记录重复，或数据缺少唯一标识）';
+      var missed = skippedText(skipped);
       /* 含图备份：还原张数并进同一句提示（体积用 fmtBytes）；缺图的引用（A13）单独说明 */
       var restored = photoRestoredText(report);
       var missingPhotos = photoMissingCount(report);
@@ -45551,7 +48167,7 @@ textarea::selection {
         var migrated = report.transactions || 0;
         var dropped = report.skipped || 0;
         toast(ctx, '迁移 ' + migrated + ' 条' + (dropped > 0
-          ? '，有 ' + dropped + ' 条未导入（与已有记录重复，或数据缺少唯一标识）'
+          ? '，' + skippedText(dropped)
           : ''), { type: dropped > 0 ? 'warning' : 'success' });
       });
     }, function () {
@@ -46501,7 +49117,7 @@ textarea::selection {
         '系统分类用系统这套图标，这样它和记账宫格、首页流水里的样子一致。'));
       var iconGrid = h('div', { className: 's-settings-icon-grid', role: 'group', aria: { label: '分类图标' } });
       var iconButtons = [];
-      var choices = systemIconChoices();
+      var choices = CAT_ICON_CHOICES();
       for (var i = 0; i < choices.length; i += 1) {
         (function (name) {
           var btn = h('button', {
@@ -46545,7 +49161,9 @@ textarea::selection {
     body.appendChild(t('p', 's-settings-sheet__label', '颜色'));
     var swatches = h('div', { className: 's-settings-swatches', role: 'group', aria: { label: '分类颜色' } });
     var swatchButtons = [];
-    for (var c = 1; c <= TONE_COUNT; c += 1) {
+    /* 色槽数量与顺序只由 CAT_COLOR_CHOICES()（--cat-raw-N）决定，本文件不写死 12 */
+    var toneSlots = CAT_COLOR_CHOICES();
+    for (var c = 1; c <= toneSlots.length; c += 1) {
       (function (tone) {
         var btn = h('button', {
           className: 's-settings-swatch s-settings-swatch-' + tone + (model.tone === tone ? ' is-active' : ''),
@@ -46618,7 +49236,7 @@ textarea::selection {
 
     var hex = existing && model.tone === model.originalTone && existing.color
       ? existing.color
-      : (CAT_HEX[model.tone - 1] || cssVar('--cat-' + model.tone));
+      : (cssVar(CAT_RAW_TOKENS[model.tone - 1]) || cssVar('--cat-' + model.tone));
     if (!hex && existing) { hex = existing.color; }
     if (!hex) {
       errorEl.textContent = MESSAGES.E_INVALID_INPUT;
@@ -47085,7 +49703,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.13.0';
+  XZB.version = '2.14.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
