@@ -34388,6 +34388,20 @@ textarea::selection {
     }
   }
 
+  /* 静默改写当前条目的 query（不重渲染）：屏幕内切换账期时，地址、history.state、
+     router.current() 三者必须同步，否则外部刷新/前进后退会拿到旧参数。 */
+  function setHash(hash) {
+    if (!currentRoute) return false;
+    var route;
+    try { route = parseHash(String(hash || '')); } catch (error) { return false; }
+    if (!route || route.view !== currentRoute.view) return false;
+    var depth = 0;
+    try { depth = (global.history.state && global.history.state.depth) || 0; } catch (error) { /* 忽略 */ }
+    currentRoute = route;
+    historyReplace(route, depth);
+    return true;
+  }
+
   /* [D1-15] 别名地址栏改写判定：仅当地址栏仍是 #/ledger… 且与归一后的
      route.hash 不同时命中。本函数只判定、不写历史（历史写入由调用点
      完成），以保证单次导航内 history.replaceState 计数恒 ≤ 1（D1-16）：
@@ -34946,6 +34960,7 @@ textarea::selection {
     isTabRoot: isTabRoot,
     parse: parseHash,
     hash: function (route) { return buildHash(route); },
+    setHash: setHash,
     views: VIEWS.slice()
   });
 
@@ -44185,10 +44200,10 @@ textarea::selection {
   };
 
   var RANGES = [
-    { key: 'month', label: '本月', months: 1, offset: 0 },
-    { key: 'prev', label: '上月', months: 1, offset: -1 },
-    { key: '3m', label: '近3个月', months: 3, offset: 0 },
-    { key: '6m', label: '近6个月', months: 6, offset: 0 }
+    { key: 'month', label: '本月', months: 1 },
+    { key: 'prev', label: '上月', months: 1 },
+    { key: '3m', label: '近3个月', months: 3 },
+    { key: '6m', label: '近6个月', months: 6 }
   ];
 
   var RANGE_BY_KEY = (function () {
@@ -44211,6 +44226,7 @@ textarea::selection {
     range: 'month',
     seq: 0,
     timer: 0,
+    timers: [],
     dead: false,
     lastSig: null,
     suppressRestore: false,
@@ -44259,6 +44275,22 @@ textarea::selection {
     if (!node) { return; }
     if (domApi && typeof domApi.clear === 'function') { domApi.clear(node); return; }
     while (node.firstChild) { node.removeChild(node.firstChild); }
+  }
+
+  /* 屏幕内所有延时回调统一登记，destroy 时一次清空：离开页面后不再画报告、不再重开 Sheet。 */
+  function later(fn, ms) {
+    var id = global.setTimeout(function () {
+      var at = S.timers.indexOf(id);
+      if (at >= 0) { S.timers.splice(at, 1); }
+      if (!S.dead) { fn(); }
+    }, ms);
+    S.timers.push(id);
+    return id;
+  }
+
+  function clearLater() {
+    for (var i = 0; i < S.timers.length; i += 1) { global.clearTimeout(S.timers[i]); }
+    S.timers.length = 0;
   }
 
   function iconNode(name, size) {
@@ -44395,6 +44427,8 @@ textarea::selection {
     var active = '';
     if (db && typeof db.activeBookId === 'string') { active = db.activeBookId; }
     var state = XZB.app && XZB.app.state;
+    /* 当前账本唯一权威在 state.ui.activeBookId（与首页/统计一致）；旧形态兼容 state.activeBookId */
+    if (!active && state && state.ui && typeof state.ui.activeBookId === 'string') { active = state.ui.activeBookId; }
     if (!active && state && typeof state.activeBookId === 'string') { active = state.activeBookId; }
     if (!active) {
       for (var i = 0; i < books.length; i += 1) {
@@ -44445,12 +44479,13 @@ textarea::selection {
       var month = date.slice(0, 7);
       var bucket = index[month];
       if (!bucket) { continue; }
-      bucket.count += 1;
       if (type === 'transfer') {
         bucket.transferCents += amount;
         bucket.transferCount += 1;
         continue;
       }
+      /* 与统计页 totalRange 同口径：总笔数只计收入/支出，转账单独计数 */
+      bucket.count += 1;
       if (type === 'income') {
         bucket.incomeCents += amount;
         continue;
@@ -44591,8 +44626,8 @@ textarea::selection {
     var meta = categoryMeta(db);
     var model = collect(db, S.month);
     if (!model) { return { failed: true, db: db }; }
-    /* 「上月」= 账期锚点往前一个月；「近 N 个月」= 以锚点为末月往前 N 个月 */
-    var anchor = addMonth(S.month, range.offset || 0);
+    /* S.month 就是本次报告账期的锚点（上月 chip 已把锚点定为上月），这里不再叠加偏移 */
+    var anchor = S.month;
     var win = summarize(model, anchor, range.months, meta);
     var prev = summarize(model, addMonth(win.months[0], -1), range.months, meta);
     var bars = [];
@@ -44945,7 +44980,7 @@ textarea::selection {
   function periodText(report) {
     var range = (report && report.range) || RANGE_BY_KEY[S.range] || RANGES[0];
     if (!report) {
-      return monthLabel(addMonth(S.month, range.offset || 0)) + ' \u00b7 ' + range.label;
+      return monthLabel(S.month) + ' \u00b7 ' + range.label;
     }
     if (range.key === 'month' || range.key === 'prev') {
       return monthLabel(report.endMonth) + ' \u00b7 ' + range.label;
@@ -45618,8 +45653,8 @@ textarea::selection {
     empty.appendChild(holder);
     empty.appendChild(el('p', { className: 'c-empty__title', text: '还没有账单' }));
     empty.appendChild(el('p', { className: 'c-empty__desc', text: '记几笔后，这里会自动生成收支结构与变化解读。' }));
-    var cta = buttonNode('记一笔', { className: 'c-btn c-btn--primary c-empty__action', icon: 'plus' });
-    cta.setAttribute('href', '#/add');
+    /* 必须是真链接：button 上补 href 不会导航 */
+    var cta = buttonNode('记一笔', { href: '#/add', className: 'c-btn c-btn--primary c-empty__action', icon: 'plus' });
     empty.appendChild(cta);
     card.appendChild(empty);
     return card;
@@ -45630,7 +45665,7 @@ textarea::selection {
     card.appendChild(el('p', { className: 's-insights-empty__title', text: '该账期暂无记录' }));
     card.appendChild(el('p', {
       className: 's-insights-empty__text',
-      text: monthLabel(addMonth(S.month, (RANGE_BY_KEY[S.range] || RANGES[0]).offset || 0)) + ' 没有任何收支。可以换一个账期，或先记一笔。'
+      text: monthLabel(S.month) + ' 没有任何收支。可以换一个账期，或先记一笔。'
     }));
     var row = el('div', { className: 's-insights-empty__actions' });
     if (S.month !== currentMonth() || S.range !== 'month') {
@@ -45850,7 +45885,7 @@ textarea::selection {
         var restore = S.sheetRestore;
         S.sheetRestore = null;
         if (restore && !S.dead) {
-          global.setTimeout(function () { if (!S.dead) { restore(); } }, 60);
+          later(restore, 60);
         }
       },
       actions: [
@@ -45933,7 +45968,13 @@ textarea::selection {
     if (first) {
       clearNode(S.contentEl);
       S.contentEl.setAttribute('aria-busy', 'true');
-      S.contentEl.appendChild(skeleton());
+      var skel = skeleton();
+      /* 骨架延迟 RULES.SKELETON_DELAY_MS 才淡入：本地读取通常 16ms 内完成，快路径不会闪一下骨架 */
+      skel.style.opacity = '0';
+      skel.style.transition = 'opacity 120ms linear ' + RULES.SKELETON_DELAY_MS + 'ms';
+      S.contentEl.appendChild(skel);
+      var reveal = global.requestAnimationFrame || function (fn) { return global.setTimeout(fn, 16); };
+      reveal(function () { if (skel.parentNode) { skel.style.opacity = '1'; } });
       S.timer = global.setTimeout(function () {
         S.timer = 0;
         if (token !== S.seq) { return; }
@@ -45954,8 +45995,16 @@ textarea::selection {
   function syncHash() {
     if (!S.month) { return; }
     var hash = '#/insights?m=' + S.month + '&r=' + S.range;
-    if (global.location.hash === hash) { return; }
-    try { global.history.replaceState(global.history.state, '', hash); } catch (error) { return; }
+    var changed = global.location.hash !== hash;
+    if (changed) {
+      var router = XZB.router;
+      if (router && typeof router.setHash === 'function') {
+        /* 同步 router.current()/history.state，前进后退与外部 rerender 才不会拿到旧 query */
+        if (!router.setHash(hash)) { return; }
+      } else {
+        try { global.history.replaceState(global.history.state, '', hash); } catch (error) { return; }
+      }
+    }
     if (S.ctx && S.ctx.route) {
       S.ctx.route.hash = hash;
       S.ctx.route.query = { m: S.month, r: S.range };
@@ -45991,7 +46040,8 @@ textarea::selection {
 
   function applyParams(ctx) {
     var query = (ctx && ctx.query) || {};
-    var sig = String(query.m || '') + '|' + String(query.r || '');
+    /* cat 也参与签名：否则从同一账期再点某个分类的「明细」深链会被旧 lastSig 吞掉 */
+    var sig = String(query.m || '') + '|' + String(query.r || '') + '|' + String(query.cat || '');
     if (sig !== S.lastSig) {
       S.lastSig = sig;
       if (isMonth(query.m) && query.m <= currentMonth()) { S.month = query.m; }
@@ -46011,6 +46061,7 @@ textarea::selection {
     S.ctx = ctx || null;
     S.dead = false;
     if (S.timer) { global.clearTimeout(S.timer); S.timer = 0; }
+    clearLater();
     applyParams(S.ctx);
     /* 会话内保留上次账期/区间：从别的 Tab 回来时把地址栏补齐，刷新仍落在同一份报告 */
     syncHash();
@@ -46020,17 +46071,19 @@ textarea::selection {
     if (S.pendingCat) {
       var categoryId = S.pendingCat;
       S.pendingCat = '';
-      global.setTimeout(function () {
-        if (S.dead) { return; }
+      later(function () {
         var report = buildReport(S.ctx);
         if (report && !report.failed) { openCategoryById(report, categoryId); }
       }, 120);
     }
+    /* 路由只采纳 render 返回对象上的 destroy；屏幕对象上的 destroy 不会被调用。 */
+    return { destroy: destroy };
   }
 
   function destroy() {
     S.dead = true;
     if (S.timer) { global.clearTimeout(S.timer); S.timer = 0; }
+    clearLater();
     S.root = null;
     S.ctx = null;
     S.contentEl = null;
@@ -53640,7 +53693,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.16.0';
+  XZB.version = '2.16.1';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
