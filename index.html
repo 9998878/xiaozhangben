@@ -3916,21 +3916,48 @@ textarea::selection {
   padding: 0 0 var(--sp-8);
 }
 
-/* 下拉刷新指示器：JS 把它从 0 拉起（home.js:932，内联 height 优先），
-   这里给的是初始态与上限高；app-screen 是滚动容器，所以它随内容一起被拉出可视区，
-   松手回弹由 JS 收尾。降级见文末 prefers-reduced-motion。 */
+/* 下拉刷新指示器（home.js:bindPullRefresh）：绝对定位在内容顶部，
+   拖动时 JS 只写 transform —— 不写 height、不写 text，避免每个 touchmove 触发布局。
+   黄底与头部同色：指示器底边恒贴内容顶边，拉出的空隙由它自己补满，不露白。
+   高度与 home.js 的 PULL_HEIGHT 成对（--sp-11 = 64px）。 */
+.s-home-view {
+  position: relative;
+}
+
 .s-home-pull {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   box-sizing: border-box;
-  height: 0;
-  max-height: var(--sp-11);
+  height: var(--sp-11);
+  padding: 0 var(--sp-page) 10px;
   overflow: hidden;
-  color: var(--c-text-3);
+  background: var(--c-tint);
+  color: var(--c-tint-soft-text);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
-  transition: height var(--dur-base) var(--ease-standard);
+  pointer-events: none;
+  transform: translate3d(0, calc(-1 * var(--sp-11)), 0);
+}
+
+/* 只有手势进行中和回弹的 180ms 提升合成层；静止时不留 will-change */
+.is-pulling .s-home-pull,
+.is-pulling .s-home-head,
+.is-pulling .s-home-inner,
+.is-pull-settling .s-home-pull,
+.is-pull-settling .s-home-head,
+.is-pull-settling .s-home-inner {
+  will-change: transform;
+}
+
+.is-pull-settling .s-home-pull,
+.is-pull-settling .s-home-head,
+.is-pull-settling .s-home-inner {
+  transition: transform var(--dur-base) var(--ease-ios);
 }
 
 /* 记一笔 FAB（home.js:956 追加在屏内容末尾）：sticky 常驻在 tab 栏之上 ——
@@ -12417,11 +12444,21 @@ textarea::selection {
       height: 28px;
     }
 
-    /* 屏幕切换：支持 View Transitions 时由浏览器接管，不支持时用同一条缓动降级 */
+    /* 屏幕切换：支持 View Transitions 时由浏览器接管，不支持时用同一条缓动降级。
+       #view-root 与 #tabbar 各自命名：底栏不再被卷进整页快照（整页淡入会让固定栏发虚、
+       跟着页面一起动）；两屏快照只负责内容区，底栏自己的高亮照常过渡。 */
+    #view-root {
+      view-transition-name: app-view;
+    }
+
+    #tabbar {
+      view-transition-name: app-tabbar;
+    }
+
     @keyframes app-screen-enter {
       from {
         opacity: 0;
-        transform: translate3d(14px, 0, 0);
+        transform: translate3d(18px, 0, 0);
       }
       to {
         opacity: 1;
@@ -12429,14 +12466,118 @@ textarea::selection {
       }
     }
 
+    @keyframes app-screen-enter-back {
+      from {
+        opacity: 0;
+        transform: translate3d(-18px, 0, 0);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    @keyframes app-screen-enter-tab {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
     .app-screen--enter {
       animation: app-screen-enter var(--dur-2) var(--ease-ios) both;
     }
 
+    .app-screen--enter[data-nav="back"] {
+      animation-name: app-screen-enter-back;
+    }
+
+    .app-screen--enter[data-nav="tab"] {
+      animation-name: app-screen-enter-tab;
+      animation-duration: var(--dur-base);
+    }
+
+    /* 原生 root 快照整页含底栏：关掉它，避免整页一起淡 */
     ::view-transition-old(root),
     ::view-transition-new(root) {
-      animation-duration: var(--dur-2);
+      animation: none;
+    }
+
+    /* 底栏单独一张快照：位置不变，默认交叉淡入即可（两帧像素一致时视觉上等于不动） */
+    ::view-transition-group(app-tabbar),
+    ::view-transition-old(app-tabbar),
+    ::view-transition-new(app-tabbar) {
+      animation-duration: var(--dur-base);
       animation-timing-function: var(--ease-ios);
+    }
+
+    /* 内容区方向化：进入新页从右侧推入，返回从左侧推入，Tab 根只做短淡入 */
+    html[data-nav="forward"]::view-transition-old(app-view) {
+      animation: vt-out-left var(--dur-base) var(--ease-ios) both;
+    }
+
+    html[data-nav="forward"]::view-transition-new(app-view) {
+      animation: vt-in-right var(--dur-2) var(--ease-ios) both;
+    }
+
+    html[data-nav="back"]::view-transition-old(app-view) {
+      animation: vt-out-right var(--dur-base) var(--ease-ios) both;
+    }
+
+    html[data-nav="back"]::view-transition-new(app-view) {
+      animation: vt-in-left var(--dur-2) var(--ease-ios) both;
+    }
+
+    html[data-nav="tab"]::view-transition-old(app-view),
+    html[data-nav="tab"]::view-transition-new(app-view) {
+      animation-duration: var(--dur-base);
+      animation-timing-function: var(--ease-ios);
+    }
+
+    @keyframes vt-in-right {
+      from {
+        opacity: 0.7;
+        transform: translate3d(24px, 0, 0);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    @keyframes vt-out-left {
+      from {
+        opacity: 1;
+        transform: none;
+      }
+      to {
+        opacity: 0.7;
+        transform: translate3d(-12px, 0, 0);
+      }
+    }
+
+    @keyframes vt-in-left {
+      from {
+        opacity: 0.7;
+        transform: translate3d(-24px, 0, 0);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    @keyframes vt-out-right {
+      from {
+        opacity: 1;
+        transform: none;
+      }
+      to {
+        opacity: 0.7;
+        transform: translate3d(12px, 0, 0);
+      }
     }
 
     /* 启动遮罩：数据就绪后淡出，避免白屏 */
@@ -34414,14 +34555,14 @@ textarea::selection {
   }
 
   /* 进入 Tab 根：历史栈重置为单条，浏览器后退不回到上一个 Tab */
-  function replaceRoute(route, scrollY, animate) {
+  function replaceRoute(route, scrollY, animate, nav) {
     saveCurrentScroll();
     stack = [entryFor(route, scrollY || 0)];
     index = 0;
     currentRoute = route;
     historyReplace(route, 0);
     publishState();
-    renderRoute(route, scrollY || 0, { animate: animate !== false });
+    renderRoute(route, scrollY || 0, { animate: animate !== false, nav: nav || 'tab' });
   }
 
   /* 进入二级页：从当前 Tab 根起压栈 */
@@ -34435,7 +34576,7 @@ textarea::selection {
     currentRoute = route;
     historyPush(route, index);
     publishState();
-    renderRoute(route, 0, { animate: true });
+    renderRoute(route, 0, { animate: true, nav: 'forward' });
   }
 
   function go(input) {
@@ -34715,6 +34856,8 @@ textarea::selection {
   function renderRoute(route, scrollTop, options) {
     if (!rootEl) return;
     var opts = options || {};
+    /* 导航方向只影响动画，不参与路由语义：tab 根横切、二级页进入、返回三者分开 */
+    var nav = opts.nav === 'back' || opts.nav === 'forward' ? opts.nav : 'tab';
     currentRoute = route;
     publishState();
     /* 本轮渲染序号递增：上一屏未落定的 Promise 句柄据此判为过期。 */
@@ -34732,6 +34875,8 @@ textarea::selection {
 
     var screenEl = make('section', 'app-screen');
     screenEl.setAttribute('data-view', route.view);
+    /* 降级动画按方向选关键帧（index.html .app-screen--enter[data-nav]） */
+    screenEl.setAttribute('data-nav', nav);
     if (immersive) {
       screenEl.setAttribute('data-chrome', 'custom');
     } else {
@@ -34773,6 +34918,9 @@ textarea::selection {
     }
 
     if (document.startViewTransition && opts.animate !== false && !reducedMotion()) {
+      /* 伪元素选择器挂在 html 上：方向必须在快照开始前就位 */
+      var docEl = document.documentElement;
+      if (docEl) docEl.setAttribute('data-nav', nav);
       try {
         usedVT = true;
         var vt = document.startViewTransition(swapDom);
@@ -34848,11 +34996,13 @@ textarea::selection {
     }
 
     if (targetIndex >= 0) {
+      /* 后退/前进由栈位置判定，硬件返回与手势返回都走这里 */
+      var nav = targetIndex < index ? 'back' : 'forward';
       index = targetIndex;
       currentRoute = route;
       publishState();
       var entry = stack[index] || entryFor(route, 0);
-      renderRoute(route, entry.scrollY || 0, { animate: true });
+      renderRoute(route, entry.scrollY || 0, { animate: true, nav: nav });
       return;
     }
 
@@ -35019,8 +35169,11 @@ textarea::selection {
   /* 只在本次会话第一次进首页时播错位入场，之后 rerender 不再抖 */
   var firstPaint = true;
 
-  /* 下拉刷新：与既有首页能力清单保持一致（阈值 60px，到顶才触发） */
-  var PULL_VISUAL_MAX = 88;
+  /* 下拉刷新：与既有首页能力清单保持一致（阈值 60px，到顶才触发）。
+     指示器高度恒等于 --sp-11（64px），与 home.css 的 .s-home-pull 成对；
+     拖动期间只写 transform，不写 height / text —— 每个 touchmove 改布局是卡顿主因。 */
+  var PULL_HEIGHT = 64;
+  var PULL_VISUAL_MAX = PULL_HEIGHT;
   var PULL_TRIGGER = 60;
   var PULL_READY = Math.round(PULL_TRIGGER * 0.7);
 
@@ -35705,32 +35858,129 @@ textarea::selection {
 
   /* ---------------- 下拉刷新 ---------------- */
 
-  function bindPullRefresh(scroller, pull, isDead) {
+  function bindPullRefresh(scroller, pull, contentEls, host, isDead) {
     var app = appApi();
-    if (!scroller || !pull || !app || typeof app.refresh !== 'function') { return null; }
+    if (!scroller || !pull || !contentEls || !contentEls.length) { return null; }
+    if (!app || typeof app.refresh !== 'function') { return null; }
 
+    var startX = 0;
     var startY = 0;
     var tracking = false;
-    var distance = 0;
+    var pulled = false;
     var ready = false;
     var busy = false;
+    var raf = 0;
+    var pending = null;
+    var settleTimer = 0;
+    var settleDone = null;
+    var lastText = pull.textContent;
+    var reduced = false;
+    try {
+      reduced = !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (error) { reduced = false; }
 
     function dead() {
       return typeof isDead === 'function' && isDead() === true;
     }
 
-    function setVisual(height, text) {
-      pull.style.height = height + 'px';
+    /* 只有三种状态文案会变；同一文案不重写 textContent（避免无谓的文本重排） */
+    function setText(text) {
+      if (text === lastText) { return; }
+      lastText = text;
       pull.textContent = text;
+    }
+
+    /* 指示器底边恒贴内容顶边：拉出的空隙由指示器自身黄底补满，不露白。
+       y 是内容的位移，指示器反方向上移一个自身高度。 */
+    function paint(y) {
+      var offset = y > 0 ? y : 0;
+      pull.style.transform = 'translate3d(0,' + (offset - PULL_HEIGHT) + 'px,0)';
+      for (var i = 0; i < contentEls.length; i += 1) {
+        contentEls[i].style.transform = 'translate3d(0,' + offset + 'px,0)';
+      }
+    }
+
+    function flush() {
+      raf = 0;
+      if (pending === null) { return; }
+      var y = pending;
+      pending = null;
+      if (dead()) { return; }
+      paint(y);
+    }
+
+    /* 一帧最多写一次 transform：touchmove 可能一帧来 2~3 次 */
+    function queue(y) {
+      pending = y;
+      if (raf) { return; }
+      if (typeof global.requestAnimationFrame === 'function') {
+        raf = global.requestAnimationFrame(flush);
+      } else {
+        raf = global.setTimeout(flush, 16);
+      }
+    }
+
+    function cancelFrame() {
+      if (!raf) { return; }
+      if (typeof global.cancelAnimationFrame === 'function') { global.cancelAnimationFrame(raf); }
+      else { global.clearTimeout(raf); }
+      raf = 0;
+      pending = null;
+    }
+
+    function flushNow() {
+      if (pending === null) { return; }
+      var y = pending;
+      cancelFrame();
+      paint(y);
+    }
+
+    function clearSettling() {
+      if (settleTimer) { global.clearTimeout(settleTimer); settleTimer = 0; }
+      if (settleDone && typeof pull.removeEventListener === 'function') {
+        pull.removeEventListener('transitionend', settleDone);
+      }
+      settleDone = null;
+      if (host && host.classList) { host.classList.remove('is-pull-settling'); }
+    }
+
+    /* 结算后清空内联 transform：常驻 transform 会给后代制造 containing block */
+    function resetTransforms() {
+      pull.style.transform = '';
+      for (var i = 0; i < contentEls.length; i += 1) { contentEls[i].style.transform = ''; }
+    }
+
+    function settle() {
+      cancelFrame();
+      clearSettling();
+      if (dead()) { return; }
+      if (reduced) {
+        resetTransforms();
+        return;
+      }
+      /* 先把当前位移提交到样式再开过渡：同一帧里同时加 class 和改 transform
+         会让浏览器拿不到起点而瞬移。读一次 offsetHeight 只发生在手势结束时。 */
+      void pull.offsetHeight;
+      if (host && host.classList) { host.classList.add('is-pull-settling'); }
+      paint(0);
+      /* 不依赖 transitionend（三个元素各自触发，先到的会提前撤掉过渡）；
+         260ms 略长于 --dur-base 180ms，动画结束后清内联 transform 不产生视觉变化 */
+      settleTimer = global.setTimeout(function () {
+        settleTimer = 0;
+        clearSettling();
+        resetTransforms();
+      }, 260);
     }
 
     function onStart(event) {
       if (busy || dead() || scroller.scrollTop > 0) { return; }
       var touch = event.touches && event.touches[0];
       if (!touch) { return; }
+      clearSettling();
+      startX = touch.clientX;
       startY = touch.clientY;
       tracking = true;
-      distance = 0;
+      pulled = false;
       ready = false;
     }
 
@@ -35738,34 +35988,69 @@ textarea::selection {
       if (!tracking || busy) { return; }
       var touch = event.touches && event.touches[0];
       if (!touch) { return; }
-      distance = touch.clientY - startY;
-      if (distance <= 0 || scroller.scrollTop > 0) {
+      if (scroller.scrollTop > 0) {
+        tracking = false;
+        pulled = false;
         ready = false;
-        setVisual(0, '下拉刷新');
-        if (scroller.scrollTop > 0) { tracking = false; }
+        queue(0);
+        setText('下拉刷新');
         return;
       }
-      var visual = Math.min(PULL_VISUAL_MAX, Math.round(distance * 0.7));
+      var dy = touch.clientY - startY;
+      var dx = touch.clientX - startX;
+      if (dy <= 0) {
+        if (pulled) {
+          pulled = false;
+          ready = false;
+          queue(0);
+          setText('下拉刷新');
+        }
+        return;
+      }
+      if (!pulled) {
+        /* 8px 内不抢手势；横向意图优先交还给系统（滚动 / 侧滑返回） */
+        if (dy < 8 || Math.abs(dx) > dy) { return; }
+        pulled = true;
+        if (host && host.classList) { host.classList.add('is-pulling'); }
+      }
+      /* 只有确认「到顶 + 纵向向下」才拦默认行为，正常滚动一律不拦 */
+      if (event.cancelable) {
+        try { event.preventDefault(); } catch (error) { /* 忽略 */ }
+      }
+      var visual = Math.min(PULL_VISUAL_MAX, Math.round(dy * 0.7));
       ready = visual >= PULL_READY;
-      setVisual(visual, ready ? '松开刷新' : '下拉刷新');
+      queue(visual);
+      setText(ready ? '松开刷新' : '下拉刷新');
     }
 
     function onEnd() {
       if (!tracking || busy) { return; }
       tracking = false;
-      if (!ready) {
-        setVisual(0, '下拉刷新');
+      flushNow();
+      if (host && host.classList) { host.classList.remove('is-pulling'); }
+      if (!pulled || !ready) {
+        setText('下拉刷新');
+        settle();
         return;
       }
       busy = true;
-      setVisual(PULL_READY, '正在刷新…');
+      setText('正在刷新…');
+      /* 停在触发位，等数据回来再回弹；刷新本身走 app.refresh() */
+      cancelFrame();
+      paint(PULL_READY);
+      if (host) { host.setAttribute('aria-busy', 'true'); }
       var result = null;
       try { result = app.refresh(); } catch (error) { result = null; }
       var finish = function () {
         busy = false;
-        if (dead()) { return; } /* 已换屏：不再写 DOM、不再 toast */
-        setVisual(0, '下拉刷新');
-        toast('已刷新', { type: 'success' });
+        if (host) { host.removeAttribute('aria-busy'); }
+        /* 刷新会整屏重建时旧节点已销毁：不再写旧 DOM，但 toast 是全局的，不能吞掉 */
+        if (!dead()) { settle(); }
+        if (result && result.ok === false) {
+          toast('刷新失败，请稍后重试', { type: 'danger' });
+        } else {
+          toast('已刷新', { type: 'success' });
+        }
       };
       if (result && typeof result.then === 'function') { result.then(finish, finish); }
       else { global.setTimeout(finish, 360); }
@@ -35773,20 +36058,28 @@ textarea::selection {
 
     function onCancel() {
       tracking = false;
+      if (host && host.classList) { host.classList.remove('is-pulling'); }
       ready = false;
-      if (!busy) { setVisual(0, '下拉刷新'); }
+      if (!busy) { setText('下拉刷新'); settle(); }
     }
 
     scroller.addEventListener('touchstart', onStart, { passive: true });
-    scroller.addEventListener('touchmove', onMove, { passive: true });
+    /* 非 passive：仅在「到顶 + 纵向向下」时 preventDefault，其余滚动不拦 */
+    scroller.addEventListener('touchmove', onMove, { passive: false });
     scroller.addEventListener('touchend', onEnd, { passive: true });
     scroller.addEventListener('touchcancel', onCancel, { passive: true });
 
     return function unbind() {
       scroller.removeEventListener('touchstart', onStart, { passive: true });
-      scroller.removeEventListener('touchmove', onMove, { passive: true });
+      scroller.removeEventListener('touchmove', onMove, { passive: false });
       scroller.removeEventListener('touchend', onEnd, { passive: true });
       scroller.removeEventListener('touchcancel', onCancel, { passive: true });
+      cancelFrame();
+      clearSettling();
+      if (host) {
+        host.classList.remove('is-pulling');
+        host.removeAttribute('aria-busy');
+      }
     };
   }
 
@@ -35844,14 +36137,21 @@ textarea::selection {
     /* 树形（UI.md §4.1）：.app-screen__body.s-home > div[data-home-view="1"]
        >（.s-home-pull / header.s-home-head / .s-home-inner）。头部整块属于本屏（immersive），
        黄底通栏靠它吃满宽度；其余内容进 s-home-inner 吃页面左右留白。 */
-    var viewBody = el('div');
+    var viewBody = el('div', { className: 's-home-view' });
     viewBody.setAttribute('data-home-view', '1');
     root.appendChild(viewBody);
 
-    var pull = el('div', { className: 's-home-pull', text: '下拉刷新' });
-    pull.style.height = '0px';
+    /* 指示器与头部同底色：拖动时指示器底边恒贴内容顶边，拉出的空隙不会露白。
+       位置/高度全在 home.css，JS 只写 transform（见 bindPullRefresh）。 */
+    var pull = el('div', {
+      className: 's-home-pull',
+      text: '下拉刷新',
+      role: 'status',
+      'aria-live': 'polite'
+    });
     viewBody.appendChild(pull);
-    viewBody.appendChild(buildHead(book, month, summary, view));
+    var head = buildHead(book, month, summary, view);
+    viewBody.appendChild(head);
 
     var inner = el('div', { className: 's-home-inner' });
     view.inner = inner;
@@ -35879,6 +36179,8 @@ textarea::selection {
     var unbindPull = bindPullRefresh(
       root.closest ? root.closest('.app-screen') : null,
       pull,
+      [head, inner],
+      viewBody,
       function () { return view.dead; }
     );
 
@@ -53693,7 +53995,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.16.1';
+  XZB.version = '2.16.2';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
