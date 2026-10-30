@@ -4118,114 +4118,6 @@ textarea::selection {
   font-weight: inherit;
 }
 
-/* ---------------- 白色快捷入口卡（四等分，压住头部底边 16px） ----------------
- * 压边用「负 margin + z-index + 文档流不变」实现：
- * 不用 position:absolute——卡片的 44px 点击区和键盘弹出都不该脱离文档流。
- * 2026-10 2.15.0：五等分 → 四等分（UI.md §2.2 几何表），只改这一处函数；
- * 2.16.0：预算移出快捷区后为三等分，仍用 minmax(0,1fr) 保证 320/390/430 三档不溢出。
- */
-
-.s-home-quick {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-1);
-  box-sizing: border-box;
-  margin: calc(var(--sp-5) * -1) var(--sp-page) 0;
-  padding: var(--sp-4) var(--sp-2);
-  border-radius: var(--r-card);
-  background: var(--c-bg-elev);
-  box-shadow: var(--shadow-card);
-}
-
-.s-home-quick__item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-1);
-  box-sizing: border-box;
-  min-width: 0;
-  min-height: var(--h-tap-min);
-  padding: var(--sp-1) 0;
-  border: 0; /* a → button 归一：base.css 未重置 UA 边框 */
-  border-radius: var(--r-lg);
-  background: none; /* 同上：去掉 UA buttonface 灰底 */
-  color: var(--c-text);
-  font: inherit; /* 同上：UA 默认 13.33px，会破坏 12px 标签继承链 */
-  text-decoration: none;
-  -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--dur-base) var(--ease-standard);
-}
-
-.s-home-quick__icon {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: var(--size-quick-icon);
-  height: var(--size-quick-icon);
-  color: var(--c-text);
-  transition: transform var(--dur-fast) var(--ease-standard);
-}
-
-.s-home-quick__icon svg,
-.s-home-quick__icon .c-icon {
-  width: var(--size-quick-icon);
-  height: var(--size-quick-icon);
-}
-
-.s-home-quick__label {
-  max-width: 100%;
-  overflow: hidden;
-  font-size: var(--fs-aux);
-  line-height: var(--lh-body);
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (hover: hover) {
-  /* hover 收窄：选中态（aria-pressed=true）不吃灰底，避免「选中被 hover 盖掉」 */
-  .s-home-quick__item:not([aria-pressed="true"]):hover {
-    background: var(--c-fill);
-  }
-}
-
-.s-home-quick__item:active,
-.s-home-quick__item.is-pressed {
-  background: var(--c-pressed);
-}
-
-.s-home-quick__item:active .s-home-quick__icon,
-.s-home-quick__item.is-pressed .s-home-quick__icon {
-  transform: scale(var(--press-btn));
-}
-
-.s-home-quick__item:focus-visible {
-  outline: var(--focus-width) solid var(--c-focus);
-  outline-offset: calc(var(--focus-offset) * -1);
-}
-
-/* 唯一持久选中态（「待报销」开关，aria-pressed）。两态语义固定走 warn 黄系：
- * 底色走 --c-warn-soft、文字与图标走 --c-warn（对比度 4.85:1），
- * 与 ledger.css 的「待报销」chip 同一套颜色；禁用 --c-tint 表达选中（黄底黄字不可读）。
- * 层叠：:active / .is-pressed 是同权重（0,2,0）且写在前面，本组规则在后即胜出，
- * 因此「选中 + 按住」背景保持 warn-soft，只留 :271-274 的图标 scale(.96) 作为反馈。 */
-.s-home-quick__item[aria-pressed="true"] {
-  background: var(--c-warn-soft);
-  color: var(--c-warn);
-}
-
-.s-home-quick__item[aria-pressed="true"] .s-home-quick__icon {
-  color: var(--c-warn);
-}
-
-.s-home-quick__item[aria-pressed="true"] .s-home-quick__label {
-  color: var(--c-warn);
-  font-weight: var(--fw-semibold); /* 12px 加粗：颜色之外的第二重编码 */
-}
-
 /* ---------------- 预算（扁平：黄进度条 + 一行数字） ---------------- */
 
 .s-home-budget {
@@ -4554,8 +4446,7 @@ textarea::selection {
   transition: background-color var(--dur-base) var(--ease-standard);
 }
 
-.s-home-budget[aria-disabled="true"],
-.s-home-quick__item[aria-disabled="true"] {
+.s-home-budget[aria-disabled="true"] {
   opacity: 0.38;
   pointer-events: none;
 }
@@ -4569,10 +4460,6 @@ textarea::selection {
 @media (max-width: 360px) {
   .s-home-head__value {
     font-size: var(--fs-summary-min);
-  }
-
-  .s-home-quick {
-    padding: var(--sp-3) var(--sp-1);
   }
 }
 
@@ -4598,8 +4485,6 @@ textarea::selection {
 /* ---------------- 降级动效 ---------------- */
 
 @media (prefers-reduced-motion: reduce) {
-  .s-home-quick__item,
-  .s-home-quick__icon,
   .s-home-budget,
   .s-home-due__link,
   .s-home-pull,
@@ -4607,10 +4492,6 @@ textarea::selection {
     transition: none;
   }
 
-  .s-home-quick__item:active .s-home-quick__icon,
-  .s-home-quick__item.is-pressed .s-home-quick__icon {
-    transform: none;
-  }
 }
 
 /* ---------------- 头部汇总金额降档（配 home.js summaryColumn） ----------------
@@ -35125,13 +35006,11 @@ textarea::selection {
   <script>
 /* 小账本 2.0 · js/screens/home.js
  * 首页（2.15 整合版）：本屏自绘黄色专属头部（品牌行 + 月度汇总三列）
- *   → 白色四格页内动作卡（找流水 / 分类 / 待报销 / 预算，上浮压住头部底边）
- *   → 紧凑预算单卡（无预算时不渲染；点卡或四格「预算」打开预算状态 Sheet）
+ *   → 紧凑预算单卡（无预算时不渲染；点卡打开预算状态 Sheet）
  *   → 待入账（有数据才出现）
  *   → 嵌入式明细（ledger.render(host, ctx, { embedded:true, … }) 是唯一列表实现）
  *
  * 2.15 删除：独立「最近流水」区块、右下角 FAB、行/照片渲染管线（整体交给 ledger.js）。
- * 四格是**页内动作**不是导航：全是 <button type="button">，无 href、不写 hash（R14/R15）。
  *
  * 契约：XZB.screens.register('home', { title, immersive, render })
  *   render(root, ctx) → { destroy }；路由换屏前调用一次 destroy（D2-11）。
@@ -35156,15 +35035,6 @@ textarea::selection {
   var dates = Core.dates || null;
   var stats = Core.stats || null;
   var recurrence = Core.recurrence || null;
-
-  /* 三格页内动作：固定顺序 + 固定文案（UI.md §2.1）。三格都不是导航：
-     点击后 location.hash 逐字符不变、history.length 不变（A5 / R15）。
-     2.16.0：「预算」移出快捷区，预算只保留下方预算卡这一处入口（禁止两个预算入口）。 */
-  var QUICK_ACTIONS = [
-    { attrs: { 'data-quick': 'search' }, label: '找流水', icon: 'search' },
-    { attrs: { 'data-quick': 'tag' }, label: '分类', icon: 'tag' },
-    { attrs: { 'data-quick': 'flag' }, label: '待报销', icon: 'flag', toggle: true }
-  ];
 
   /* 只在本次会话第一次进首页时播错位入场，之后 rerender 不再抖 */
   var firstPaint = true;
@@ -35488,66 +35358,6 @@ textarea::selection {
     return head;
   }
 
-  /* ---------------- 区块：四格页内动作卡（压住头部底边） ---------------- */
-
-  function bindQuickAction(button, key, view) {
-    button.addEventListener('click', function () {
-      if (view.dead || view.destroyed) { return; }
-      var controller = view.controller;
-      var method = key === 'search' ? 'focusSearch'
-        : key === 'tag' ? 'openCategoryFilter'
-          : key === 'flag' ? 'toggleReimburse'
-            : 'openBudgetStatus';
-      if (key === 'bell') {
-        /* 预算：恒走 controller.openBudgetStatus()（D2-9 转发 onBudgetStatus）；
-           控制器缺失（ledger 未实现/未加载）时直接开本屏自建的 Sheet，不吞掉点击。 */
-        if (controller && typeof controller.openBudgetStatus === 'function') {
-          try { controller.openBudgetStatus(); } catch (error) { warn('[home] 预算状态转发失败', error); }
-        } else {
-          openBudgetStatus(view);
-        }
-        return;
-      }
-      if (!controller || typeof controller[method] !== 'function') { return; }
-      try { controller[method](); } catch (error) { warn('[home] 快捷动作失败：' + key, error); }
-      if (key === 'flag') {
-        /* 双态由 aria-pressed 表达（CSS 负责观感，本文件零内联样式）。
-           controller 不回传当前值，因此以本屏点击次数为准翻转。 */
-        view.reimbursePressed = !view.reimbursePressed;
-        button.setAttribute('aria-pressed', view.reimbursePressed ? 'true' : 'false');
-      }
-    });
-  }
-
-  function buildQuick(view) {
-    var card = el('nav', { className: 's-home-quick', 'aria-label': '快捷入口' });
-    card.setAttribute('data-home-quick', '1');
-    for (var i = 0; i < QUICK_ACTIONS.length; i += 1) {
-      var action = QUICK_ACTIONS[i];
-      var attrs = { className: 's-home-quick__item c-pressable' };
-      Object.keys(action.attrs).forEach(function (name) {
-        attrs[name] = action.attrs[name];
-      });
-      attrs.type = 'button'; /* A5：恒为 <button type=button>，恒无 href / data-nav / data-tab */
-      if (action.toggle) {
-        attrs['aria-pressed'] = view.reimbursePressed ? 'true' : 'false';
-      }
-      var button = el('button', attrs);
-      button.setAttribute('type', 'button'); /* kit 缺失时的兜底 */
-      var key = '';
-      var attrNames = Object.keys(action.attrs);
-      if (attrNames.length) { key = String(action.attrs[attrNames[0]]); } /* 派发键取自动作表，不二次维护 */
-      var holder = el('span', { className: 's-home-quick__icon' });
-      holder.setAttribute('aria-hidden', 'true');
-      holder.appendChild(iconNode(action.icon, 24));
-      button.appendChild(holder);
-      button.appendChild(el('span', { className: 's-home-quick__label', text: action.label }));
-      bindQuickAction(button, key, view);
-      card.appendChild(button);
-    }
-    return card;
-  }
-
   /* ---------------- 区块：预算（紧凑单卡；没预算就整块不渲染） ---------------- */
 
   function openBudgetStatus(view) {
@@ -35850,7 +35660,7 @@ textarea::selection {
       if (nextCard) { prev.parentNode.replaceChild(nextCard, prev); }
       else { prev.parentNode.removeChild(prev); }
     } else if (nextCard && view.inner) {
-      var anchor = view.quickCard ? view.quickCard.nextSibling : view.inner.firstChild;
+      var anchor = view.inner.firstChild;
       view.inner.insertBefore(nextCard, anchor);
     }
     view.budgetCard = nextCard || null;
@@ -36102,10 +35912,6 @@ textarea::selection {
     var scope = bookId ? { bookId: bookId } : undefined;
 
     var params = (ctx && ctx.params) || {};
-    /* 双态按钮只有一个真值来源：ledger 的 reimburseOnly。URL 只能把待报销「打开」
-       （D4-6），所以初始按压态按 ?flag=reimburse 对齐；之后以本屏点击次数翻转。
-       controller 不暴露 getter（D2-10 只允许三个只读字段），故不反查。 */
-    var reimburseOn = String(params.flag || '') === 'reimburse';
 
     /* 月汇总/预算各算一次：头部、预算卡与预算 Sheet 共用同一份结果（D2-37 零二次读库） */
     var view = {
@@ -36120,9 +35926,7 @@ textarea::selection {
       controller: null,
       head: null,
       inner: null,
-      quickCard: null,
-      budgetCard: null,
-      reimbursePressed: reimburseOn
+      budgetCard: null
     };
     var summary = readSummary(db, month, scope);
     view.budget = readBudget(db, month, scope);
@@ -36155,10 +35959,6 @@ textarea::selection {
 
     var inner = el('div', { className: 's-home-inner' });
     view.inner = inner;
-
-    var quickCard = buildQuick(view);
-    view.quickCard = quickCard;
-    inner.appendChild(quickCard);
 
     var budgetCard = buildBudget(view);
     view.budgetCard = budgetCard;
@@ -36199,7 +35999,7 @@ textarea::selection {
     }
 
     if (firstPaint && kit() && !reducedMotion()) {
-      kit().stagger([quickCard, budgetCard, dueCard], { step: 34 });
+      kit().stagger([budgetCard, dueCard], { step: 34 });
       firstPaint = false;
     }
 
@@ -53995,7 +53795,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.16.2';
+  XZB.version = '2.16.3';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
