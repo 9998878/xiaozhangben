@@ -6609,7 +6609,11 @@ textarea::selection {
     calc(var(--sp-page) + var(--safe-left));
   color: inherit;
   text-decoration: none;
-  touch-action: pan-y;
+  /* 2.17.1：原来是 pan-y，等于告诉浏览器「纵向滚动直接归你，不用等 JS」。
+     横向左滑只要带一点纵向抖动，浏览器就抢先开始滚动并发 pointercancel，
+     整行因此弹回、页面上下滑。改回 auto，让行上的非被动 touchmove 先判方向
+     （方向判定见 src/js/screens/ledger.js 的 bindGesture）。 */
+  touch-action: auto;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
@@ -44494,6 +44498,54 @@ textarea::selection {
     var longFired = false;
     var longTimer = 0;
 
+    /* 2.17.1 方向仲裁：触摸设备上先由 touchmove 决定这次手势归谁。
+       浏览器一旦开始滚动，指针流会被 pointercancel 掐断、行再也拖不动，
+       所以第一帧必须先 preventDefault 把滚动压住，再判断是横滑还是滚动。
+       在完成「判断」之前绝不放手，宁可晚一帧再交还给系统滚动。 */
+    var touchAxis = '';       /* '' 未定 | 'x' 横滑（整段压住滚动） | 'y' 交还滚动 */
+    var touchX = 0;
+    var touchY = 0;
+    var touchBlocked = false;
+
+    function onTouchStart(event) {
+      touchAxis = '';
+      touchBlocked = false;
+      if (st.dead || !event.touches || event.touches.length !== 1) { return; }
+      if (event.target && event.target.closest && event.target.closest('.s-ledger-item__actions')) {
+        touchAxis = 'y';
+        return;
+      }
+      touchX = event.touches[0].clientX;
+      touchY = event.touches[0].clientY;
+    }
+
+    function onTouchMove(event) {
+      if (st.dead || touchAxis === 'y') { return; }
+      if (!event.touches || event.touches.length !== 1) { return; }
+      var ax = Math.abs(event.touches[0].clientX - touchX);
+      var ay = Math.abs(event.touches[0].clientY - touchY);
+      if (touchAxis === 'x') {
+        if (event.cancelable) { event.preventDefault(); }
+        return;
+      }
+      /* 还没定方向：这一帧先吃掉，避免浏览器抢先开滚 */
+      if (event.cancelable) { event.preventDefault(); }
+      touchBlocked = true;
+      if (ax >= 4 && ax * 1.25 >= ay) {
+        touchAxis = 'x';
+        return;
+      }
+      if (ay >= 6 && ay > ax * 1.25) {
+        /* 明确纵向：从下一帧起不再 preventDefault，滚动照常 */
+        touchAxis = 'y';
+      }
+    }
+
+    function onTouchEnd() {
+      touchAxis = '';
+      touchBlocked = false;
+    }
+
     function clearLong() {
       if (longTimer) { global.clearTimeout(longTimer); longTimer = 0; }
     }
@@ -44541,7 +44593,7 @@ textarea::selection {
       var dx = event.clientX - startX;
       var dy = event.clientY - startY;
       if (!dragging) {
-        if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) {
+        if (touchAxis !== 'x' && Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) {
           active = false;
           clearLong();
           return;
@@ -44576,11 +44628,24 @@ textarea::selection {
     wrap.addEventListener('pointerup', finish);
     wrap.addEventListener('pointercancel', function () {
       clearLong();
+      var wasDragging = dragging;
+      var wasDelta = delta;
       active = false;
       dragging = false;
       surface.style.transition = '';
-      close();
+      /* 横滑已经锁定时被 cancel，不该把行弹回去（用户的手势意图是滑动，不是取消） */
+      if (wasDragging && touchAxis === 'x') {
+        if (wasDelta <= SWIPE_OPEN / 2) { open(); } else { close(); }
+      } else {
+        close();
+      }
+      onTouchEnd();
     });
+
+    wrap.addEventListener('touchstart', onTouchStart, { passive: false });
+    wrap.addEventListener('touchmove', onTouchMove, { passive: false });
+    wrap.addEventListener('touchend', onTouchEnd, { passive: true });
+    wrap.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
     wrap.addEventListener('click', function (event) {
       if (event.target && event.target.closest && event.target.closest('.s-ledger-item__actions')) { return; }
@@ -58042,7 +58107,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.17.0';
+  XZB.version = '2.17.1';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
