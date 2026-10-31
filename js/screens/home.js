@@ -417,11 +417,34 @@
     if (danger || pct >= 80 || budget.state === 'warn') {
       list.push(budgetWarnRow(danger, pct));
     }
+
+    /* P0-1：把预算上下文带进小助手（只预填问题，不自动改预算） */
+    if (assistantEntryOn(view)) {
+      list.push(btnNode('问问小助手怎么调整', {
+        variant: 'secondary',
+        href: budgetAskHash(month)
+      }));
+    }
     return list;
   }
 
   function pctText(pct) {
     return String(Math.round((Number(pct) || 0) * 10) / 10);
+  }
+
+  /* P0-1 情境入口开关：默认开，「我的」里可关（与解读页同一开关） */
+  function assistantEntryOn(view) {
+    var prefs = (view && view.ctx && view.ctx.prefs) || (appApi() && appApi().prefs);
+    var v = null;
+    if (prefs && typeof prefs.get === 'function') {
+      try { v = prefs.get('assistant.contextualEntry'); } catch (error) { v = null; }
+    }
+    return v !== false;
+  }
+
+  function budgetAskHash(month) {
+    var q = '本月预算还能用多少？照这样花月底会超吗？';
+    return '#/assistant?from=home&m=' + encodeURIComponent(String(month || '')) + '&q=' + encodeURIComponent(q);
   }
 
   function sheetRow(options) {

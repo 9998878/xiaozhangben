@@ -7452,6 +7452,12 @@ textarea::selection {
   text-align: left;
 }
 
+/* P0-1 情境入口：详情面板底部「问问小助手这笔账」 */
+.s-ledger-detail__ask {
+  width: 100%;
+  margin-top: var(--sp-3);
+}
+
 /* ---------------- 详情面板照片区（D1；紧邻 __detail 家族，UI.md §2.5.1 / §2.10） ---------------- */
 .s-ledger-detail__photos {
   display: grid;
@@ -12481,6 +12487,8 @@ textarea::selection {
 .s-assistant__ghost:focus-visible,
 .s-assistant__opt:focus-visible,
 .s-assistant__chip:focus-visible,
+.s-assistant__ctxchip-close:focus-visible,
+.s-assistant__task:focus-visible,
 .s-assistant__target:focus-visible,
 .s-assistant__filter:focus-visible,
 .s-assistant__hcard-btn:focus-visible,
@@ -12744,6 +12752,239 @@ textarea::selection {
   font-size: var(--fs-caption-1);
   font-weight: var(--fw-semibold);
   cursor: pointer;
+}
+
+/* ---------------- 情境上下文 Chip（解读/预算/流水带参进入） ---------------- */
+
+.s-assistant__ctxrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+}
+
+.s-assistant__ctxrow[hidden] {
+  display: none;
+}
+
+/* 空会话任务入口：4 等分，触区 ≥44px */
+.s-assistant__tasks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+}
+
+.s-assistant__tasks[hidden] {
+  display: none;
+}
+
+.s-assistant__task {
+  min-height: var(--h-tap-min, 44px);
+  padding: 0 4px;
+  border: var(--hairline) solid var(--c-stroke);
+  border-radius: var(--r-md);
+  background: var(--c-fill);
+  color: var(--c-text-2);
+  font-family: inherit;
+  font-size: var(--fs-footnote);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.s-assistant__task:active {
+  background: var(--c-fill-press);
+}
+
+.s-assistant__ctxchip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 4px 0 10px;
+  border: var(--hairline) solid var(--c-stroke);
+  border-radius: var(--r-pill);
+  background: var(--c-fill);
+  color: var(--c-text-2);
+  font-size: var(--fs-caption-1);
+}
+
+.s-assistant__ctxchip-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.s-assistant__ctxchip-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--c-text-3);
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.s-assistant__ctxchip-close:active {
+  background: var(--c-fill-press);
+}
+
+/* 「问这笔账」单条流水卡 */
+.s-assistant__txcard {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: var(--hairline) solid var(--c-hairline);
+}
+
+/* ---------------- 洞察答案卡（本地计算结果只渲染不计算） ---------------- */
+
+.s-assistant__insight {
+  margin-top: var(--sp-2);
+}
+
+.s-assistant__insight-scope {
+  margin: 0 0 var(--sp-1);
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+}
+
+.s-assistant__metric-sub {
+  grid-column: 1 / -1;
+  margin-top: -2px;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+}
+
+.s-assistant__causes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: var(--hairline) solid var(--c-hairline);
+}
+
+.s-assistant__cause-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.s-assistant__cause-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.s-assistant__cause-delta {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+}
+
+.s-assistant__cause-delta.is-expense {
+  color: var(--c-expense);
+}
+
+.s-assistant__cause-delta.is-income {
+  color: var(--c-income);
+}
+
+.s-assistant__cause-count {
+  flex: none;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+}
+
+.s-assistant__assumption {
+  margin: var(--sp-2) 0 0;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+}
+
+/* ---------------- 草稿行内编辑（P0-4） ---------------- */
+
+.s-assistant__tr-edit {
+  flex: none;
+  min-height: 24px;
+  padding: 0 8px;
+  border: var(--hairline) solid var(--c-stroke);
+  border-radius: var(--r-pill);
+  background: var(--c-bg);
+  color: var(--c-text-3);
+  font-family: inherit;
+  font-size: var(--fs-caption-1);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.s-assistant__tr-edit:active {
+  background: var(--c-fill-press);
+}
+
+.s-assistant__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.s-assistant__form-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.s-assistant__form-label {
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+}
+
+.s-assistant__form-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: var(--hairline) solid var(--c-stroke-strong);
+  border-radius: var(--r-md);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+}
+
+.s-assistant__form-input:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: var(--focus-offset);
+}
+
+.s-assistant__optwrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.s-assistant__opt.is-active {
+  border-color: var(--c-tint);
+  background: var(--c-tint-soft, var(--c-fill));
+  color: var(--c-text);
+  font-weight: var(--fw-semibold);
 }
 
 .s-assistant__chips {
@@ -13759,7 +14000,7 @@ textarea::selection {
     <p style="padding: 24px; font-size: 16px; line-height: 24px;">小账本需要启用 JavaScript 才能使用。</p>
   </noscript>
 
-  <!-- 加载顺序冻结：core → ui → 壳层 → router → app；壳层 25 条内联 + 15 个 lazy chunk 由 load-screen.js 加载 -->
+  <!-- 加载顺序冻结：core → ui → 壳层 → router → app；壳层 25 条内联 + 16 个 lazy chunk 由 load-screen.js 加载 -->
   <script>
 /* 小账本 2.0 · js/core/money.js · owner: dba（T01）
  * 契约锚点：CONTRACT §2.1（Cents）、§6.1、§8（金额错误码）。
@@ -31153,7 +31394,7 @@ textarea::selection {
 
 </script>
   <script>
-/* 小账本 2.0 · js/chunk-manifest.js · owner: frontend（T-02）：16 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
+/* 小账本 2.0 · js/chunk-manifest.js · owner: frontend（T-02）：17 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
 (function (global) {
   'use strict';
   var XZB = global.XZB || (global.XZB = {});
@@ -31162,10 +31403,10 @@ textarea::selection {
     ['home', 'screens/home', 'screens/home'], ['add', 'screens/add', 'screens/add'], ['ledger', 'screens/ledger', 'screens/ledger'], ['stats', 'screens/stats', 'screens/stats'],
     ['insights', 'screens/insights', 'screens/insights'], ['accounts', 'screens/accounts', 'screens/accounts'], ['books', 'screens/books', 'screens/books'], ['plan', 'screens/plan', 'screens/plan'],
     ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
-    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'], ['quips', 'modules/quips', 'modules/quips']
+    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'], ['insight-qa', 'core/insight-qa', 'modules/insight-qa'], ['quips', 'modules/quips', 'modules/quips']
   ];
   /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
-  var DEPS = { add: ['keypad', 'icon-picker', 'quips'], stats: ['charts'], insights: ['charts'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant', 'quips'] };
+  var DEPS = { add: ['keypad', 'icon-picker', 'quips'], stats: ['charts'], insights: ['charts'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant', 'insight-qa', 'quips'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
@@ -32248,7 +32489,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.19.0';
+  XZB.version = '2.20.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -34115,6 +34356,7 @@ textarea::selection {
   <script type="text/xzb-module" data-xzb-chunk="charts" src="js/modules/charts.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="nl" src="js/modules/nl.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="core-assistant" src="js/modules/core-assistant.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="insight-qa" src="js/modules/insight-qa.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="quips" src="js/modules/quips.js"></script>
 </body>
 </html>

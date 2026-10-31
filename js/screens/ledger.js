@@ -2115,6 +2115,16 @@
     try { ctx.replace(target); } catch (error) { /* 清参失败不影响已关闭的面板 */ }
   }
 
+  /* P0-1 情境入口开关：默认开，「我的」里可关（与解读页/首页同一开关） */
+  function assistantEntryOn(st) {
+    var prefs = (st && st.ctx && st.ctx.prefs) || (XZB.app && XZB.app.prefs);
+    var v = null;
+    if (prefs && typeof prefs.get === 'function') {
+      try { v = prefs.get('assistant.contextualEntry'); } catch (error) { v = null; }
+    }
+    return v !== false;
+  }
+
   function openDetailSheet(st, tx) {
     var sheet = sheetApi();
     if (!sheet || typeof sheet.open !== 'function') { return; }
@@ -2158,6 +2168,16 @@
 
     /* 照片区：无图 → 「未添加」文本行（不渲染空网格）；有图 → loading → ready/partial/failed */
     var photoArea = attachDetailPhotos(st, tx, list, body);
+
+    /* P0-1 情境入口：把这笔账带进小助手（只读摘要卡 + 追问 Chip，不写任何数据） */
+    if (assistantEntryOn(st)) {
+      var askBtn = el('button', { className: 'c-btn c-btn--secondary s-ledger-detail__ask', type: 'button', text: '问问小助手这笔账' });
+      askBtn.setAttribute('aria-label', '带这笔账的上下文打开小助手');
+      askBtn.addEventListener('click', function () {
+        navigate(st, '#/assistant?from=ledger&tx=' + encodeURIComponent(String(tx.id || '')));
+      });
+      body.appendChild(askBtn);
+    }
 
     photoDetailOpen = false;   /* 先落白：旧 sheet 的 onClose 可能在 sheet.open() 内部先触发 */
     sheet.open({

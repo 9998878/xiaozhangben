@@ -1182,8 +1182,49 @@
     if (global.confirm && global.confirm('清空撤销历史？只清记录，不影响账目。')) { run(); }
   }
 
+  /* P0-5 本地使用统计：只存 prefs，不上传；行尾展示、点击清零 */
+  function readAssistantMetrics(ctx) {
+    var v = prefsGet(ctx, 'assistant.metrics', null);
+    return v && typeof v === 'object' ? v : {};
+  }
+
+  function metricsSummary(m) {
+    var bits = [];
+    if (m.confirm) { bits.push('写入 ' + m.confirm); }
+    if (m.insight) { bits.push('洞察 ' + m.insight); }
+    if (m.query) { bits.push('查账 ' + m.query); }
+    if (m.undo) { bits.push('撤销 ' + m.undo); }
+    return bits.join(' · ');
+  }
+
+  function clearAssistantMetrics(ctx) {
+    var run = function () {
+      prefsSet(ctx, 'assistant.metrics', {});
+      toast(ctx, '使用统计已清零', { type: 'success' });
+      if (ctx && typeof ctx.refresh === 'function') { ctx.refresh(); }
+    };
+    var sheet = XZB.ui && XZB.ui.sheet;
+    if (sheet && typeof sheet.open === 'function') {
+      var body = h('div', { className: 's-settings-confirm' });
+      body.appendChild(t('p', 's-settings-confirm__text',
+        '只清零计数（写入/洞察/查账/撤销），账目本身不受影响。'));
+      sheet.open({
+        title: '清零使用统计',
+        content: body,
+        actions: [
+          { label: '取消', kind: 'text' },
+          { label: '清零', kind: 'danger', onClick: run }
+        ]
+      });
+      return;
+    }
+    if (global.confirm && global.confirm('清零本地使用统计？只清计数，不影响账目。')) { run(); }
+  }
+
   function sectionAssistant(ctx) {
     var count = historyCount();
+    var metrics = readAssistantMetrics(ctx);
+    var metricsText = metricsSummary(metrics);
     var rows = [
       row({
         icon: 'sparkles',
@@ -1197,8 +1238,31 @@
         sub: count ? '最近 ' + count + ' 次写入可以撤' : '还没有可撤销的记录',
         value: count ? count + ' 条' : '暂无',
         onClick: function () { go(ctx, '#/assistant/history'); }
+      }),
+      switchRow(ctx, {
+        icon: 'sparkles',
+        title: '情境入口',
+        sub: '解读、预算、流水里带上下文问小助手',
+        checked: prefsGet(ctx, 'assistant.contextualEntry', true) !== false,
+        onChange: function (next) { return prefsSet(ctx, 'assistant.contextualEntry', next); }
+      }),
+      switchRow(ctx, {
+        icon: 'chart-line',
+        title: '本地洞察问答',
+        sub: '为什么超支、预算预测、节省模拟，全在本机算',
+        checked: prefsGet(ctx, 'assistant.localInsights', true) !== false,
+        onChange: function (next) { return prefsSet(ctx, 'assistant.localInsights', next); }
       })
     ];
+    if (metricsText) {
+      rows.push(row({
+        icon: 'list',
+        title: '本地使用统计',
+        sub: '只存在本机，点击清零',
+        value: metricsText,
+        onClick: function () { clearAssistantMetrics(ctx); }
+      }));
+    }
     if (count) {
       rows.push(row({
         icon: 'trash',
@@ -1208,7 +1272,7 @@
       }));
     }
     return group('小助手', rows,
-      '小助手完全在本机解析与保存，不上传任何内容。撤销历史只记录小助手与手动记账的差异，最多 30 条。');
+      '小助手完全在本机解析与保存，不上传任何内容；语音识别由你的浏览器服务处理。撤销历史只记录小助手与手动记账的差异，最多 30 条。');
   }
 
   /* ---------------- 记账管理（M12：按任务找入口，不按实现方式） ---------------- */

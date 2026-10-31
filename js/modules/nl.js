@@ -925,11 +925,12 @@
       addDateMatch(list, dateMatch(s, e, m[0], addDaysStr(today, offsets[m[0]]), null, true, 'relative'));
     });
 
-    /* 本月 / 上个月 / 下个月 */
-    eachMatch(work, /本月|这个月|上个月|上月|下个月|下月/g, function (m, s, e) {
+    /* 本月 / 上个月 / 上上个月 / 下个月（长词放前面，避免「上上个月」被「上个月」截走） */
+    eachMatch(work, /本月|这个月|上上个月|上上月|上个月|上月|下个月|下月/g, function (m, s, e) {
       var d = today;
       var word = m[0];
-      if (word === '上个月' || word === '上月') { d = addMonthsStr(today, -1); }
+      if (word === '上上个月' || word === '上上月') { d = addMonthsStr(today, -2); }
+      else if (word === '上个月' || word === '上月') { d = addMonthsStr(today, -1); }
       else if (word === '下个月' || word === '下月') { d = addMonthsStr(today, 1); }
       addDateMatch(list, dateMatch(s, e, m[0], d, null, true, 'month'));
     });

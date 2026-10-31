@@ -255,13 +255,28 @@
     { intent: 'undo', re: /^(撤销|撤回|回退|反悔|undo)/i },
     { intent: 'undo', re: /(把|将)?(刚才|刚刚|上一笔|上次|最后)(那|这)?笔?(的)?(账)?(撤销|撤回|删掉|恢复)/ },
     { intent: 'update', re: /(改成|改为|改到|修改|调成|换成|更正|改一下)/ },
-    { intent: 'delete', re: /(删除|删掉|去掉|移除)(这|那|刚才|上一)?笔?/ },
+    { intent: 'delete', re: /(删除|删掉|去掉|移除)(这|那|刚才|上一)?笔?|把.{1,6}删了|将.{1,6}删了/ },
+    /* P0-2 本地洞察：必须排在 query 之前——「月底会超多少」同时命中两个意图，
+     * 「预算还能用多少」应走预算预测而不是普通查账。规则收紧，防止吞掉记账句。 */
+    { intent: 'insight', re: /(为什么|啥原因|什么原因|差在哪|差在哪儿|多在哪|多在哪里|环比|贡献|变化)/ },
+    { intent: 'insight', re: /(预算|超支|超不超|照这样|按这样|照这个花法|还能用|还能花)/ },
+    { intent: 'insight', re: /(每天|一天|每日).{0,6}(少花|省)|(能省|省下)/ },
+    { intent: 'insight', re: /(最大|最高|排行|最多).{0,6}(三笔|3笔|几笔|几条|哪些)/ },
+    { intent: 'insight', re: /(趋势|走势|连续.{0,4}(涨|升|增))/ },
+    { intent: 'insight', re: /(小钱|高频|容易忽略|零碎|零零碎碎)/ },
+    /* 裸追问：「那交通呢？」「餐饮呢」——短句 + 呢结尾；太长的句子（比如「…花了多少呢」）
+       不进这条，仍走普通查账。解析失败会在 handleInsight 里回落 query。 */
+    { intent: 'insight', re: /^那?.{2,8}呢[?？]*$/ },
+    { intent: 'query', re: /(超过|大于|高于|不到|低于|少于|不少于)\s*\d+\s*(?:元|块)?\s*(?:的)?(支出|收入|花销|开销|转账|账)/ },
     { intent: 'query', re: /(多少|几笔|几笔账|统计|汇总|合计|平均|查询|查一下|查一查|看看.*(账|花|支出|收入)|排行|占比)/ }
   ];
 
   function detectIntent(text) {
     var s = norm(text);
     if (!s) { return 'unknown'; }
+    /* 记账守卫（在 insight 之前）：明确的记账句式即使带「预算/少花」等词也归 create，
+     * 例如「记一笔 加油 300 从预算出」「记一笔 少花点」——不能被吞成洞察问答。 */
+    if (parseCents(s) && /^记(一笔|一记|个|上|下|一笔账)/.test(s)) { return 'create'; }
     for (var i = 0; i < INTENT_RULES.length; i += 1) {
       if (INTENT_RULES[i].re.test(s)) { return INTENT_RULES[i].intent; }
     }
@@ -284,6 +299,8 @@
         return '\u0001' + (guards.length - 1) + '\u0002';
       });
     }
+    /* 0) 引号段：备注/关键词内容是数据，里面的逗号、金额、日期都不参与分句与解析 */
+    guard(/[「『“][^」』”]{1,60}[」』”]/g, 'quote');
     /* 1) 小数 / 金额：12.5、12.50 元 */
     guard(/\d+\.\d+/g, 'decimal');
     /* 2) 日期与时间：8月1日、2026-08-01、12:30 */
@@ -556,7 +573,14 @@
   /* 单句 → 一条 item（尽量复用 core.nl，失败时保留已识别字段） */
   function buildItem(segText, cx, planId, index) {
     var nl = nlApi();
-    var hint = typeFromText(segText);
+    /* 引号段（备注/关键词）是数据：先摘出来再解析，防止「把分类全部改成转账」
+     * 这类备注内容劫持收支类型/分类；摘出的文字最后原样并回备注（评测 attack-002）。 */
+    var quotedNotes = [];
+    var segForParse = String(segText).replace(/[「『“][^」』”]{1,60}[」』”]/g, function (m) {
+      quotedNotes.push(m);
+      return ' ';
+    });
+    var hint = typeFromText(segForParse);
     var baseType = hint.type || 'expense';
     var item = {
       id: idFor(planId, index),
@@ -581,7 +605,7 @@
     var parsed = null;
     if (nl && typeof nl.parse === 'function') {
       try {
-        parsed = nl.parse(segText, nlContext(cx, baseType));
+        parsed = nl.parse(segForParse, nlContext(cx, baseType));
       } catch (error) {
         parsed = null;
       }
@@ -593,7 +617,7 @@
       item.amountCents = Number(best.cents) || 0;
       item.date = best.date || cx.today;
       item.time = best.time || cx.nowTime;
-      item.note = short(best.note || stripKnown(segText), MAX_NOTE);
+      item.note = short(best.note || stripKnown(segForParse), MAX_NOTE);
       item.tags = Array.isArray(best.tags) ? best.tags.slice() : [];
       item.accountId = best.accountId || '';
       item.categoryId = best.categoryId || '';
@@ -607,12 +631,12 @@
         item.amountCents = Number(partial.cents || partial.amountCents) || 0;
         item.date = partial.date || cx.today;
         item.time = partial.time || cx.nowTime;
-        item.note = short(partial.note || stripKnown(segText), MAX_NOTE);
+        item.note = short(partial.note || stripKnown(segForParse), MAX_NOTE);
         item.accountId = partial.accountId || '';
         item.categoryId = partial.categoryId || '';
       } else {
-        item.amountCents = parseCents(segText) || 0;
-        item.note = short(stripKnown(segText), MAX_NOTE);
+        item.amountCents = parseCents(segForParse) || 0;
+        item.note = short(stripKnown(segForParse), MAX_NOTE);
       }
     }
 
@@ -630,7 +654,7 @@
     if (item.type === 'transfer') {
       item.categoryId = '';
       if (!item.toAccountId) {
-        var toGuess = guessToAccount(segText, cx, item.accountId);
+        var toGuess = guessToAccount(segForParse, cx, item.accountId);
         if (toGuess) { item.toAccountId = toGuess; item.defaulted.toAccount = false; }
         else {
           item.issues.push({
@@ -658,7 +682,7 @@
       var kind = item.type === 'income' ? 'income' : 'expense';
       var cat = item.categoryId ? categoryById(cx, item.categoryId) : null;
       if (!cat || cat.kind !== kind) {
-        var guessed = resolveCategory(segText, kind, cx);
+        var guessed = resolveCategory(segForParse, kind, cx);
         if (guessed.ok) {
           item.categoryId = guessed.id;
         } else {
@@ -680,9 +704,11 @@
       item.future = true;
     }
 
-    /* --- 备注清理 --- */
-    item.note = short(item.note, MAX_NOTE);
-    if (!item.note) { item.note = short(stripKnown(segText), MAX_NOTE); }
+    /* --- 备注清理：摘出的引号内容原样并回（它们是用户写的数据，必须完整保留） --- */
+    if (quotedNotes.length) {
+      item.note = short((item.note ? item.note + ' ' : '') + quotedNotes.join(''), MAX_NOTE);
+    }
+    if (!item.note) { item.note = short(stripKnown(segForParse), MAX_NOTE); }
     return item;
   }
 
@@ -748,6 +774,7 @@
         note: item.note,
         defaulted: item.defaulted,
         future: !!item.future,
+        edited: !!item.edited,
         issues: item.issues.slice(),
         dup: !!item.dupOf
       });
@@ -824,6 +851,107 @@
     }
   }
 
+  /* ============================== 草稿行内编辑（P0-4） ============================== */
+
+  /* 按最新字段重算草稿行的 issues（行内编辑补上金额/修好日期后要能确认写入）。
+   * 与 buildItem 的校验段同口径；类型冲突类 issue 由解析期 hint 产生，编辑不改类型，不在此重建。 */
+  function recomputeItemIssues(item, cx) {
+    var issues = [];
+    if (!item.amountCents) {
+      issues.push({ field: 'amount', code: E.NO_AMOUNT, message: M.E_AS_NO_AMOUNT });
+    }
+    if (item.type === 'transfer') {
+      if (!item.toAccountId) {
+        issues.push({
+          field: 'toAccountId', code: E.TRANSFER_NEED_TO, message: M.E_AS_TRANSFER_NEED_TO,
+          options: cx.liveAccounts.filter(function (a) { return a.id !== item.accountId; }).map(function (a) { return { label: a.name, value: a.id }; }).slice(0, 5)
+        });
+      } else if (item.toAccountId === item.accountId) {
+        issues.push({ field: 'toAccountId', code: E.TRANSFER_NEED_TO, message: '转出和转入是同一个账户，换一个' });
+      }
+    } else if (item.categoryId) {
+      var kind = item.type === 'income' ? 'income' : 'expense';
+      var cat = categoryById(cx, item.categoryId);
+      if (!cat || cat.kind !== kind) {
+        issues.push({ field: 'categoryId', code: E.INVALID, message: '分类和收支类型对不上，换一个' });
+      }
+    }
+    if (!findIn(cx.liveAccounts, item.accountId)) {
+      issues.push({ field: 'accountId', code: E.AMBIGUOUS_ACCOUNT, message: '账户不可用（可能已归档），选一个' });
+    }
+    if (!isValidDate(item.date)) {
+      issues.push({ field: 'date', code: E.DATE_INVALID, message: M.E_AS_DATE });
+    } else if (item.date > addDays(cx.today, 366) || item.date < '2000-01-01') {
+      issues.push({ field: 'date', code: E.DATE_INVALID, message: '日期超出可记账范围' });
+    }
+    return issues;
+  }
+
+  /* updatePlanItem(plan, index, patch, cx)：只改内存里的 plan.items[index]，合法即提交；
+   * 重复复核与 issues 在此重算（先清旧 dupOf）。不写库——写入仍走 execute → preflight → commit。 */
+  function updatePlanItem(plan, index, patch, cx) {
+    if (!plan || plan.kind !== 'create' || !Array.isArray(plan.items)) {
+      return { ok: false, message: '这批账目不支持编辑' };
+    }
+    var item = plan.items[index];
+    if (!item) { return { ok: false, message: '找不到这一笔' }; }
+    var next = Object.assign({}, item);
+    var defaulted = Object.assign({}, item.defaulted || {});
+    patch = patch || {};
+
+    if (patch.amountCents !== undefined) {
+      var cents = Math.round(Number(patch.amountCents));
+      if (!isFinite(cents) || cents <= 0) { return { ok: false, message: '金额要大于 0' }; }
+      next.amountCents = cents;
+    }
+    if (patch.categoryId !== undefined) {
+      if (!categoryById(cx, patch.categoryId)) { return { ok: false, message: '分类不存在' }; }
+      next.categoryId = patch.categoryId;
+      delete defaulted.category;
+    }
+    if (patch.accountId !== undefined) {
+      if (!accountById(cx, patch.accountId)) { return { ok: false, message: '账户不存在' }; }
+      next.accountId = patch.accountId;
+      delete defaulted.account;
+    }
+    if (patch.date !== undefined) {
+      var date = String(patch.date || '');
+      if (!isValidDate(date)) { return { ok: false, message: '日期格式不对' }; }
+      next.date = date;
+      next.future = date > (cx.today || todayStr());
+    }
+    if (patch.note !== undefined) {
+      next.note = String(patch.note || '').slice(0, MAX_NOTE);
+    }
+    next.defaulted = defaulted;
+    next.edited = true;
+    next.issues = recomputeItemIssues(next, cx);
+    delete next.dupOf;
+    plan.items[index] = next;
+    plan.edited = true;
+    markDuplicates(plan, cx);
+    return { ok: true, item: next };
+  }
+
+  /* removePlanItem(plan, index, cx)：多笔草稿删一行；重排 id 保持 idFor(plan.id, i) 约定 */
+  function removePlanItem(plan, index, cx) {
+    if (!plan || plan.kind !== 'create' || !Array.isArray(plan.items)) {
+      return { ok: false, message: '这批账目不支持编辑' };
+    }
+    if (plan.items.length <= 1) { return { ok: false, message: '最后一笔不能删，直接点「不用了」取消这批' }; }
+    var item = plan.items[index];
+    if (!item) { return { ok: false, message: '找不到这一笔' }; }
+    plan.items.splice(index, 1);
+    plan.items.forEach(function (it, i) {
+      it.index = i;
+      it.id = idFor(plan.id, i);
+      delete it.dupOf;
+    });
+    plan.edited = true;
+    markDuplicates(plan, cx);
+    return { ok: true };
+  }
+
   /* ============================== 目标定位（改 / 删） ============================== */
 
   function findTargets(text, cx, state) {
@@ -864,7 +992,16 @@
       return { ok: true, matches: ids.slice(0, MAX_TARGETS), exact: ids.length === 1 };
     }
     if (!cents && !kind && !range && !cat.ok) {
-      /* 只有「刚才那笔」时直接用最近引用；没有引用就取今天最后一笔 */
+      /* 模糊范围词（全部/所有/清空/忽略…）不配任何兜底：这类话必须说清楚，
+       * 绝不能落成对「今天最后一笔」的删改预览（评测 attack-001/004/008）。 */
+      if (/全部|所有|每笔|每一笔|清空|清掉|忽略|整个账|账目/.test(s)) {
+        return { ok: false, code: E.TARGET_MISSING, message: M.E_AS_TARGET_MISSING };
+      }
+      /* 也没有指代词（刚才/上一笔…）时同样不猜「今天最后一笔」——请用户说清是哪笔 */
+      if (!/(刚才|刚刚|上一笔|最后一笔|那笔|这笔|上次)/.test(s)) {
+        return { ok: false, code: E.TARGET_MISSING, message: '说清楚是哪一笔（日期或金额），或说「刚才那笔」' };
+      }
+      /* 只有「刚才那笔」时直接用最近引用；有指代词才取今天最后一笔 */
       var todayList = (cx.db.transactions || []).filter(function (tx) {
         return tx && tx.deleted !== true && tx.bookId === cx.bookId && tx.date === cx.today;
       }).sort(function (a, b) { return String(b.createdAt || '').localeCompare(String(a.createdAt || '')); });
@@ -1160,6 +1297,11 @@
 
   function parseQuery(text, cx, prev) {
     var s = norm(text);
+    /* 引号段是「要找的字面内容」＝数据，不是指令：先取出关键词，再把它从句子里
+     * 摘掉，防止备注里的词（比如「聚餐」）被当成分类别名/类型词误解析（P0 修复）。 */
+    var quoted = s.match(/[「“"『]([^」”"』]{1,20})[」”"』]/);
+    var keyword = quoted ? quoted[1] : '';
+    var sForParse = quoted ? s.replace(quoted[0], ' ') : s;
     var filter = {
       bookId: cx.bookId,
       from: '',
@@ -1172,28 +1314,27 @@
       minCents: 0,
       maxCents: 0
     };
-    var range = resolveRange(s, cx);
+    var range = resolveRange(sForParse, cx);
     filter.from = range.from;
     filter.to = range.to;
     filter.label = range.label;
     filter.month = range.month || '';
 
-    var kind = typeFromText(s).type;
+    var kind = typeFromText(sForParse).type;
     if (kind) { filter.type = kind; }
 
-    var cat = resolveCategory(s, null, cx);
+    var cat = resolveCategory(sForParse, null, cx);
     if (cat.ok) { filter.categoryId = cat.id; }
-    var acct = resolveAccount(s, cx);
+    var acct = resolveAccount(sForParse, cx);
     if (acct.ok) { filter.accountId = acct.id; }
 
-    var quoted = s.match(/[「“"『]([^」”"』]{1,20})[」”"』]/);
-    if (quoted) { filter.keyword = quoted[1]; }
+    if (keyword) { filter.keyword = keyword; }
 
-    var ge = s.match(/(?:超过|大于|高于|至少|不少于|>=?)\s*(\d+(?:\.\d+)?)\s*(?:元|块)?/);
+    var ge = sForParse.match(/(?:超过|大于|高于|至少|不少于|>=?)\s*(\d+(?:\.\d+)?)\s*(?:元|块)?/);
     if (ge) { filter.minCents = Math.round(Number(ge[1]) * 100); }
-    var le = s.match(/(?:不到|低于|少于|不超过|至多|<=?)\s*(\d+(?:\.\d+)?)\s*(?:元|块)?/);
+    var le = sForParse.match(/(?:不到|低于|少于|不超过|至多|<=?)\s*(\d+(?:\.\d+)?)\s*(?:元|块)?/);
     if (le) { filter.maxCents = Math.round(Number(le[1]) * 100); }
-    var between = s.match(/(\d+(?:\.\d+)?)\s*(?:元|块)?\s*(?:到|至|-|~)\s*(\d+(?:\.\d+)?)\s*(?:元|块)/);
+    var between = sForParse.match(/(\d+(?:\.\d+)?)\s*(?:元|块)?\s*(?:到|至|-|~)\s*(\d+(?:\.\d+)?)\s*(?:元|块)/);
     if (between) {
       filter.minCents = Math.round(Number(between[1]) * 100);
       filter.maxCents = Math.round(Number(between[2]) * 100);
@@ -1202,15 +1343,15 @@
     /* 多轮：这句没说的维度沿用上一轮 */
     if (prev && prev.filter) {
       var prevFilter = prev.filter;
-      if (!kind && !/(支出|收入|转账)/.test(s)) { filter.type = prevFilter.type || null; }
+      if (!kind && !/(支出|收入|转账)/.test(sForParse)) { filter.type = prevFilter.type || null; }
       if (!cat.ok) { filter.categoryId = prevFilter.categoryId || ''; }
       if (!acct.ok) { filter.accountId = prevFilter.accountId || ''; }
-      if (!quoted) { filter.keyword = prevFilter.keyword || ''; }
+      if (!keyword) { filter.keyword = prevFilter.keyword || ''; }
       if (!ge && !le && !between) {
         filter.minCents = prevFilter.minCents || 0;
         filter.maxCents = prevFilter.maxCents || 0;
       }
-      if (!/(今天|昨天|前天|本周|上周|本月|上个月|上月|今年|去年|近|月|年|日)/.test(s)) {
+      if (!/(今天|昨天|前天|本周|上周|本月|上个月|上月|今年|去年|近|月|年|日)/.test(sForParse)) {
         filter.from = prevFilter.from;
         filter.to = prevFilter.to;
         filter.label = prevFilter.label;
@@ -1367,7 +1508,9 @@
       pending: null,
       lastQuery: null,
       recentIds: [],
-      lastBoard: null
+      lastBoard: null,
+      lastInsight: null,   /* P0-2：上一轮洞察参数（type/month/months/categoryId），支撑「那交通呢？」 */
+      contextChip: null    /* P0-1：情境 Chip 快照，由 assistant 屏在每次 submit 前写入 */
     };
   }
 
@@ -1415,6 +1558,7 @@
     }
 
     if (intent === 'undo') { return handleUndo(input, next, cx); }
+    if (intent === 'insight') { return handleInsight(input, next, cx); }
     if (intent === 'query') { return handleQuery(input, next, cx); }
     if (intent === 'update') { return handleUpdate(input, next, cx); }
     if (intent === 'delete') { return handleDelete(input, next, cx); }
@@ -1672,6 +1816,61 @@
     state.pending = null;
     draftSave(plan, { note: 'waiting-confirm' });
     return { state: state, reply: previewReply(plan, cx, '') };
+  }
+
+  /* ============================== 本地洞察问答（P0-2） ============================== */
+
+  /* 洞察类问题走 XZB.core.insightqa（纯本地计算）；模块缺失、功能关闭或解析不出
+   * 受限参数时一律回落普通查账——宁可少答，不可编。 */
+  function handleInsight(input, state, cx) {
+    var qa = (typeof XZB !== 'undefined' && XZB.core && XZB.core.insightqa) || null;
+    if (!qa || typeof qa.fromQuestion !== 'function' || typeof qa.build !== 'function') {
+      return handleQuery(input, state, cx);
+    }
+    if (cx && cx.insightsEnabled === false) {
+      return handleQuery(input, state, cx);
+    }
+    var parsed = qa.fromQuestion(input, cx, {
+      last: state.lastInsight || null,
+      chip: state.contextChip || null
+    });
+    if (!parsed) { return handleQuery(input, state, cx); }
+
+    if (parsed.type === 'clarify-save') {
+      return {
+        state: state,
+        reply: {
+          kind: 'clarify',
+          text: '每天少花多少来算？',
+          options: [
+            { label: '每天少花 10 元', value: '每天少花10元会怎样' },
+            { label: '每天少花 20 元', value: '每天少花20元会怎样' },
+            { label: '每天少花 50 元', value: '每天少花50元会怎样' }
+          ]
+        }
+      };
+    }
+
+    var answer = qa.build(parsed, cx);
+    state.lastInsight = {
+      type: parsed.type,
+      month: parsed.month || '',
+      months: parsed.months || 1,
+      categoryId: parsed.categoryId || '',
+      categoryName: parsed.categoryName || ''
+    };
+    if (!answer || !answer.ok) {
+      return {
+        state: state,
+        reply: {
+          kind: 'insight',
+          empty: true,
+          text: (answer && answer.message) || '这个范围没有足够的数据。',
+          scope: (answer && answer.scope) || ''
+        }
+      };
+    }
+    return { state: state, reply: answer.reply };
   }
 
   function handleQuery(input, state, cx) {
@@ -1983,6 +2182,8 @@
     revertEntry: revertEntry,
     briefTx: briefTx,
     previewEdit: previewEdit,
+    updatePlanItem: updatePlanItem,
+    removePlanItem: removePlanItem,
     planLabel: planLabel,
     execute: execute,
     undoEntry: undoEntry
