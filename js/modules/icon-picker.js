@@ -1,8 +1,8 @@
 /* 小账本 2.0 · js/ui/icon-picker.js · 分类图标选择器（2.6 新增）
  * ------------------------------------------------------------------
- * 自定义分类的图标从 40 个膨胀到 96 个（8 组 × 12 枚）之后，不能再一整片堆在
- * 面板里。这里做成一个可复用组件：搜索 + 分组横向标签 + 最近使用 + 当前图标，
- * 手机端 6 列，只渲染当前分组。
+ * 自定义分类的图标从 40 个膨胀到 120 个（12 组，2.7 新增零售/健康/学习/数码
+ * 四组与 24 枚高频候选）之后，不能再一整片堆在面板里。这里做成一个可复用组件：
+ * 搜索 + 分组横向标签 + 最近使用 + 当前图标，手机端 6 列，只渲染当前分组。
  *
  * 公开：XZB.ui.iconPicker
  *   mount(container, options) -> controller { value(), setValue(), destroy() }
@@ -47,6 +47,9 @@
   var RECOMMEND = {
     expense: [
       'hotpot', 'latte', 'milktea', 'burger', 'noodles', 'sushi', 'cake', 'juice',
+      /* 2.7 高频候选（P0）：外卖早餐、商超网购、房租水电、医疗、学费订阅 */
+      'takeout', 'breakfast', 'supermarket', 'online-shopping', 'rent', 'utility-bill',
+      'medicine', 'clinic', 'tuition', 'subscription', 'loan',
       'taxi', 'subway', 'bike', 'gas', 'parking',
       'key', 'lamp', 'fridge', 'detergent', 'bin',
       'clapper', 'dslr', 'music', 'football', 'tent',
@@ -55,15 +58,20 @@
     income: [
       'passbook', 'stock', 'fund', 'safe', 'cashier', 'invoice', 'refund', 'reimburse',
       'installment', 'exchange', 'tax',
+      /* 2.7：利息、分红属于收入向候选 */
+      'interest', 'dividend',
       'tiara', 'gem', 'rocket', 'clover', 'spark', 'love', 'smiley',
       'clapper', 'dslr', 'football', 'cat', 'bike'
     ]
   };
 
-  /* 分组配色：只用于「选择器里的预览」，让 96 枚图标一眼看出是彩色的；
-   * 真正落到分类上的颜色，仍然由分类自己的色槽（categoryTone）决定。 */
+  /* 分组配色：只用于「选择器里的预览」，让 120 枚图标一眼看出是彩色的；
+   * 真正落到分类上的颜色，仍然由分类自己的色槽（categoryTone）决定。
+   * 2.7 新增四组沿用 12 色槽，不新增颜色：retail 3 / health 6 / digital 7 / learning 11
+   * 与 family、mood 共用色槽只是预览色，互不影响。 */
   var GROUP_TONE = {
-    food: 1, travel: 2, home: 4, fun: 5, pet: 8, family: 3, finance: 10, mood: 11
+    food: 1, retail: 3, travel: 2, home: 4, health: 6, learning: 11, digital: 7,
+    fun: 5, pet: 8, family: 3, finance: 10, mood: 11
   };
 
   function mount(container, options) {
@@ -84,7 +92,7 @@
     var searchWrap = el('div', 'c-icon-picker__search');
     var input = el('input', 'c-icon-picker__input');
     input.type = 'search';
-    input.placeholder = '搜索图标（拼音或中文）';
+    input.placeholder = '搜索图标（中文名或关键词）';
     input.setAttribute('autocomplete', 'off');
     input.setAttribute('aria-label', '搜索分类图标');
     searchWrap.appendChild(input);
