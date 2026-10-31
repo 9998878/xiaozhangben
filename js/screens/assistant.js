@@ -668,6 +668,13 @@
       if (deleted) { parts.push('删除 ' + deleted + ' 笔'); }
       var doneText = res.already ? '这几笔之前已经记过了，没有重复入账' : ('搞定，' + (parts.join('、') || '已写入'));
       pushTurn({ who: 'bot', text: doneText, tone: 'ok' });
+      /* 俏皮点评：新增入账时，挑第一笔支出/收入补一句 ≤40 字调侃；取不到就静默跳过 */
+      if (created && !res.already && XZB.core && XZB.core.quips && plan && plan.items) {
+        for (var qi = 0; qi < plan.items.length; qi += 1) {
+          var quipText = XZB.core.quips.for(plan.items[qi]);
+          if (quipText) { pushTurn({ who: 'bot', text: quipText }); break; }
+        }
+      }
       paint();
       refreshBanner();
       scrollToEnd(true);

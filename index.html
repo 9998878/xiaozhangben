@@ -28895,6 +28895,10 @@ textarea::selection {
     var type = normalizeType(options.type);
     var action = options.action && typeof options.action === 'object' ? options.action : null;
     var actionLabel = action && action.label ? String(action.label) : '撤销';
+    /* 长文案（如记账点评）需要更久停留：调用方可用 opts.duration 覆盖默认时长 */
+    var duration = typeof options.duration === 'number' && options.duration >= 800
+      ? options.duration
+      : (action ? DURATION_ACTION : DURATION_PLAIN);
 
     var host = ensureRoot();
     if (!host) { return null; }
@@ -28960,7 +28964,7 @@ textarea::selection {
     timer = setTimeout(function () {
       timer = 0;
       if (token === current && toastEl === node) { dismiss(); }
-    }, action ? DURATION_ACTION : DURATION_PLAIN);
+    }, duration);
 
     return Object.freeze({
       dismiss: dismiss,
@@ -31149,7 +31153,7 @@ textarea::selection {
 
 </script>
   <script>
-/* 小账本 2.0 · js/chunk-manifest.js · owner: frontend（T-02）：15 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
+/* 小账本 2.0 · js/chunk-manifest.js · owner: frontend（T-02）：16 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
 (function (global) {
   'use strict';
   var XZB = global.XZB || (global.XZB = {});
@@ -31158,10 +31162,10 @@ textarea::selection {
     ['home', 'screens/home', 'screens/home'], ['add', 'screens/add', 'screens/add'], ['ledger', 'screens/ledger', 'screens/ledger'], ['stats', 'screens/stats', 'screens/stats'],
     ['insights', 'screens/insights', 'screens/insights'], ['accounts', 'screens/accounts', 'screens/accounts'], ['books', 'screens/books', 'screens/books'], ['plan', 'screens/plan', 'screens/plan'],
     ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
-    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant']
+    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'], ['quips', 'modules/quips', 'modules/quips']
   ];
   /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
-  var DEPS = { add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant'] };
+  var DEPS = { add: ['keypad', 'icon-picker', 'quips'], stats: ['charts'], insights: ['charts'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant', 'quips'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
@@ -32244,7 +32248,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.18.0';
+  XZB.version = '2.19.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -34111,5 +34115,6 @@ textarea::selection {
   <script type="text/xzb-module" data-xzb-chunk="charts" src="js/modules/charts.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="nl" src="js/modules/nl.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="core-assistant" src="js/modules/core-assistant.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="quips" src="js/modules/quips.js"></script>
 </body>
 </html>

@@ -2859,7 +2859,10 @@
             goBack();
             return;
           }
-          showToast('已记一笔', { type: 'success' });
+          /* 俏皮点评：成功文案后追加一条 ≤40 字的场景调侃；取不到就退回原文案，主流程零影响 */
+          var quip = XZB.core && XZB.core.quips ? XZB.core.quips.for(entity) : '';
+          showToast(quip ? '已记一笔 · ' + quip : '已记一笔',
+            quip ? { type: 'success', duration: 3600 } : { type: 'success' });
           goBack();
         }, function () {
           /* 门面自身不 reject（app.js 的 callPhotoStore 已兜底），这里是最后一道兜底：
