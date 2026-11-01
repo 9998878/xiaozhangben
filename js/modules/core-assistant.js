@@ -357,19 +357,45 @@
     return { type: hit, conflict: null };
   }
 
-  /* 分类：最长匹配（分类名 + aliases），再看 nl 的别名表（借 nl.parse 拿不到别名表，这里自带一份最小集合） */
+  /* 分类：最长匹配（分类名 + aliases），再看 nl 的别名表（借 nl.parse 拿不到别名表，这里自带一份最小集合）
+   * 2.22.1：与 nl.js/种子同步——精确词让位给 24 个转正分类，旧 catch-all 只留泛化词；
+   * 顺带修正 ca_veg → ca_veggie（种子 id 拼写）。 */
   var EXTRA_ALIASES = {
-    ca_food: ['吃饭', '午饭', '晚饭', '早饭', '外卖', '咖啡', '奶茶', '零食'],
+    ca_food: ['吃饭', '午饭', '晚饭', '夜宵', '咖啡', '奶茶', '零食', '聚餐', '食堂'],
     ca_transport: ['打车', '地铁', '公交', '高铁', '油费', '停车', '加油'],
-    ca_shopping: ['购物', '网购', '买衣服', '超市'],
-    ca_home: ['房租', '水电', '物业', '燃气', '宽带'],
-    ca_fun: ['电影', '游戏', '演出', '会员', '旅游'],
-    ca_health: ['看病', '买药', '体检'],
+    ca_shopping: ['购物', '买衣服', '商场'],
+    ca_home: ['物业', '物业费', '家具'],
+    ca_fun: ['电影', '游戏', '演出', '旅游'],
+    ca_health: ['看病', '健身', '医院'],
     ca_social: ['红包', '礼物', '随礼', '请客'],
     ca_salary: ['工资', '薪水', '奖金'],
     ca_daily: ['日用', '纸巾', '洗衣液'],
-    ca_snack: ['奶茶', '甜品', '蛋糕'],
-    ca_veg: ['买菜', '菜市场']
+    ca_snack: ['甜品', '蛋糕', '饼干'],
+    ca_veggie: ['买菜', '菜市场'],
+    ca_takeout: ['外卖', '点外卖', '美团', '饿了么', '送餐'],
+    ca_breakfast: ['早餐', '早饭', '早点', '早午餐'],
+    ca_supermarket: ['超市', '商超', '便利店'],
+    ca_online_shopping: ['网购', '淘宝', '京东', '拼多多', '快递', '包裹'],
+    ca_secondhand: ['二手', '闲置', '转卖', '闲鱼', '回收'],
+    ca_rent: ['房租', '租金', '月租', '租房', '押金'],
+    ca_utility: ['水电', '水电费', '水费', '电费', '燃气', '燃气费'],
+    ca_broadband: ['宽带', '网费', '宽带费', '网络费'],
+    ca_ev_charge: ['汽车充电', '充电', '充电桩', '新能源'],
+    ca_car_service: ['保养', '换机油', '四轮定位', '维修保养'],
+    ca_car_wash: ['洗车', '打蜡', '车辆美容'],
+    ca_medicine: ['买药', '药店', '感冒药', '处方药'],
+    ca_clinic: ['门诊', '挂号', '打针'],
+    ca_dentist: ['牙科', '看牙', '洗牙', '补牙', '拔牙', '口腔'],
+    ca_checkup: ['体检', '复查', '疫苗', '筛查'],
+    ca_tuition: ['学费', '学费课程', '培训班', '辅导班', '网课', '报名费'],
+    ca_stationery: ['文具', '铅笔', '学习用品'],
+    ca_subscription: ['会员', '订阅', '自动续费', '包月', '视频会员'],
+    ca_insurance: ['保险', '保费', '投保', '保单', '车险'],
+    ca_loan: ['贷款', '还贷', '借款', '月供', '房贷'],
+    ca_interest: ['利息', '存款利息', '利息收入'],
+    ca_dividend: ['分红', '股息', '红利'],
+    ca_topup: ['话费', '充话费', '流量', '流量包', '手机费'],
+    ca_software: ['云服务', '软件服务', '网盘会员']
   };
 
   function resolveCategory(text, kind, cx) {
@@ -1523,7 +1549,7 @@
     var next = cloneState(state);
     var input = norm(text);
     if (!input) {
-      return { state: next, reply: { kind: 'hint', text: '说说这笔账，比如「午饭 35 微信」或「这个月餐饮花了多少」' } };
+      return { state: next, reply: { kind: 'hint', text: '说说这笔账，比如「外卖 28 微信」或「这个月外卖花了多少」' } };
     }
 
     /* 1a) 「选一笔」待答（修改/删除的候选） */
@@ -1582,8 +1608,8 @@
         kind: 'hint',
         text: M.E_AS_UNKNOWN,
         options: [
-          { label: '记一笔：午饭 35', value: 'create 午饭 35' },
-          { label: '查一查：这个月餐饮花了多少', value: 'query 这个月餐饮花了多少' },
+          { label: '记一笔：外卖 28', value: 'create 外卖 28' },
+          { label: '查一查：这个月外卖花了多少', value: 'query 这个月外卖花了多少' },
           { label: '撤销上一笔', value: 'undo' }
         ]
       }

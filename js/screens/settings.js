@@ -1229,7 +1229,7 @@
       row({
         icon: 'sparkles',
         title: '小助手',
-        sub: '说一句「午饭 28 微信」就记好，也能改、删、查',
+        sub: '说一句「外卖 28 微信」「房租 3000」就记好，也能改、删、查',
         onClick: function () { go(ctx, '#/assistant'); }
       }),
       row({

@@ -27,10 +27,11 @@
 
   var MAX_TURNS = 60;
   var QUICK_EXAMPLES = [
-    '午饭 35 微信',
+    '外卖 28 微信',
+    '房租 3000 招行',
     '昨天打车 18 支付宝',
     '工资 8000 招行',
-    '这个月餐饮花了多少'
+    '这个月外卖花了多少'
   ];
 
   var TYPE_TEXT = { expense: '支出', income: '收入', transfer: '转账' };
@@ -260,7 +261,7 @@
     var input = el('textarea', {
       className: 's-assistant__input',
       rows: '1',
-      placeholder: '说一句：午饭 35 微信',
+      placeholder: '说一句：外卖 28 微信',
       'aria-label': '对助手说一句',
       autocomplete: 'off',
       enterkeyhint: 'send'
@@ -568,7 +569,7 @@
       if (list[i] && list[i].deleted !== true && (!cx.bookId || list[i].bookId === cx.bookId)) { hasData = true; break; }
     }
     if (!hasData) {
-      return [{ label: '记一笔：午饭 35 微信', value: '午饭 35 微信' }, { label: '记一笔：工资 8000 招行', value: '工资 8000 招行' }];
+      return [{ label: '记一笔：外卖 28 微信', value: '外卖 28 微信' }, { label: '记一笔：房租 3000 招行', value: '房租 3000 招行' }];
     }
 
     if (contextChip && contextChip.from === 'insights') {
@@ -581,7 +582,7 @@
       return chips.slice(0, 4);
     }
     if (contextChip && contextChip.from === 'home') {
-      return [{ label: '记一笔', value: '午饭 35 微信' }, '今天花了多少？', '本月预算还能用多少？'];
+      return [{ label: '记一笔', value: '外卖 28 微信' }, '今天花了多少？', '本月预算还能用多少？'];
     }
     return QUICK_EXAMPLES.slice();
   }
