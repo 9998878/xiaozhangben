@@ -2912,9 +2912,13 @@
       }
       body.appendChild(iconGrid);
     } else {
-      /* 自定义分类 / 新增：专属图标库（搜索 + 分组 + 最近使用），与记账面板同一个组件 */
-      body.appendChild(t('p', 's-settings-sheet__hint',
-        '这 ' + ((XZB.ui && XZB.ui.icons && XZB.ui.icons.customKeys && XZB.ui.icons.customKeys().length) || 120) + ' 枚是给自定义分类留的专属图标，系统分类里不会出现，所以不会跟系统图标撞脸。'));
+      /* 自定义分类 / 新增：专属图标库（搜索 + 分组 + 最近使用），与记账面板同一个组件。
+         2.22.1：计数取实际值；图标模块缺失时不再报一个看似真实的假数。 */
+      var iconCount = (XZB.ui && XZB.ui.icons && XZB.ui.icons.customKeys)
+        ? XZB.ui.icons.customKeys().length : 0;
+      body.appendChild(t('p', 's-settings-sheet__hint', iconCount > 0
+        ? '这 ' + iconCount + ' 枚是给自定义分类留的专属图标，系统分类里不会出现，所以不会跟系统图标撞脸。'
+        : '这里是给自定义分类留的专属图标库，系统分类里不会出现，所以不会跟系统图标撞脸。'));
       var pickerHost = h('div', { className: 's-settings-picker' });
       body.appendChild(pickerHost);
       var pickerApi = XZB.ui && XZB.ui.iconPicker;
