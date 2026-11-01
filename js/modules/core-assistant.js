@@ -389,7 +389,7 @@
     ca_checkup: ['体检', '复查', '疫苗', '筛查'],
     ca_tuition: ['学费', '学费课程', '培训班', '辅导班', '网课', '报名费'],
     ca_stationery: ['文具', '铅笔', '学习用品'],
-    ca_subscription: ['会员', '订阅', '自动续费', '包月', '视频会员'],
+    ca_subscription: ['会员', '订阅', '自动续费', '包月'],
     ca_insurance: ['保险', '保费', '投保', '保单', '车险'],
     ca_loan: ['贷款', '还贷', '借款', '月供', '房贷'],
     ca_interest: ['利息', '存款利息', '利息收入'],
@@ -420,12 +420,24 @@
       var aliases = Array.isArray(cat.aliases) ? cat.aliases : [];
       for (var a = 0; a < aliases.length; a += 1) { consider(cat, aliases[a]); }
     }
+    /* 2.23 消费词库单一真相源在 nl（CONSUMER_LEXICON），助手消费同一份长尾词+品牌词 */
+    var nlApi = (XZB.core && XZB.core.nl) || (Core && Core.nl) || null;
+    var lexMap = nlApi && typeof nlApi.lexicon === 'function' ? nlApi.lexicon() : null;
     for (var key in EXTRA_ALIASES) {
       if (!Object.prototype.hasOwnProperty.call(EXTRA_ALIASES, key)) { continue; }
       var target = findIn(cx.categories, key);
       if (!target) { continue; }
       var list = EXTRA_ALIASES[key];
       for (i = 0; i < list.length; i += 1) { consider(target, list[i]); }
+    }
+    if (lexMap) {
+      for (var lxKey in lexMap) {
+        if (!Object.prototype.hasOwnProperty.call(lexMap, lxKey)) { continue; }
+        var lxTarget = findIn(cx.categories, lxKey);
+        if (!lxTarget) { continue; }
+        var lxList = lexMap[lxKey];
+        for (var lxi = 0; lxi < lxList.length; lxi++) { consider(lxTarget, lxList[lxi]); }
+      }
     }
     if (best) { return { ok: true, id: best.id, name: best.name, matched: bestLen }; }
     return { ok: false };
