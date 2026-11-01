@@ -50,7 +50,16 @@
     ca_kids: 'baby', ca_elder: 'elder', ca_socialize: 'chat', ca_travel: 'plane',
     ca_smoke: 'glass', ca_digital: 'plug', ca_auto: 'car', ca_pet: 'pet',
     ca_office: 'briefcase', ca_repair: 'hammer', ca_donate: 'heart', ca_lottery: 'ticket',
-    ca_game: 'gamepad', ca_tools: 'wrench', ca_appliance: 'washer', ca_family: 'family'
+    ca_game: 'gamepad', ca_tools: 'wrench', ca_appliance: 'washer', ca_family: 'family',
+    /* 2.22 转正的 24 个高频分类（与 schema 种子一一对应；旧库分类 icon 字段优先于此表） */
+    ca_takeout: 'takeout', ca_breakfast: 'breakfast', ca_supermarket: 'supermarket',
+    ca_online_shopping: 'online-shopping', ca_secondhand: 'secondhand', ca_rent: 'rent',
+    ca_utility: 'utility-bill', ca_broadband: 'broadband', ca_ev_charge: 'ev-charge',
+    ca_car_service: 'car-service', ca_car_wash: 'car-wash', ca_medicine: 'medicine',
+    ca_clinic: 'clinic', ca_dentist: 'dentist', ca_checkup: 'checkup', ca_tuition: 'tuition',
+    ca_stationery: 'stationery', ca_subscription: 'subscription', ca_insurance: 'insurance',
+    ca_loan: 'loan', ca_topup: 'topup', ca_software: 'software',
+    ca_interest: 'interest', ca_dividend: 'dividend'
   };
   var HOLD_MS = 500;
 

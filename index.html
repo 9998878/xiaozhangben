@@ -15885,12 +15885,38 @@ textarea::selection {
       createCategory({ id: 'ca_tools', kind: 'expense', name: '工具', icon: 'wrench', color: '#8E8E93', sort: 320, hidden: false, system: true, aliases: ['五金', '工具', '螺丝'] }, at),
       createCategory({ id: 'ca_appliance', kind: 'expense', name: '电器', icon: 'washer', color: '#007AFF', sort: 330, hidden: false, system: true, aliases: ['家电', '冰箱', '洗衣机', '空调'] }, at),
       createCategory({ id: 'ca_family', kind: 'expense', name: '亲友', icon: 'family', color: '#34C759', sort: 340, hidden: false, system: true, aliases: ['走亲戚', '亲戚', '看望'] }, at),
+      /* 2.22 高频分类转正（规格 §8.3 预留阶段）：24 枚候选图标升级为系统默认分类。
+         老账本由 backfillSeedCategories 在加载路径按 id 幂等补种，无需迁移。 */
+      createCategory({ id: 'ca_takeout', kind: 'expense', name: '外卖', icon: 'takeout', color: '#FF9500', sort: 350, hidden: false, system: true, aliases: ['外卖', '点外卖', '外送', '美团', '饿了么', '送餐'] }, at),
+      createCategory({ id: 'ca_breakfast', kind: 'expense', name: '早餐', icon: 'breakfast', color: '#FF9500', sort: 360, hidden: false, system: true, aliases: ['早餐', '早饭', '早点', '买早餐', '早午餐'] }, at),
+      createCategory({ id: 'ca_supermarket', kind: 'expense', name: '超市', icon: 'supermarket', color: '#FF2D55', sort: 370, hidden: false, system: true, aliases: ['超市', '商超', '便利店', '日用采购'] }, at),
+      createCategory({ id: 'ca_online_shopping', kind: 'expense', name: '网购', icon: 'online-shopping', color: '#FF2D55', sort: 380, hidden: false, system: true, aliases: ['网购', '电商', '淘宝', '拼多多', '京东', '快递', '包裹'] }, at),
+      createCategory({ id: 'ca_secondhand', kind: 'expense', name: '二手交易', icon: 'secondhand', color: '#8E8E93', sort: 390, hidden: false, system: true, aliases: ['二手', '闲置', '转卖', '闲鱼', '回收', '出二手'] }, at),
+      createCategory({ id: 'ca_rent', kind: 'expense', name: '房租', icon: 'rent', color: '#8E8E93', sort: 400, hidden: false, system: true, aliases: ['房租', '租金', '月租', '租房', '押金'] }, at),
+      createCategory({ id: 'ca_utility', kind: 'expense', name: '水电燃', icon: 'utility-bill', color: '#8E8E93', sort: 410, hidden: false, system: true, aliases: ['水电燃', '水电', '水电费', '水费', '电费', '燃气', '燃气费'] }, at),
+      createCategory({ id: 'ca_broadband', kind: 'expense', name: '宽带', icon: 'broadband', color: '#34C759', sort: 420, hidden: false, system: true, aliases: ['宽带', '网费', '网络费', 'WiFi', 'wifi', '宽带续费'] }, at),
+      createCategory({ id: 'ca_ev_charge', kind: 'expense', name: '汽车充电', icon: 'ev-charge', color: '#007AFF', sort: 430, hidden: false, system: true, aliases: ['汽车充电', '充电', '充电桩', '电车充电', '新能源'] }, at),
+      createCategory({ id: 'ca_car_service', kind: 'expense', name: '汽车保养', icon: 'car-service', color: '#007AFF', sort: 440, hidden: false, system: true, aliases: ['汽车保养', '保养', '换机油', '四轮定位', '维修保养'] }, at),
+      createCategory({ id: 'ca_car_wash', kind: 'expense', name: '洗车', icon: 'car-wash', color: '#007AFF', sort: 450, hidden: false, system: true, aliases: ['洗车', '打蜡', '车辆美容'] }, at),
+      createCategory({ id: 'ca_medicine', kind: 'expense', name: '药品', icon: 'medicine', color: '#FF3B30', sort: 460, hidden: false, system: true, aliases: ['药品', '药店', '感冒药', '处方药', '消炎药', '退烧药'] }, at),
+      createCategory({ id: 'ca_clinic', kind: 'expense', name: '门诊', icon: 'clinic', color: '#FF3B30', sort: 470, hidden: false, system: true, aliases: ['门诊', '挂号', '门诊费', '打针', '输液'] }, at),
+      createCategory({ id: 'ca_dentist', kind: 'expense', name: '牙科', icon: 'dentist', color: '#FF3B30', sort: 480, hidden: false, system: true, aliases: ['牙科', '看牙', '洗牙', '补牙', '拔牙', '口腔'] }, at),
+      createCategory({ id: 'ca_checkup', kind: 'expense', name: '体检', icon: 'checkup', color: '#FF3B30', sort: 490, hidden: false, system: true, aliases: ['体检', '体检报告', '复查', '筛查', '疫苗'] }, at),
+      createCategory({ id: 'ca_tuition', kind: 'expense', name: '学费课程', icon: 'tuition', color: '#5856D6', sort: 500, hidden: false, system: true, aliases: ['学费课程', '培训班', '辅导班', '网课', '报名费', '兴趣班', '考级'] }, at),
+      createCategory({ id: 'ca_stationery', kind: 'expense', name: '文具', icon: 'stationery', color: '#5856D6', sort: 510, hidden: false, system: true, aliases: ['文具', '铅笔', '笔记本', '学习用品', '教辅'] }, at),
+      createCategory({ id: 'ca_subscription', kind: 'expense', name: '会员订阅', icon: 'subscription', color: '#AF52DE', sort: 520, hidden: false, system: true, aliases: ['会员订阅', '会员', '订阅', '自动续费', '包月', '视频会员'] }, at),
+      createCategory({ id: 'ca_insurance', kind: 'expense', name: '保险', icon: 'insurance', color: '#34C759', sort: 530, hidden: false, system: true, aliases: ['保险', '保费', '投保', '保单', '车险', '寿险'] }, at),
+      createCategory({ id: 'ca_loan', kind: 'expense', name: '贷款还贷', icon: 'loan', color: '#8E8E93', sort: 540, hidden: false, system: true, aliases: ['贷款还贷', '贷款', '还贷', '借款', '月供', '房贷', '花呗还款'] }, at),
+      createCategory({ id: 'ca_topup', kind: 'expense', name: '话费充值', icon: 'topup', color: '#34C759', sort: 550, hidden: false, system: true, aliases: ['话费充值', '话费', '充话费', '流量', '流量包', '手机费'] }, at),
+      createCategory({ id: 'ca_software', kind: 'expense', name: '云服务', icon: 'software', color: '#5856D6', sort: 560, hidden: false, system: true, aliases: ['云服务', '软件服务', '网盘会员', 'AI工具', 'AI 工具'] }, at),
       createCategory({ id: 'ca_salary', kind: 'income', name: '工资', icon: 'salary', color: '#34C759', sort: 10, hidden: false, system: true, aliases: ['工资', '发薪', '月薪', '薪水'] }, at),
       createCategory({ id: 'ca_bonus', kind: 'income', name: '奖金', icon: 'bonus', color: '#FF9500', sort: 20, hidden: false, system: true, aliases: ['奖金', '年终奖', '提成'] }, at),
       createCategory({ id: 'ca_invest', kind: 'income', name: '理财', icon: 'invest', color: '#007AFF', sort: 30, hidden: false, system: true, aliases: ['利息', '基金', '股票', '分红'] }, at),
       createCategory({ id: 'ca_parttime', kind: 'income', name: '兼职', icon: 'parttime', color: '#5856D6', sort: 40, hidden: false, system: true, aliases: ['兼职', '外快', '稿费'] }, at),
       createCategory({ id: 'ca_redpacket', kind: 'income', name: '红包', icon: 'redpacket', color: '#FF2D55', sort: 50, hidden: false, system: true, aliases: ['红包', '收红包', '压岁钱'] }, at),
-      createCategory({ id: 'ca_other_income', kind: 'income', name: '其他', icon: 'coins', color: '#8E8E93', sort: 60, hidden: false, system: true, aliases: ['其他', '退款', '报销'] }, at)
+      createCategory({ id: 'ca_other_income', kind: 'income', name: '其他', icon: 'coins', color: '#8E8E93', sort: 60, hidden: false, system: true, aliases: ['其他', '退款', '报销'] }, at),
+      createCategory({ id: 'ca_interest', kind: 'income', name: '利息', icon: 'interest', color: '#007AFF', sort: 70, hidden: false, system: true, aliases: ['利息', '存款利息', '利息收入', '活期利息'] }, at),
+      createCategory({ id: 'ca_dividend', kind: 'income', name: '分红', icon: 'dividend', color: '#007AFF', sort: 80, hidden: false, system: true, aliases: ['分红', '股息', '红利'] }, at)
     ];
 
     return { books: books, accounts: accounts, categories: categories };
@@ -15974,6 +16000,21 @@ textarea::selection {
     ca_other_income: { from: 'ellipsis', to: 'coins' }
   };
 
+  /* 2.22 别名让位：新转正的 24 个高频分类接管了更精确的词，旧 catch-all 分类里
+   * 的同名词按「仍是出厂默认别名」原则移除，自然语言记账才能路由到新分类。
+   * 只动 system === true 且别名仍是种子值的条目；用户数据不受影响。 */
+  var SEED_ALIAS_REMOVALS = {
+    ca_food: ['早饭', '外卖'],
+    ca_home: ['房租', '水电', '宽带', '燃气'],
+    ca_shopping: ['网购'],
+    ca_daily: ['超市'],
+    ca_comm: ['话费', '流量', '手机费'],
+    ca_invest: ['利息', '分红'],
+    ca_health: ['买药', '体检', '牙医'],
+    ca_study: ['学费'],
+    ca_fun: ['会员']
+  };
+
   function upgradeSeedCategoryIcons(list) {
     if (!Array.isArray(list)) { return list; }
     for (var i = 0; i < list.length; i++) {
@@ -15981,8 +16022,25 @@ textarea::selection {
       if (!category || category.system !== true) { continue; }
       var rule = SEED_ICON_UPGRADES[category.id];
       if (rule && category.icon === rule.from) { category.icon = rule.to; }
+      var removals = SEED_ALIAS_REMOVALS[category.id];
+      if (removals && Array.isArray(category.aliases)) {
+        for (var r = 0; r < removals.length; r++) {
+          var at2 = category.aliases.indexOf(removals[r]);
+          if (at2 >= 0) { category.aliases.splice(at2, 1); }
+        }
+      }
     }
     return list;
+  }
+
+  /* 2.22 系统分类补种：常规启动对同版本库也按 id 幂等追加缺失的系统分类。
+   * mergeSeedById 只增不改，用户隐藏/改名的同名分类不会被覆盖；
+   * 新建账本走 seedData 本身，无需此步。 */
+  function backfillSeedCategories(db) {
+    if (!isObj(db) || !Array.isArray(db.categories)) { return db; }
+    mergeSeedById(db.categories, seedData(dates.nowIso()).categories);
+    upgradeSeedCategoryIcons(db.categories);
+    return db;
   }
 
   function dbFailure(path) {
@@ -16311,6 +16369,7 @@ textarea::selection {
 
     ensureShape: ensureShape,
     applyCategoryDelete: applyCategoryDelete,
+    backfillSeedCategories: backfillSeedCategories,
 
     seedData: seedData,
     defaultSettings: defaultSettings,
@@ -17075,12 +17134,38 @@ textarea::selection {
           });
         }
 
+        /* 2.22：同版本库也补种新增系统分类（幂等、只增不改）——种子演进不再依赖
+           schemaVersion 升级。有新增时立刻写回一次，后续启动即不再重补。 */
+        var catsBefore = Array.isArray(value.categories) ? value.categories.length : 0;
+        schema.backfillSeedCategories(value);
+        var catsGrew = Array.isArray(value.categories) && value.categories.length > catsBefore;
         var validated = schema.validateDb(value);
         if (!validated.ok) {
           return readSnapshotRecords().then(function (records) {
             return corruptFailure(latestSnapshotId(records));
           }, function () {
             return corruptFailure(null);
+          });
+        }
+        if (catsGrew) {
+          var isoBackfill = nowIso();
+          value.updatedAt = isoBackfill;
+          return writeStateRecord({ key: STATE_KEY, value: clone(value), savedAt: isoBackfill }).then(function () {
+            installCache(value, isoBackfill);
+            persistStorageOnce();
+            return {
+              ok: true,
+              data: clone(cache),
+              meta: { source: 'backfill', degraded: false, savedAt: isoBackfill }
+            };
+          }, function () {
+            /* 写回失败不阻断启动：内存里已带新分类，下次启动再补 */
+            installCache(value, recordSavedAt);
+            return {
+              ok: true,
+              data: clone(cache),
+              meta: { source: 'idb', degraded: false, savedAt: recordSavedAt }
+            };
           });
         }
         installCache(value, recordSavedAt);
@@ -19870,6 +19955,8 @@ textarea::selection {
       return fail('E_STORAGE_VERSION', 'schemaVersion');
     }
     if (db.schemaVersion === SCHEMA_VERSION) {
+      /* 2.22：同版本库也补种新增系统分类（幂等、只增不改），再做常规校验 */
+      schema.backfillSeedCategories(db);
       var same = schema.validateDb(db);
       if (!same.ok) { return fail(same.code || 'E_SCHEMA_INVALID', same.path); }
       return { ok: true, db: clone(db), warnings: [], from: SCHEMA_VERSION };
@@ -26897,13 +26984,19 @@ textarea::selection {
     }
   }());
 
-  /* 系统分类正在用的图标（分组、标签保持线性风格，不进自定义候选） */
+  /* 系统分类正在用的图标（分组、标签保持线性风格，不进自定义候选）
+   * 2.22：24 枚高频候选转正为系统分类图标 —— 字形仍由 CUSTOM_ICON_GROUPS 定义
+   * （键与选择器分组共用一份），只是同时具备系统分类身份。 */
   var SYSTEM_CATEGORY_KEYS = [
     'food', 'bus', 'bag', 'house', 'fun', 'health', 'book', 'phone', 'gift', 'ellipsis',
     'daily', 'carrot', 'fruit', 'snack', 'sport', 'shirt', 'beauty', 'sofa', 'baby', 'elder',
     'chat', 'plane', 'glass', 'plug', 'car', 'pet', 'briefcase', 'hammer', 'heart', 'ticket',
     'gamepad', 'wrench', 'washer', 'family', 'salary', 'bonus', 'invest', 'parttime',
-    'redpacket', 'coins', 'kit', 'cap', 'box', 'dots'
+    'redpacket', 'coins', 'kit', 'cap', 'box', 'dots',
+    'takeout', 'breakfast', 'supermarket', 'online-shopping', 'secondhand', 'rent',
+    'utility-bill', 'broadband', 'ev-charge', 'car-service', 'car-wash', 'medicine',
+    'clinic', 'dentist', 'checkup', 'tuition', 'stationery', 'subscription', 'insurance',
+    'loan', 'interest', 'dividend', 'topup', 'software'
   ];
 
   /* 系统分类图标的中文名：设置页的 aria-label 和候选格标签都从这里来，
@@ -26917,7 +27010,13 @@ textarea::selection {
     briefcase: '办公', hammer: '维修', heart: '捐赠', ticket: '彩票', gamepad: '游戏',
     wrench: '工具', washer: '电器', family: '亲友', salary: '工资', bonus: '奖金',
     invest: '理财', parttime: '兼职', redpacket: '红包', coins: '硬币', kit: '医疗箱',
-    cap: '学习', box: '其他'
+    cap: '学习', box: '其他',
+    takeout: '外卖', breakfast: '早餐', supermarket: '超市', 'online-shopping': '网购',
+    secondhand: '二手', rent: '房租', 'utility-bill': '水电燃', broadband: '宽带',
+    'ev-charge': '充电', 'car-service': '保养', 'car-wash': '洗车', medicine: '药品',
+    clinic: '门诊', dentist: '牙科', checkup: '体检', tuition: '学费', stationery: '文具',
+    subscription: '订阅', insurance: '保险', loan: '还贷', interest: '利息',
+    dividend: '分红', topup: '话费', software: '云服务'
   };
 
   (function registerSystemMeta() {
@@ -28120,7 +28219,14 @@ textarea::selection {
     ca_pet: 8, ca_office: 11, ca_repair: 8, ca_donate: 6, ca_lottery: 3,
     ca_game: 5, ca_tools: 12, ca_appliance: 2, ca_family: 10,
     ca_salary: 10, ca_bonus: 8, ca_invest: 2, ca_parttime: 11,
-    ca_redpacket: 6, ca_other_income: 4
+    ca_redpacket: 6, ca_other_income: 4,
+    /* 2.22 转正的 24 个高频分类 */
+    ca_takeout: 1, ca_breakfast: 1, ca_supermarket: 3, ca_online_shopping: 3,
+    ca_secondhand: 12, ca_rent: 4, ca_utility: 4, ca_broadband: 10, ca_topup: 10,
+    ca_ev_charge: 7, ca_car_service: 7, ca_car_wash: 7,
+    ca_medicine: 6, ca_clinic: 6, ca_dentist: 6, ca_checkup: 6,
+    ca_tuition: 11, ca_stationery: 11, ca_subscription: 5, ca_insurance: 10,
+    ca_loan: 12, ca_software: 5, ca_interest: 2, ca_dividend: 2
   };
 
   function parseHexRgb(value) {
@@ -32691,7 +32797,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.21.0';
+  XZB.version = '2.22.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
