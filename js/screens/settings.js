@@ -1310,16 +1310,19 @@
     E_AI_ABORTED: '已取消'
   };
 
-  var AI = { store: null, ensuring: null, ensuringFailed: false, testBusy: false, group: null, testValue: null };
+  var AI = { store: null, ensuring: null, ensuringFailed: false, ensureRequested: false, pollTimer: null, testBusy: false, group: null, testValue: null };
 
   function aiStoreOf() { return AI.store; }
 
-  /* 诊断埋点：线上排查「占位不重绘」用；生产只挂 window.__aiStoreDbg 数组，无副作用 */
+  /* 诊断埋点：线上排查「占位不重绘」用；带相对时间戳（ms）。生产无副作用 */
+  var AI_DBG_T0 = 0;
   function aiDbg(ev) {
     try {
       var g = global;
+      var now = Date.now();
+      if (!AI_DBG_T0) { AI_DBG_T0 = now; }
       g.__aiStoreDbg = g.__aiStoreDbg || [];
-      if (g.__aiStoreDbg.length < 40) { g.__aiStoreDbg.push(ev); }
+      if (g.__aiStoreDbg.length < 60) { g.__aiStoreDbg.push('+' + (now - AI_DBG_T0) + 'ms ' + ev); }
     } catch (e) { /* 诊断不影响功能 */ }
   }
 
@@ -1345,21 +1348,8 @@
     return AI.ensuring.then(function (st) {
       try {
         rerenderAiGroup();
-        /* 时序兜底：chunk 回调若早于占位节点挂载/守卫就绪，rerender 会静默失效
-           （线上首访实测踩过）。占位节点带 __aiPlaceholder 标记，store 就位后
-           每 400ms 补一次重绘，至多 5 次；换上完整分组即停。 */
-        var n = 0;
-        (function compensate() {
-          if (!AI.group || !AI.group.__aiPlaceholder) { return; }
-          if (!aiStoreOf()) { return; }
-          if (n >= 5) { aiDbg('compensate-exhausted'); return; }
-          n += 1;
-          aiDbg('compensate-' + n);
-          setTimeout(function () {
-            try { rerenderAiGroup(); } catch (e) { aiDbg('compensate-err ' + (e && e.message || e)); }
-            compensate();
-          }, 400);
-        })();
+        /* 补充重绘由 sectionAiEnhance 的 setInterval 轮询兜底（宏任务，不受
+           then 链与「同 key 并发 ensure 只兑现最后注册者」的 loader 竞态影响） */
       } catch (error) {
         /* 重绘失败不得影响其他分组；开发期先可见，稳定后可降为静默 */
         if (global.console && typeof global.console.warn === 'function') {
@@ -1819,8 +1809,33 @@
         title: '智能增强',
         sub: AI.ensuringFailed ? '这个模块没加载成功，下拉刷新或重新打开试试' : '正在读取配置…'
       })]);
-      node.__aiPlaceholder = true;   /* 时序兜底标记：compensate 靠它判断是否还需补绘 */
-      if (!AI.ensuringFailed) { ensureAiStore(); }
+      node.__aiPlaceholder = true;
+      /* 先挂引用再启动 ensure：保证 then 回调执行时 AI.group 一定指向当前占位节点 */
+      AI.group = node;
+      /* 全生命周期只发起一次 ensure——render 可能跑多次，同 key 并发 ensure
+         会踩 loader 的并发竞态（先注册的 promise 可能永远 pending，线上实测踩过） */
+      if (!AI.ensureRequested && !AI.ensuringFailed) {
+        AI.ensureRequested = true;
+        ensureAiStore();
+      }
+      /* 宏任务轮询兜底：不依赖 ensure 的 then 链与微任务时序。
+         store 就位即重绘；占位已被换掉或 20s 超时则停。 */
+      if (!AI.pollTimer) {
+        var polls = 0;
+        aiDbg('poll-start');
+        AI.pollTimer = global.setInterval(function () {
+          polls += 1;
+          if (!AI.group || !AI.group.__aiPlaceholder) { aiDbg('poll-stop-noplacement'); global.clearInterval(AI.pollTimer); AI.pollTimer = null; return; }
+          if (aiStoreOf()) {
+            aiDbg('poll-fire store=true polls=' + polls);
+            global.clearInterval(AI.pollTimer);
+            AI.pollTimer = null;
+            try { rerenderAiGroup(); aiDbg('poll-rerender-done full=' + (document.body.textContent.indexOf('测试连接') >= 0)); } catch (e) { aiDbg('poll-rerender-err ' + (e && e.message || e)); }
+            return;
+          }
+          if (polls >= 40) { aiDbg('poll-timeout'); global.clearInterval(AI.pollTimer); AI.pollTimer = null; }
+        }, 500);
+      }
     }
     AI.group = node;
     return node;
