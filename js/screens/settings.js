@@ -1314,6 +1314,15 @@
 
   function aiStoreOf() { return AI.store; }
 
+  /* 诊断埋点：线上排查「占位不重绘」用；生产只挂 window.__aiStoreDbg 数组，无副作用 */
+  function aiDbg(ev) {
+    try {
+      var g = global;
+      g.__aiStoreDbg = g.__aiStoreDbg || [];
+      if (g.__aiStoreDbg.length < 40) { g.__aiStoreDbg.push(ev); }
+    } catch (e) { /* 诊断不影响功能 */ }
+  }
+
   /* 懒加载 ai-store；成功后重绘本分区。失败不影响设置页其他分组（§10.1 懒加载契约） */
   function ensureAiStore() {
     if (AI.store) { return Promise.resolve(AI.store); }
@@ -1321,30 +1330,52 @@
     if (!chunks || typeof chunks.ensure !== 'function') { return Promise.resolve(null); }
     if (!AI.ensuring) {
       AI.ensuringFailed = false;
+      aiDbg('ensure-start');
       AI.ensuring = chunks.ensure('ai-store').then(function () {
         AI.store = (XZB.core && XZB.core.aiStore) || null;
+        aiDbg('ensure-ok store=' + !!AI.store);
         return AI.store;
       }, function () {
         AI.ensuring = null;
         AI.ensuringFailed = true;   /* 让分区显示「没加载成功」而不是永远停在「正在读取」 */
+        aiDbg('ensure-fail');
         return null;
       });
     }
     return AI.ensuring.then(function (st) {
       try {
         rerenderAiGroup();
+        /* 时序兜底：chunk 回调若早于占位节点挂载/守卫就绪，rerender 会静默失效
+           （线上首访实测踩过）。占位节点带 __aiPlaceholder 标记，store 就位后
+           每 400ms 补一次重绘，至多 5 次；换上完整分组即停。 */
+        var n = 0;
+        (function compensate() {
+          if (!AI.group || !AI.group.__aiPlaceholder) { return; }
+          if (!aiStoreOf()) { return; }
+          if (n >= 5) { aiDbg('compensate-exhausted'); return; }
+          n += 1;
+          aiDbg('compensate-' + n);
+          setTimeout(function () {
+            try { rerenderAiGroup(); } catch (e) { aiDbg('compensate-err ' + (e && e.message || e)); }
+            compensate();
+          }, 400);
+        })();
       } catch (error) {
         /* 重绘失败不得影响其他分组；开发期先可见，稳定后可降为静默 */
         if (global.console && typeof global.console.warn === 'function') {
           global.console.warn('[小账本] AI 分区重绘失败', error && error.message ? error.message : String(error));
         }
+        aiDbg('rerender-err ' + (error && error.message ? error.message : String(error)));
       }
       return st;
     });
   }
 
   function rerenderAiGroup() {
-    if (!AI.group || !AI.group.parentNode || !live.ctx) { return; }
+    if (!AI.group || !AI.group.parentNode || !live.ctx) {
+      aiDbg('rerender-guard g=' + !!AI.group + ' parent=' + !!(AI.group && AI.group.parentNode) + ' ctx=' + !!live.ctx);
+      return;
+    }
     var fresh = buildAiGroup(live.ctx);
     if (fresh && AI.group.parentNode) {
       AI.group.parentNode.replaceChild(fresh, AI.group);
@@ -1780,6 +1811,7 @@
        设置页其他分组不受影响（§10.1）。 */
     var st = aiStoreOf();
     var node;
+    aiDbg('render st=' + !!st + ' failed=' + !!AI.ensuringFailed);
     if (st) {
       node = buildAiGroup(ctx);
     } else {
@@ -1787,6 +1819,7 @@
         title: '智能增强',
         sub: AI.ensuringFailed ? '这个模块没加载成功，下拉刷新或重新打开试试' : '正在读取配置…'
       })]);
+      node.__aiPlaceholder = true;   /* 时序兜底标记：compensate 靠它判断是否还需补绘 */
       if (!AI.ensuringFailed) { ensureAiStore(); }
     }
     AI.group = node;
