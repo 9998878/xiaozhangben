@@ -1793,6 +1793,35 @@
     return AI.group;
   }
 
+  /* DOM 层自愈轮询：每 500ms 扫一次页面里的占位（data-ai-placeholder）。
+     store 就位 → 就地用 buildAiGroup 重建并替换该节点——不依赖 AI.group 引用、
+     不依赖 ensure 的 then 链、不怕路由重渲与任何实例/时序错乱。
+     占位消失（已换好或切走）或 30s 超时即停。 */
+  function startAiPoll() {
+    if (AI.pollTimer) { return; }
+    var polls = 0;
+    aiDbg('poll-start');
+    AI.pollTimer = global.setInterval(function () {
+      polls += 1;
+      var ph = null;
+      try { ph = global.document.querySelector('[data-ai-placeholder="1"]'); } catch (e) { ph = null; }
+      if (!ph) { aiDbg('poll-stop-clean polls=' + polls); global.clearInterval(AI.pollTimer); AI.pollTimer = null; return; }
+      if (aiStoreOf()) {
+        aiDbg('poll-fire polls=' + polls);
+        global.clearInterval(AI.pollTimer);
+        AI.pollTimer = null;
+        try {
+          var fresh = buildAiGroup(live.ctx);
+          if (ph.parentNode) { ph.parentNode.replaceChild(fresh, ph); }
+          aiDbg('poll-replaced full=' + (global.document.body.textContent.indexOf('测试连接') >= 0));
+          AI.group = fresh;
+        } catch (e) { aiDbg('poll-replace-err ' + (e && e.message || e)); }
+        return;
+      }
+      if (polls >= 60) { aiDbg('poll-timeout'); global.clearInterval(AI.pollTimer); AI.pollTimer = null; }
+    }, 500);
+  }
+
   function sectionAiEnhance(ctx) {
     /* ai-store 是懒加载 chunk。render 可能被调用多次（路由重渲等）：
        - store 已就位 → 直接同步构建完整分组（否则第二次渲染会放回占位行，
@@ -1809,35 +1838,19 @@
         title: '智能增强',
         sub: AI.ensuringFailed ? '这个模块没加载成功，下拉刷新或重新打开试试' : '正在读取配置…'
       })]);
+      /* DOM 层标记：自愈轮询靠它找到「还没换上完整分组」的占位，
+         不依赖 AI.group 引用与任何 then 链时序（引用层修不可靠，线上实测） */
+      node.setAttribute('data-ai-placeholder', '1');
       node.__aiPlaceholder = true;
-      /* 先挂引用再启动 ensure：保证 then 回调执行时 AI.group 一定指向当前占位节点 */
-      AI.group = node;
       /* 全生命周期只发起一次 ensure——render 可能跑多次，同 key 并发 ensure
          会踩 loader 的并发竞态（先注册的 promise 可能永远 pending，线上实测踩过） */
       if (!AI.ensureRequested && !AI.ensuringFailed) {
         AI.ensureRequested = true;
         ensureAiStore();
       }
-      /* 宏任务轮询兜底：不依赖 ensure 的 then 链与微任务时序。
-         store 就位即重绘；占位已被换掉或 20s 超时则停。 */
-      if (!AI.pollTimer) {
-        var polls = 0;
-        aiDbg('poll-start');
-        AI.pollTimer = global.setInterval(function () {
-          polls += 1;
-          if (!AI.group || !AI.group.__aiPlaceholder) { aiDbg('poll-stop-noplacement'); global.clearInterval(AI.pollTimer); AI.pollTimer = null; return; }
-          if (aiStoreOf()) {
-            aiDbg('poll-fire store=true polls=' + polls);
-            global.clearInterval(AI.pollTimer);
-            AI.pollTimer = null;
-            try { rerenderAiGroup(); aiDbg('poll-rerender-done full=' + (document.body.textContent.indexOf('测试连接') >= 0)); } catch (e) { aiDbg('poll-rerender-err ' + (e && e.message || e)); }
-            return;
-          }
-          if (polls >= 40) { aiDbg('poll-timeout'); global.clearInterval(AI.pollTimer); AI.pollTimer = null; }
-        }, 500);
-      }
     }
     AI.group = node;
+    startAiPoll();
     return node;
   }
 
