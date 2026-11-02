@@ -13126,6 +13126,72 @@ textarea::selection {
   text-align: center;
 }
 
+/* ---------------- 智能增强（云端辅助） ----------------
+   停止键与发送键同尺寸（≥44px）；理解中占位与降级行使用既有 CSS 变量，深色模式自动跟随。 */
+
+.s-assistant__stop {
+  background: var(--c-fill-2);
+  color: var(--c-text-2);
+}
+
+.s-assistant__stop:active {
+  background: var(--c-fill-3);
+}
+
+.s-assistant__aithink {
+  color: var(--c-text-3);
+}
+
+.s-assistant__text.is-streaming::after {
+  content: '▍';
+  color: var(--c-text-4);
+}
+
+.s-assistant__degrade {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: var(--r-md);
+  background: var(--c-fill-2);
+  color: var(--c-text-3);
+  font-size: var(--fs-micro);
+  word-break: break-word;
+}
+
+.s-assistant__degrade-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.s-assistant__degrade-btn,
+.s-assistant__explain {
+  flex: none;
+  min-width: 44px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--r-full);
+  background: var(--c-tint);
+  color: var(--c-on-tint);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+.s-assistant__explainrow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.s-assistant__srcnote {
+  margin: 6px 0 0;
+  color: var(--c-text-4);
+  font-size: var(--fs-micro);
+  text-align: right;
+}
+
 /* ---------------- 撤销历史 ---------------- */
 
 .s-assistant--history {
@@ -16008,7 +16074,7 @@ textarea::selection {
    * 的同名词按「仍是出厂默认别名」原则移除，自然语言记账才能路由到新分类。
    * 只动 system === true 且别名仍是种子值的条目；用户数据不受影响。 */
   var SEED_ALIAS_REMOVALS = {
-    ca_food: ['早饭', '外卖'],
+    ca_food: ['早饭', '外卖', '零食'],
     ca_home: ['房租', '水电', '宽带', '燃气'],
     ca_shopping: ['网购'],
     ca_daily: ['超市'],
@@ -16018,7 +16084,8 @@ textarea::selection {
     ca_study: ['学费'],
     ca_auto: ['保养', '洗车'],
     ca_fun: ['会员'],
-    ca_subscription: ['视频会员']
+    ca_subscription: ['视频会员'],
+    ca_office: ['文具', '打印'],
   };
 
   function upgradeSeedCategoryIcons(list) {
@@ -31719,10 +31786,15 @@ textarea::selection {
     ['home', 'screens/home', 'screens/home'], ['add', 'screens/add', 'screens/add'], ['ledger', 'screens/ledger', 'screens/ledger'], ['stats', 'screens/stats', 'screens/stats'],
     ['insights', 'screens/insights', 'screens/insights'], ['accounts', 'screens/accounts', 'screens/accounts'], ['books', 'screens/books', 'screens/books'], ['plan', 'screens/plan', 'screens/plan'],
     ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
-    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'], ['insight-qa', 'core/insight-qa', 'modules/insight-qa'], ['quips', 'modules/quips', 'modules/quips']
+    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'], ['insight-qa', 'core/insight-qa', 'modules/insight-qa'], ['quips', 'modules/quips', 'modules/quips'],
+    ['ai-store', 'modules/ai-store', 'modules/ai-store'], ['ai-client', 'modules/ai-client', 'modules/ai-client'], ['ai-enhance', 'modules/ai-enhance', 'modules/ai-enhance']
   ];
   /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
-  var DEPS = { add: ['keypad', 'icon-picker', 'quips'], stats: ['charts'], insights: ['charts'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant', 'insight-qa', 'quips'] };
+  var DEPS = { add: ['keypad', 'icon-picker', 'quips'], stats: ['charts'], insights: ['charts'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant', 'insight-qa', 'quips'],
+    /* 三个 AI 模块都不进任何屏幕的 DEPS：由 assistant/settings 按需 ensure()，
+       一个 404 只会让云端分支不可用，不会让整屏打不开（架构 §1.2 K4）。
+       ai-enhance 依赖 store/client；store 与 client 各自为空，显式写出来是为了让键集与 ROWS 相等。 */
+    'ai-store': [], 'ai-client': [], 'ai-enhance': ['ai-store', 'ai-client'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
@@ -32805,7 +32877,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.23.0';
+  XZB.version = '2.24.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -32841,6 +32913,16 @@ textarea::selection {
   /* ④ 删 prefs（xzb.ui.v2）只能由本文件做（L-o）；闸门要保证「清除本机数据」始终有出口 */
   function clearPrefs() {
     try { global.localStorage.removeItem(PREFS_KEY); } catch (error) { /* 读不到/写不进都不阻断闸门出口 */ }
+    /* 清空所有数据必须带走 AI Key（xzb.ai.v1）；新增持久化键都要在这里登记。
+       用裸 removeItem 而不是 aiStore.clearAll()：ai-store 是懒加载 chunk，
+       用户从没打开过智能增强时 XZB.core.aiStore 就是 undefined，那样写等于什么都没删，
+       而代码看起来完全正确、review 也看不出来。字面量必须与 js/modules/ai-store.js 的 KEY 常量逐字相等。 */
+    try { global.localStorage.removeItem('xzb.ai.v1'); } catch (error) { /* 同上：清不掉也不阻断出口 */ }
+    /* 模块已在内存里缓存过配置的话顺手失效：闸门的可重试分支不一定 reload，别留一份旧 Key 在内存里 */
+    try {
+      var aiStore = global.XZB && global.XZB.core && global.XZB.core.aiStore;
+      if (aiStore && typeof aiStore.invalidate === 'function') { aiStore.invalidate(); }
+    } catch (error) { /* 未加载/失效失败都无妨，落盘删除已经做过 */ }
   }
 
   if (XZB.lock && typeof XZB.lock.configure === 'function') {
@@ -34674,5 +34756,9 @@ textarea::selection {
   <script type="text/xzb-module" data-xzb-chunk="core-assistant" src="js/modules/core-assistant.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="insight-qa" src="js/modules/insight-qa.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="quips" src="js/modules/quips.js"></script>
+  <!-- 智能增强三件套：顺序 store → client → enhance（enhance 的 DEPS 依赖前两者） -->
+  <script type="text/xzb-module" data-xzb-chunk="ai-store" src="js/modules/ai-store.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="ai-client" src="js/modules/ai-client.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="ai-enhance" src="js/modules/ai-enhance.js"></script>
 </body>
 </html>

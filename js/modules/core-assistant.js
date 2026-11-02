@@ -1423,6 +1423,10 @@
         var hay = String(tx.note || '');
         if (hay.indexOf(filter.keyword) < 0) { continue; }
       }
+      /* exclude：备注含该词的行在**计数与合计阶段**就剔除，而不是只从展示行里过滤。
+         「上个月外卖加打车一共多少，不算那笔退款」这类问法，合计必须同步排除，
+         否则数字看着合理但其实是错的（口径仍在本函数一处，调用方不要另写一份）。 */
+      if (filter.exclude && String(tx.note || '').indexOf(filter.exclude) >= 0) { continue; }
       if (tx.type === 'transfer') {
         transferCount += 1;
         transferCents += Number(tx.amountCents) || 0;
@@ -1448,6 +1452,10 @@
         amountText: formatCents(tx.amountCents),
         categoryText: tx.type === 'transfer' ? '转账' : categoryName(cx, tx.categoryId),
         accountText: accountName(cx, tx.accountId),
+        /* 内部 id（acct_xxx），非敏感。ai-enhance 靠它把行映射成「账户N」代号；
+           payload 只带走 accountLabel，不带走 id。缺了它，映射恒回落「账户1」，
+           模型老实引用代号反而会被数字守卫当成金额误杀（D14）。 */
+        accountId: tx.accountId || '',
         note: tx.note || ''
       };
     });

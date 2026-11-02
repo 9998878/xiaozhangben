@@ -273,6 +273,15 @@
       'aria-label': '发送'
     }, [icon('arrow-up', 20)]);
 
+    /* 「停止生成」：仅在云端生成中可见；与 send 同尺寸，切换只动 hidden/disabled */
+    var stop = el('button', {
+      className: 's-assistant__stop',
+      type: 'button',
+      'aria-label': '停止生成',
+      hidden: true,
+      onclick: function () { stopEnhance(); }
+    }, [icon('close', 18)]);
+
     var mic = null;
     var voice = makeVoice({
       onText: function (text) {
@@ -302,6 +311,7 @@
     var composer = el('form', { className: 's-assistant__composer' }, [
       el('div', { className: 's-assistant__field' }, [input]),
       mic,
+      stop,
       send
     ]);
 
@@ -317,7 +327,10 @@
     var shell = el('section', { className: 's-assistant', 'data-assistant-screen': '1' }, [head, log, foot]);
     root.appendChild(shell);
 
-    host = { root: root, ctx: ctx, shell: shell, log: log, chipRow: chipRow, ctxRow: ctxRow, taskRow: taskRow, input: input, send: send, banner: banner, voice: voice };
+    host = { root: root, ctx: ctx, shell: shell, log: log, chipRow: chipRow, ctxRow: ctxRow, taskRow: taskRow, input: input, send: send, stop: stop, banner: banner, voice: voice };
+
+    /* 预热 AI chunk 并按状态刷新头部副标题 / 底部隐私行（P0-10，AC11 冷启动） */
+    ensureAiBoot();
 
     /* 情境上下文：每次按当前 hash 参数重建（无参进入 = 无 Chip，不留旧状态） */
     contextChip = readContextParams(ctx, cxNow());
@@ -639,6 +652,7 @@
 
   function paint() {
     if (!host) { return; }
+    AI.node = null;   /* 流式节点引用每次重画重建（botBubble 里回填） */
     clear(host.log);
     session.turns.forEach(function (turn) {
       host.log.appendChild(turn.who === 'user' ? userBubble(turn.text) : botBubble(turn));
@@ -659,7 +673,18 @@
     if (turn.text) {
       body.appendChild(el('p', { className: 's-assistant__text', text: turn.text }));
     } else if (reply.text) {
-      body.appendChild(el('p', { className: 's-assistant__text', text: reply.text }));
+      var textNode = el('p', {
+        className: 's-assistant__text' + (turn.pending && reply.streaming ? ' is-streaming' : ''),
+        text: reply.text
+      });
+      /* 中途 repaint 也要保住流式节点引用，否则 onDelta 会写到已脱离 DOM 的节点上 */
+      if (turn.pending && reply.streaming) { AI.node = textNode; }
+      body.appendChild(textNode);
+    } else if (turn.pending && reply.streaming) {
+      /* 流式回合：先给一行阶段文案；首个增量到达后由 onDelta 直接改这个节点的文字 */
+      var think = el('p', { className: 's-assistant__text s-assistant__aithink', text: aiPhaseText() });
+      AI.node = think;
+      body.appendChild(think);
     }
 
     var kind = reply.kind;
@@ -713,6 +738,43 @@
       } else {
         body.appendChild(previewActions(reply));
       }
+    }
+
+    if (reply.degrade) {
+      /* 降级说明在消息位内（P0-5）：说清为什么 + 数字仍来自账本 + 可重试 */
+      var degradeRow = el('div', { className: 's-assistant__degrade' }, [
+        el('span', {
+          className: 's-assistant__degrade-text',
+          text: '已切回本机：' + (reply.degrade.text || '云端这次没答上') + '。下面的数字仍来自你的账本。'
+        })
+      ]);
+      if (turn.aiQuestion) {
+        degradeRow.appendChild(el('button', {
+          className: 's-assistant__degrade-btn',
+          type: 'button',
+          text: '重试',
+          onclick: function () { retryEnhance(turn); }
+        }));
+      }
+      body.appendChild(degradeRow);
+    }
+
+    if (reply.source === 'remote' && reply.provider) {
+      body.appendChild(el('p', { className: 's-assistant__srcnote', text: '由 ' + reply.provider + ' 辅助理解' }));
+    }
+
+    /* P1-3 表达增强：本地 query/insight 结果可一键「换个说法解释」。
+       数字结构（rows/totals/metrics）原样带回，只有文字会变；已重写过的不再叠按钮。 */
+    if ((reply.kind === 'query' || reply.kind === 'insight') && !reply.rewritten && !turn.pending && !reply.streaming) {
+      var explainTurn = turn;
+      body.appendChild(el('div', { className: 's-assistant__explainrow' }, [
+        el('button', {
+          className: 's-assistant__explain',
+          type: 'button',
+          text: '换个说法解释',
+          onclick: function () { aiExplainTurn(explainTurn); }
+        })
+      ]));
     }
 
     return el('div', { className: 's-assistant__row s-assistant__row--bot' }, [
@@ -1139,10 +1201,241 @@
     return wrap;
   }
 
+  /* ============================== 云端增强（P1，BYOK） ==============================
+   * 契约锚点：
+   *  - 只有本地返回 kind:'hint'（听不懂的兜底）才可能进云端；clarify/preview/query 等一律不调模型（P0-3）；
+   *  - 流式只更新文字节点，不整屏 paint；确认按钮永远来自本地 plan，模型不产（§8.1）；
+   *  - 失败/降级在消息位内说明并给「重试」；连续 2 次失败才升到顶部 banner（§10.4 优先级）；
+   *  - ai-* 三个 chunk 不在 DEPS 里，按需 ensure；加载失败 = 增强不可用，本地路径完全不受影响。
+   */
+  var AI = { store: null, enhance: null, ensuring: null, ctl: null, busy: false, question: '', fails: 0, phase: '', node: null };
+
+  function aiEnsuring() {
+    if (AI.enhance) { return Promise.resolve(AI.enhance); }
+    var chunks = XZB.chunks;
+    if (!chunks || typeof chunks.ensure !== 'function') { return Promise.resolve(null); }
+    if (!AI.ensuring) {
+      AI.ensuring = chunks.ensure('ai-enhance').then(function () {
+        var core = XZB.core || {};
+        AI.enhance = core.aiEnhance || null;
+        AI.store = core.aiStore || null;
+        return AI.enhance;
+      }, function () {
+        AI.ensuring = null;   /* 允许下次重试 */
+        return null;
+      });
+    }
+    return AI.ensuring;
+  }
+
+  function aiSubtitleText() {
+    var st = AI.store;
+    if (!st || typeof st.platform !== 'function') { return '离线运行 · 数据不出手机'; }
+    if (st.platform().ok !== true) { return '离线运行 · 数据不出手机'; }
+    var consented = false;
+    try { consented = st.consent().granted === true; } catch (error) { consented = false; }
+    if (!consented) { return '离线运行 · 数据不出手机'; }
+    var name = '';
+    try { name = String(st.labelOf(st.getActive().id) || ''); } catch (error) { name = ''; }
+    return '本机记账 · 复杂问题由' + (name || '所选供应商') + '辅助';
+  }
+
+  /* 头部副标题 / 底部隐私行随增强状态切换（P0-10：不得保留绝对化承诺） */
+  function updateAiChrome() {
+    if (!host || !host.shell) { return; }
+    var sub = host.shell.querySelector('.s-assistant__subtitle');
+    if (sub) { sub.textContent = aiSubtitleText(); }
+    var foot = host.shell.querySelector('.s-assistant__privacy');
+    if (foot) {
+      var st = AI.store;
+      var on = false;
+      try { on = !!(st && typeof st.consent === 'function' && st.platform().ok === true && st.consent().granted === true); } catch (error) { on = false; }
+      foot.textContent = on
+        ? '本机记账；开启增强后，问题与必要摘要会发给所选供应商（备注默认不发送）'
+        : '文字解析与账目保存在本机；语音识别由你的浏览器服务处理';
+    }
+  }
+
+  /* 预热：进屏就 ensure + load 一次，把首次 getItem 的开销挪出「本地命中」的热路径（AC11） */
+  function ensureAiBoot() {
+    aiEnsuring().then(function () { updateAiChrome(); });
+  }
+
+  function setAiBusy(busy) {
+    AI.busy = busy === true;
+    if (host && host.send) { host.send.disabled = AI.busy; }
+    if (host && host.stop) { host.stop.hidden = !AI.busy; }
+  }
+
+  function stopEnhance() {
+    if (AI.ctl && typeof AI.ctl.abort === 'function') {
+      try { AI.ctl.abort(); } catch (error) { /* 已结束 */ }
+    }
+  }
+
+  function aiPhaseText() {
+    return AI.phase === 'streaming' ? '正在生成…' : '正在理解…';
+  }
+
+  /* P1-3：把一条已有的本地 query/insight 结论交给模型重写表达。
+     数字全在 reply.rows/totals 上且 explain() 原样带回；守卫仍会校验文字里的数字。 */
+  function aiExplainTurn(turn) {
+    var reply = turn && turn.reply;
+    if (!reply || AI.busy) { return; }
+    var begin = function (enh) {
+      if (!enh || AI.busy) { return; }
+      var gate = enh.ready(null);
+      if (!gate || gate.ok !== true) {
+        if (XZB.ui && XZB.ui.toast && XZB.ui.toast.show) {
+          XZB.ui.toast.show('智能增强还没开启或额度用完了，去设置里看看', { type: 'info' });
+        }
+        return;
+      }
+      var newTurn = {
+        who: 'bot',
+        reply: {
+          kind: reply.kind === 'insight' ? 'insight' : 'query',
+          text: '',
+          streaming: true,
+          rows: reply.rows,
+          totals: reply.totals,
+          metrics: reply.metrics
+        }
+      };
+      pushTurn(newTurn);
+      AI.phase = 'thinking';
+      setAiBusy(true);
+      paint();
+      scrollToEnd(true);
+
+      var client = XZB.core && XZB.core.aiClient;
+      var ctl = client && typeof client.abortHandle === 'function' ? client.abortHandle() : null;
+      enh.explain({
+        reply: reply,
+        cx: cxNow(),
+        ctl: ctl,
+        onDelta: function (delta, all) {
+          AI.phase = 'streaming';
+          newTurn.reply.text = all == null ? '' : String(all);
+          if (AI.node) {
+            AI.node.textContent = newTurn.reply.text;
+            scrollToEnd(false);
+          }
+        }
+      }).then(function (out) {
+        newTurn.pending = false;
+        newTurn.reply = out || reply;
+        setAiBusy(false);
+        if (newTurn.reply.source === 'remote') { AI.fails = 0; }
+        else if (newTurn.reply.degrade) { AI.fails += 1; }
+        paint();
+        refreshBanner();
+        scrollToEnd(true);
+      });
+    };
+    if (AI.enhance) { begin(AI.enhance); } else { aiEnsuring().then(begin); }
+  }
+
+  function maybeEnhance(raw, reply) {
+    if (!reply || reply.kind !== 'hint') { return; }
+    if (AI.busy) { return; }
+    var st = AI.store;
+    if (st && typeof st.platform === 'function') {
+      var pf = st.platform();
+      if (pf && pf.ok !== true) { return; }   /* file://：静默留在本地答案（AC19） */
+    }
+    aiEnsuring().then(function (enh) {
+      if (!enh || AI.busy) { return; }
+      var gate = enh.ready(null);
+      if (!gate || gate.ok !== true) { return; }   /* 未授权/无 Key/额度尽/断网：静默留在本地答案 */
+      startEnhance(raw, reply, enh);
+    });
+  }
+
+  function startEnhance(raw, reply, enh) {
+    var turn = session.turns[session.turns.length - 1];
+    if (!turn || turn.who !== 'bot' || turn.reply !== reply) { return; }
+    var cx = cxNow();
+    if (!cx) { return; }
+
+    turn.aiQuestion = String(raw || '');
+    AI.question = turn.aiQuestion;
+    AI.phase = 'thinking';
+    /* 注意：AI.fails 是「跨提问的连续失败计数」（≥2 升 banner），
+       不能在这里清零——否则每次新提问都从 0 数起，banner 永远不出现。
+       清零只发生在成功（then 里 source==='remote'）。 */
+    turn.reply = { kind: 'hint', text: '', streaming: true };
+    turn.pending = true;
+    setAiBusy(true);
+    paint();
+    scrollToEnd(true);
+
+    runEnhance(turn, raw, reply, enh, false);
+  }
+
+  /* 降级卡上的「重试」：同一回合重跑同一载荷，retry:true → 不计入每日额度（P0-8） */
+  function retryEnhance(turn) {
+    var enh = AI.enhance;
+    if (!enh || AI.busy || !turn || !turn.aiQuestion) { return; }
+    var localReply = { kind: 'hint', text: '', options: [] };
+    turn.reply = { kind: 'hint', text: '', streaming: true };
+    turn.pending = true;
+    AI.question = turn.aiQuestion;
+    AI.phase = 'thinking';
+    setAiBusy(true);
+    paint();
+    scrollToEnd(true);
+    runEnhance(turn, turn.aiQuestion, localReply, enh, true);
+  }
+
+  function runEnhance(turn, raw, localReply, enh, isRetry) {
+    var cx = cxNow();
+    if (!cx) {
+      turn.pending = false;
+      setAiBusy(false);
+      paint();
+      return;
+    }
+
+    var client = XZB.core && XZB.core.aiClient;
+    AI.ctl = client && typeof client.abortHandle === 'function' ? client.abortHandle() : null;
+
+    enh.run({
+      question: raw,
+      localReply: localReply,
+      state: session.state,
+      cx: cx,
+      ctl: AI.ctl,
+      retry: isRetry === true,
+      onDelta: function (delta, all) {
+        AI.phase = 'streaming';
+        turn.reply.text = all == null ? '' : String(all);
+        if (AI.node) {
+          AI.node.textContent = turn.reply.text;
+          scrollToEnd(false);
+        }
+      },
+      onPhase: function (name) {
+        AI.phase = String(name || '');
+        if (turn.pending && AI.node && !turn.reply.text) { AI.node.textContent = aiPhaseText(); }
+      }
+    }).then(function (out) {
+      turn.pending = false;
+      turn.reply = out || { kind: 'hint', text: '这次没能给出更好的回答，换个说法试试' };
+      setAiBusy(false);
+      if (turn.reply.source === 'remote') { AI.fails = 0; }
+      else if (turn.reply.degrade) { AI.fails += 1; }
+      paint();
+      refreshBanner();
+      scrollToEnd(true);
+    });
+  }
+
   /* ============================== 提交 / 回复 ============================== */
 
   function submit(text) {
     if (!host || !text || !String(text).trim()) { return; }
+    if (AI.busy) { return; }   /* 生成中不接受新问题，避免流式回合被打断 */
     var raw = String(text).trim();
     if (session.busy) { return; }
 
@@ -1193,6 +1486,9 @@
     refreshBanner();
     scrollToEnd(true);
     renderChips();
+
+    /* 本地听不懂（hint 兜底）才考虑云端；其他 kind 一律不调模型（P0-3） */
+    maybeEnhance(raw, reply);
   }
 
   function markConsumed(plan) {
@@ -1294,6 +1590,16 @@
       append(banner, [
         icon('warning', 18),
         el('span', { className: 's-assistant__banner-text', text: '当前是临时存储模式，写入不会保留。先去「我的」检查存储。' })
+      ]);
+      return;
+    }
+
+    /* 云端增强连续失败才升到 banner（§10.4：只读存储 > 降级持续 > 未确认草稿） */
+    if (AI.fails >= 2) {
+      banner.hidden = false;
+      append(banner, [
+        icon('warning', 18),
+        el('span', { className: 's-assistant__banner-text', text: '云端增强连续没答上，已自动切回本机；账目不受影响，稍后可再试。' })
       ]);
       return;
     }

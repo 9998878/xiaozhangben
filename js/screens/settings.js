@@ -1272,7 +1272,525 @@
       }));
     }
     return group('小助手', rows,
-      '小助手完全在本机解析与保存，不上传任何内容；语音识别由你的浏览器服务处理。撤销历史只记录小助手与手动记账的差异，最多 30 条。');
+      '小助手默认完全在本机解析与保存；开启下方「智能增强」后，问题与必要的数据摘要会按授权说明发送给所选供应商。语音识别由你的浏览器服务处理。撤销历史只记录小助手与手动记账的差异，最多 30 条。');
+  }
+
+  /* ---------------- 智能增强（BYOK 云端辅助，架构 §10.1） ----------------
+   * 契约锚点：
+   *  - Key 与全部 AI 配置只经 XZB.core.aiStore（懒加载 chunk），本文件不碰 localStorage；
+   *  - 「总开关」= 授权状态（consent）：开启走授权浮层，关闭即 revokeConsent；
+   *  - file:// 下 aiStore.platform().ok === false：开关渲染为不可点静态行（AC19），
+   *    其余配置行整组不渲染——不是 disabled，用户看不到可误触的入口；
+   *  - 连接测试发 1 次真实请求（max_tokens:8），不计入每日额度，但会占用供应商极少量额度。
+   * 本分区不新增 CSS：输入框复用 .c-field__input，按钮复用 .c-btn。 */
+
+  var AI_PROVIDER_TAGS = {
+    modelscope: '每日 2000 次免费 · 国内直连',
+    zhipu: '需 z.ai 国际站账号',
+    siliconflow: '免费模型常变，以控制台为准',
+    openrouter: '需能访问境外网络',
+    dashscope: '新用户 90 天免费 · 阿里云账号，与魔搭同一个',
+    custom1: '地址需自己放行浏览器跨域'
+  };
+
+  /* 连接测试的失败文案：只翻 code，不透传任何响应细节（Key 不进文案） */
+  var AI_TEST_TEXT = {
+    E_AI_NO_KEY: '先填 API Key',
+    E_AI_401: 'Key 不对或已失效',
+    E_AI_403: 'Key 不对或没有该模型权限',
+    E_AI_402: '这家今天额度用完了',
+    E_AI_429: '请求太频繁，稍后再试',
+    E_AI_TIMEOUT_FIRST: '10 秒没回应，已取消',
+    E_AI_NET: '网络不通，检查网络后重试',
+    E_AI_CORS: '这个地址没放行浏览器跨域，或地址填错了',
+    E_AI_BAD_REQUEST: '模型名可能填错了，或该模型没有免费额度',
+    E_AI_NOT_FOUND: '接口地址路径不对，一般填到 /v1 就够',
+    E_AI_5XX: '供应商那边出问题了，稍后重试',
+    E_AI_FILE_PROTOCOL: '本地文件方式不能联网',
+    E_AI_ABORTED: '已取消'
+  };
+
+  var AI = { store: null, ensuring: null, ensuringFailed: false, testBusy: false, group: null, testValue: null };
+
+  function aiStoreOf() { return AI.store; }
+
+  /* 懒加载 ai-store；成功后重绘本分区。失败不影响设置页其他分组（§10.1 懒加载契约） */
+  function ensureAiStore() {
+    if (AI.store) { return Promise.resolve(AI.store); }
+    var chunks = XZB.chunks;
+    if (!chunks || typeof chunks.ensure !== 'function') { return Promise.resolve(null); }
+    if (!AI.ensuring) {
+      AI.ensuringFailed = false;
+      AI.ensuring = chunks.ensure('ai-store').then(function () {
+        AI.store = (XZB.core && XZB.core.aiStore) || null;
+        return AI.store;
+      }, function () {
+        AI.ensuring = null;
+        AI.ensuringFailed = true;   /* 让分区显示「没加载成功」而不是永远停在「正在读取」 */
+        return null;
+      });
+    }
+    return AI.ensuring.then(function (st) {
+      try {
+        rerenderAiGroup();
+      } catch (error) {
+        /* 重绘失败不得影响其他分组；开发期先可见，稳定后可降为静默 */
+        if (global.console && typeof global.console.warn === 'function') {
+          global.console.warn('[小账本] AI 分区重绘失败', error && error.message ? error.message : String(error));
+        }
+      }
+      return st;
+    });
+  }
+
+  function rerenderAiGroup() {
+    if (!AI.group || !AI.group.parentNode || !live.ctx) { return; }
+    var fresh = buildAiGroup(live.ctx);
+    if (fresh && AI.group.parentNode) {
+      AI.group.parentNode.replaceChild(fresh, AI.group);
+      AI.group = fresh;
+    }
+  }
+
+  /* 轻量节点工厂：settings 的 h() 不支持任意属性/事件，这里只服务本分区 */
+  function str(value) {
+    return value === undefined || value === null ? '' : String(value);
+  }
+
+  function mkEl(tag, attrs, kids) {
+    var node = global.document.createElement(tag);
+    attrs = attrs || {};
+    Object.keys(attrs).forEach(function (key) {
+      var value = attrs[key];
+      if (value === null || value === undefined || value === false) { return; }
+      if (key === 'className') { node.className = String(value); }
+      else if (key === 'text') { node.textContent = String(value); }
+      else if (key === 'value') { node.value = String(value); }
+      else if (key.indexOf('on') === 0 && key.length > 2 && typeof value === 'function') { node.addEventListener(key.slice(2), value); }
+      else { node.setAttribute(key, value === true ? '' : String(value)); }
+    });
+    (kids || []).forEach(function (kid) { if (kid) { node.appendChild(kid); } });
+    return node;
+  }
+
+  function aiConsented(st) { return st.consent().granted === true; }
+
+  function openConsentSheet(st) {
+    var sheet = XZB.ui && XZB.ui.sheet;
+    if (!sheet || typeof sheet.open !== 'function') { return; }
+    var body = mkEl('div', { className: 's-settings-consent' });
+    [
+      ['会发送什么', '你的问题原文、当前账期与分类名、必要的汇总数字；需要举证时最多 8 条流水摘要（日期、金额、分类）。'],
+      ['不会发送什么', '备注默认不发送；账户只用「账户1」这类代号指代；整本账、撤销历史、照片、聊天记录都不会发。'],
+      ['Key 存在哪', '只存这台设备的浏览器里（明文）。小账本没有服务器，备份文件里也不包含它。'],
+      ['随时可以关闭', '关闭即停止发送；「清除 Key 与全部增强数据」不会动你的账目。']
+    ].forEach(function (item) {
+      body.appendChild(t('p', 'c-row__title', item[0]));
+      body.appendChild(t('p', 's-settings-note', item[1]));
+    });
+    sheet.open({
+      title: '开启智能增强前，先看四件事',
+      content: body,
+      actions: [
+        { label: '不同意', kind: 'text' },
+        {
+          label: '同意并开启',
+          kind: 'primary',
+          onClick: function () {
+            var r = st.grantConsent(st.CONSENT_VERSION);
+            toast(ctx0(), r.ok ? '已开启智能增强' : '开启失败，请重试', { type: r.ok ? 'success' : 'danger' });
+            rerenderAiGroup();
+          }
+        }
+      ]
+    });
+  }
+
+  function ctx0() { return live.ctx; }
+
+  function openProviderSheet(st) {
+    var sheet = XZB.ui && XZB.ui.sheet;
+    if (!sheet || typeof sheet.open !== 'function') { return; }
+    var cfg = st.load();
+    var body = mkEl('div', { className: 's-settings-consent' });
+    st.list().forEach(function (item) {
+      var p = cfg.providers[item.id] || {};
+      var isCustom = item.id === 'custom1';
+      var modelText = isCustom ? (str(p.model) || '未填写') : (str(p.model) || item.defaultModel);
+      var keyText = st.hasKey(item.id) ? '已填 Key' : '未填 Key';
+      var row = mkEl('div', {
+        className: 'c-row c-row--two-line c-row--tappable',
+        role: 'button', tabindex: '0',
+        onclick: function () {
+          var r = st.setActive(item.id);
+          if (r && r.ok === false) { toast(ctx0(), '切换失败', { type: 'danger' }); return; }
+          /* 预设被清空过 model/baseUrl 时回填默认，避免切过去是空白 */
+          if (!isCustom) {
+            if (!str(p.model)) { st.setProviderField(item.id, 'model', item.defaultModel); }
+            if (!str(p.baseUrl)) { st.setProviderField(item.id, 'baseUrl', item.defaultBaseUrl); }
+          }
+          if (handle) { handle.close(); }
+          rerenderAiGroup();
+        }
+      });
+      row.appendChild(mkEl('span', { className: 'c-row__main' }, [
+        t('span', 'c-row__title', item.label),
+        t('span', 'c-row__sub', AI_PROVIDER_TAGS[item.id] || '')
+      ]));
+      row.appendChild(mkEl('span', { className: 'c-row__trail' }, [
+        t('span', 'c-row__value', (str(cfg.active) === item.id ? '当前 · ' : '') + modelText + ' · ' + keyText)
+      ]));
+      body.appendChild(row);
+    });
+    var handle = sheet.open({ title: '选择供应商', content: body, actions: [{ label: '取消', kind: 'text' }] });
+  }
+
+  function openKeySheet(st) {
+    var sheet = XZB.ui && XZB.ui.sheet;
+    if (!sheet || typeof sheet.open !== 'function') { return; }
+    var pid = str(st.getActive().id);
+    var shown = false;
+    var body = mkEl('div', { className: 's-settings-consent' });
+    var input = mkEl('input', {
+      className: 'c-field__input',
+      type: 'password', autocomplete: 'new-password', spellcheck: 'false',
+      autocapitalize: 'off', enterkeyhint: 'done',
+      placeholder: '粘贴 API Key',
+      'aria-label': 'API Key'
+    });
+    var eye = mkEl('button', {
+      className: 'c-btn c-btn--text', type: 'button', text: '显示',
+      onclick: function () {
+        shown = !shown;
+        input.type = shown ? 'text' : 'password';
+        input.value = shown ? str(st.revealKey(pid)) : '';
+        eye.textContent = shown ? '隐藏' : '显示';
+      }
+    });
+    input.addEventListener('paste', function () {
+      /* 粘贴后清洗：去首尾空白 / Bearer 前缀 / 引号（统一走 ai-store 的 sanitizeKey） */
+      global.setTimeout(function () {
+        var cleaned = st.sanitizeKey ? st.sanitizeKey(input.value) : str(input.value).trim();
+        if (cleaned !== input.value) { input.value = cleaned; }
+      }, 0);
+    });
+    var wrap = mkEl('div', { className: 'c-field' }, [input]);
+    var tip = t('p', 's-settings-note', 'Key 只存本机浏览器；显示时请注意周围环境。');
+    body.appendChild(wrap);
+    body.appendChild(mkEl('div', { className: 'c-row' }, [eye]));
+    body.appendChild(tip);
+    var handle = sheet.open({
+      title: 'API Key · ' + st.labelOf(pid),
+      content: body,
+      actions: [
+        { label: '取消', kind: 'text' },
+        {
+          label: '保存',
+          kind: 'primary',
+          onClick: function () {
+            var r = st.setKey(pid, input.value);
+            if (!r || r.ok !== true) { toast(ctx0(), '没保存成功，请重试', { type: 'danger' }); return false; }
+            toast(ctx0(), 'Key 已保存（只在本机）', { type: 'success' });
+            rerenderAiGroup();
+          }
+        }
+      ]
+    });
+    global.setTimeout(function () { try { input.focus({ preventScroll: true }); } catch (e) {} }, 60);
+  }
+
+  function openTextSheet(st, title, field, onSaved) {
+    var sheet = XZB.ui && XZB.ui.sheet;
+    if (!sheet || typeof sheet.open !== 'function') { return; }
+    var pid = str(st.getActive().id);
+    var p = st.load().providers[pid] || {};
+    var isBase = field === 'baseUrl';
+    var editable = pid === 'custom1' || !isBase;
+    var preset = st.list().filter(function (x) { return x.id === pid; })[0] || null;
+    var body = mkEl('div', { className: 's-settings-consent' });
+    var input = mkEl('input', {
+      className: 'c-field__input',
+      type: 'text', autocomplete: 'off', spellcheck: 'false',
+      value: str(p[field]) || (field === 'model' && preset ? str(preset.defaultModel) : ''),
+      'aria-label': title
+    });
+    if (!editable) { input.setAttribute('readonly', 'readonly'); }
+    body.appendChild(mkEl('div', { className: 'c-field' }, [input]));
+    if (isBase && pid !== 'custom1') {
+      body.appendChild(t('p', 's-settings-note', '预设供应商的接口地址不建议改；填错会连不上。'));
+    }
+    var actions = [];
+    if (isBase && pid !== 'custom1') {
+      actions.push({
+        label: '恢复默认地址', kind: 'text',
+        onClick: function () {
+          var def = st.list().filter(function (x) { return x.id === pid; })[0];
+          st.setProviderField(pid, 'baseUrl', def ? def.defaultBaseUrl : '');
+          toast(ctx0(), '已恢复默认地址', { type: 'success' });
+          rerenderAiGroup();
+        }
+      });
+    }
+    actions.push({ label: '取消', kind: 'text' });
+    if (editable) {
+      actions.push({
+        label: '保存', kind: 'primary',
+        onClick: function () {
+          var value = str(input.value).trim();
+          if (!value) { toast(ctx0(), '不能为空', { type: 'warning' }); return false; }
+          var r = st.setProviderField(pid, field, value);
+          if (!r || r.ok !== true) { toast(ctx0(), '没保存成功', { type: 'danger' }); return false; }
+          if (typeof onSaved === 'function') { onSaved(); }
+          toast(ctx0(), '已保存', { type: 'success' });
+          rerenderAiGroup();
+        }
+      });
+    }
+    sheet.open({ title: title, content: body, actions: actions });
+  }
+
+  function aiTestText(st) {
+    var pid = str(st.getActive().id);
+    var cfg = st.load().providers[pid] || {};
+    var lt = cfg.lastTest || null;
+    if (AI.testBusy) { return '测试中…'; }
+    if (!lt) { return '未测试'; }
+    if (lt.ok === true) { return '✓ 连接正常 · ' + Math.max(0, Math.round(Number(lt.ms) || 0)) + 'ms'; }
+    return '✗ ' + (AI_TEST_TEXT[str(lt.code)] || '连接失败，请检查网络与配置');
+  }
+
+  function runConnTest(st) {
+    if (AI.testBusy) { return; }
+    var pid = str(st.getActive().id);
+    var cfg = st.load().providers[pid] || {};
+    if (!str(cfg.key)) { toast(ctx0(), '先填 API Key 再测试', { type: 'warning' }); return; }
+    AI.testBusy = true;
+    if (AI.testValue) { AI.testValue.textContent = '测试中…'; }
+    ensureAiStore().then(function () {
+      var chunks = XZB.chunks;
+      var client = (XZB.core && XZB.core.aiClient) || null;
+      var ready = client || (chunks && typeof chunks.ensure === 'function'
+        ? chunks.ensure('ai-client').then(function () { return (XZB.core && XZB.core.aiClient) || null; })
+        : Promise.resolve(null));
+      return Promise.resolve(ready).then(function (cl) {
+        if (!cl || typeof cl.test !== 'function') { throw new Error('E_AI_NET'); }
+        return cl.test({ key: str(cfg.key), baseUrl: str(cfg.baseUrl), model: str(cfg.model) });
+      });
+    }).then(function (r) {
+      AI.testBusy = false;
+      st.setLastTest(pid, { ok: r && r.ok === true, ms: r ? Math.round(Number(r.ms) || 0) : 0, code: r ? str(r.code) : 'E_AI_NET' });
+      if (r && r.ok) { toast(ctx0(), '连接正常', { type: 'success' }); }
+      rerenderAiGroup();
+    }, function () {
+      AI.testBusy = false;
+      st.setLastTest(pid, { ok: false, ms: 0, code: 'E_AI_NET' });
+      rerenderAiGroup();
+    });
+  }
+
+  function openUsageSheet(st) {
+    var sheet = XZB.ui && XZB.ui.sheet;
+    if (!sheet || typeof sheet.open !== 'function') { return; }
+    var u = st.usage();
+    var cfg = st.load();
+    var body = mkEl('div', { className: 's-settings-consent' });
+    var avg = u.firstByteN > 0 ? Math.round((u.firstByteMsSum || 0) / u.firstByteN) : 0;
+    body.appendChild(t('p', 'c-row__title', '今日 ' + (u.count || 0) + ' / ' + (u.limit || 0) + ' 次'));
+    body.appendChild(t('p', 's-settings-note', '成功 ' + (u.ok || 0) + ' · 失败 ' + (u.fail || 0) + ' · 平均首字 ' + (avg ? avg + 'ms' : '—')));
+    st.PROVIDER_ORDER.forEach(function (id) {
+      var pu = (cfg.providers[id] && cfg.providers[id].usage) || {};
+      body.appendChild(t('p', 's-settings-note', st.labelOf(id) + '：今日 ' + (pu.count || 0) + ' 次'));
+    });
+    body.appendChild(t('p', 's-settings-note', '计数只存在本机，跨日 0 点后自动归零。'));
+    sheet.open({
+      title: '智能增强用量',
+      content: body,
+      actions: [
+        { label: '关闭', kind: 'text' },
+        {
+          label: '清零', kind: 'danger',
+          onClick: function () { st.resetUsage(); toast(ctx0(), '已清零', { type: 'success' }); rerenderAiGroup(); }
+        }
+      ]
+    });
+  }
+
+  function openDailyLimitSheet(st) {
+    var sheet = XZB.ui && XZB.ui.sheet;
+    if (!sheet || typeof sheet.open !== 'function') { return; }
+    var cur = st.prefs().dailyLimit;
+    var body = mkEl('div', { className: 's-settings-consent' });
+    var valueEl = t('p', 'c-row__title', '每日上限：' + cur + ' 次');
+    body.appendChild(valueEl);
+    body.appendChild(t('p', 's-settings-note', '范围 20–200，每次 ±20。达到上限后当天不再外发，本机助手照常可用。'));
+    function step(delta) {
+      var next = st.setPref('dailyLimit', st.prefs().dailyLimit + delta);
+      if (next && next.ok !== false) {
+        valueEl.textContent = '每日上限：' + st.prefs().dailyLimit + ' 次';
+        rerenderAiGroup();
+      }
+    }
+    var row = mkEl('div', { className: 'c-row' }, [
+      mkEl('button', { className: 'c-btn c-btn--text', type: 'button', text: '−20', onclick: function () { step(-20); } }),
+      mkEl('button', { className: 'c-btn c-btn--text', type: 'button', text: '+20', onclick: function () { step(20); } })
+    ]);
+    body.appendChild(row);
+    sheet.open({ title: '每日调用上限', content: body, actions: [{ label: '完成', kind: 'primary' }] });
+  }
+
+  function openClearAiSheet(st) {
+    var sheet = XZB.ui && XZB.ui.sheet;
+    if (!sheet || typeof sheet.open !== 'function') { return; }
+    var body = mkEl('div', { className: 's-settings-consent' });
+    body.appendChild(t('p', 's-settings-note', '会删除：全部供应商的 Key、授权记录、用量计数与自定义地址。'));
+    body.appendChild(t('p', 's-settings-note', '不会动：账目、账本、照片与普通设置。'));
+    sheet.open({
+      title: '清除 Key 与全部增强数据',
+      content: body,
+      actions: [
+        { label: '取消', kind: 'text' },
+        {
+          label: '清除', kind: 'danger',
+          onClick: function () {
+            st.clearAll();
+            toast(ctx0(), '已清除，账目不受影响', { type: 'success' });
+            rerenderAiGroup();
+          }
+        }
+      ]
+    });
+  }
+
+  function buildAiGroup(ctx) {
+    var st = aiStoreOf();
+    if (!st) {
+      AI.group = group('智能增强', [row({ title: '智能增强', sub: '正在读取配置…' })]);
+      return AI.group;
+    }
+    if (st.platform && st.platform().ok !== true) {
+      AI.group = group('智能增强', [
+        row({
+          title: '智能增强',
+          value: '不可用',
+          sub: '用本地文件方式打开时不能连网，增强功能已关闭；从网址打开就能用'
+        })
+      ], '本地文件（file://）方式没有网络能力，增强功能保持关闭；账目功能不受影响。');
+      return AI.group;
+    }
+
+    var cfg = st.load();
+    var pid = str(cfg.active);
+    var p = cfg.providers[pid] || {};
+    var consented = aiConsented(st);
+    var rows = [];
+
+    rows.push(switchRow(ctx, {
+      icon: 'sparkles',
+      title: '智能增强',
+      sub: '用你自己的 API Key，让助手更懂复杂问法；关闭后完全在本机',
+      checked: consented,
+      onChange: function (next) {
+        if (next === true) {
+          if (aiConsented(st)) { return true; }
+          openConsentSheet(st);
+          return false; /* 授权浮层里点「同意」后由 rerender 把开关拨回开启 */
+        }
+        st.revokeConsent();
+        return true;
+      }
+    }));
+
+    rows.push(row({
+      icon: 'list', title: '供应商',
+      sub: AI_PROVIDER_TAGS[pid] || '',
+      value: st.labelOf(pid),
+      onClick: function () { openProviderSheet(st); }
+    }));
+
+    rows.push(row({
+      icon: 'key', title: 'API Key',
+      value: st.hasKey(pid) ? str(st.maskedKey(pid)) : '未填写',
+      onClick: function () { openKeySheet(st); }
+    }));
+
+    rows.push(row({
+      icon: 'sparkles', title: '模型名',
+      sub: '可能随供应商政策变化，可手动修改',
+      value: str(p.model) || '未填写',
+      onClick: function () { openTextSheet(st, '模型名', 'model'); }
+    }));
+
+    rows.push(row({
+      icon: 'list', title: '接口地址',
+      sub: pid === 'custom1' ? '自定义地址，需自己放行浏览器跨域' : '预设地址，一般不用改',
+      value: str(p.baseUrl) || '未填写',
+      onClick: function () { openTextSheet(st, '接口地址', 'baseUrl'); }
+    }));
+
+    var testRow = row({
+      icon: 'chart-line', title: '测试连接',
+      sub: '测试会向供应商发一次极小的请求，可能占用极少量额度',
+      value: aiTestText(st),
+      onClick: function () { runConnTest(st); }
+    });
+    AI.testValue = testRow.querySelector ? testRow.querySelector('.c-row__value') : null;
+    if (AI.testValue) { AI.testValue.textContent = aiTestText(st); }
+    rows.push(testRow);
+
+    var u = st.usage();
+    rows.push(row({
+      icon: 'list', title: '今日用量',
+      value: (u.count || 0) + ' / ' + (u.limit || 0),
+      onClick: function () { openUsageSheet(st); }
+    }));
+
+    rows.push(row({
+      icon: 'list', title: '每日上限',
+      sub: '达到上限后当天不再外发，本机助手照常可用',
+      value: (st.prefs().dailyLimit || 100) + ' 次/天',
+      onClick: function () { openDailyLimitSheet(st); }
+    }));
+
+    rows.push(switchRow(ctx, {
+      icon: 'list', title: '发送备注',
+      sub: '默认关闭；开启后只发当前问题相关的 ≤8 条备注',
+      checked: st.prefs().sendNote === true,
+      onChange: function (next) {
+        var r = st.setPref('sendNote', next);
+        return !(r && r.ok === false);
+      }
+    }));
+
+    rows.push(row({
+      icon: 'trash', title: '清除 Key 与全部增强数据',
+      value: '不影响账目',
+      onClick: function () { openClearAiSheet(st); }
+    }));
+
+    AI.group = group('智能增强', rows,
+      'Key 只存这台设备的浏览器（明文），备份文件不含它。开启后，问题与必要的数据摘要会发给所选供应商；备注默认不发送，账户只用「账户1」这类代号。');
+    return AI.group;
+  }
+
+  function sectionAiEnhance(ctx) {
+    /* ai-store 是懒加载 chunk。render 可能被调用多次（路由重渲等）：
+       - store 已就位 → 直接同步构建完整分组（否则第二次渲染会放回占位行，
+         而 ensureAiStore 见 store 已存在会直接返回，占位就永远留在 DOM 里）；
+       - 未就位 → 占位行 + ensure，成功/失败都会 rerender（失败显示「没加载成功」）。
+       设置页其他分组不受影响（§10.1）。 */
+    var st = aiStoreOf();
+    var node;
+    if (st) {
+      node = buildAiGroup(ctx);
+    } else {
+      node = group('智能增强', [row({
+        title: '智能增强',
+        sub: AI.ensuringFailed ? '这个模块没加载成功，下拉刷新或重新打开试试' : '正在读取配置…'
+      })]);
+      if (!AI.ensuringFailed) { ensureAiStore(); }
+    }
+    AI.group = node;
+    return node;
   }
 
   /* ---------------- 记账管理（M12：按任务找入口，不按实现方式） ---------------- */
@@ -3425,6 +3943,7 @@
 
     root.appendChild(sectionAppearance(ctx));
     root.appendChild(sectionAssistant(ctx));
+    root.appendChild(sectionAiEnhance(ctx));
     root.appendChild(sectionManage(ctx, db));
     root.appendChild(sectionAutomation(ctx, db));
     root.appendChild(sectionData(ctx, db));
