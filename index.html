@@ -11436,6 +11436,18 @@ textarea::selection {
   color: var(--c-text-4);
 }
 
+/* 未开启的风险态右值：用警示色，别让「未开启」和普通值一个灰度 */
+.s-settings-row__value.s-settings-row__value--warn {
+  color: var(--c-warn);
+  font-weight: 600;
+}
+
+/* 开关写入中：只降当前开关的透明度，其他开关照常可点 */
+.s-settings .c-switch[aria-busy='true'] {
+  opacity: 0.45;
+  transition: opacity 120ms ease;
+}
+
 /* 记账金额语义色优先于上面这条降权色（同特异度，靠顺序取胜） */
 .s-settings .c-row__value--expense {
   color: var(--c-expense);
@@ -12096,6 +12108,19 @@ textarea::selection {
   font-size: var(--fs-caption-1);
   line-height: var(--lh-caption-1);
 }
+
+/* ---------------- 本机数据总览卡（2.26.0） ---------------- */
+.s-settings-overview { margin-bottom: var(--sp-2); }
+.s-settings-overview .c-card__title { margin: 0; color: var(--c-text-2); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: var(--fw-regular); }
+.s-settings-overview__lead { margin: var(--sp-1) 0 0; color: var(--c-text-3); font-size: var(--fs-caption-1); line-height: var(--lh-caption-1); }
+.s-settings-overview__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); margin-top: var(--sp-4); }
+.s-settings-overview__grid .s-settings-stat { padding: var(--sp-3) 0; }
+.s-settings-overview__grid .s-settings-stat__value { font-size: 20px; line-height: 1.25; }
+.s-settings-overview__mode { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin: var(--sp-3) 0 0; padding-top: var(--sp-3); border-top: var(--hairline) solid var(--c-separator); color: var(--c-text-2); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.s-settings-overview__mode-label { color: var(--c-text-3); }
+.s-settings-overview__mode-value.is-warn { color: var(--c-danger); font-weight: var(--fw-medium); }
+.s-settings-overview__warn { margin: var(--sp-3) 0 0; color: var(--c-danger); font-size: var(--fs-caption-1); line-height: var(--lh-caption-1); }
+.s-settings-overview__export { width: 100%; margin-top: var(--sp-4); }
 
 /* ---------------- 页脚 / 加入主屏幕步骤 ---------------- */
 
@@ -32410,7 +32435,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.25.0';
+  XZB.version = '2.26.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};

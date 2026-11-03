@@ -275,17 +275,30 @@
     return '未开启（系统可能在空间紧张时清理，建议定期导出备份）';
   }
 
+  /* 右值只留两态短句；长风险说明挪到副标题，320px 下不会被右值 58% 的宽度截掉。 */
+  function storageProtectValue(persisted) {
+    return persisted === true ? '已开启' : '未开启';
+  }
+
+  function storageProtectSub(persisted) {
+    if (persisted === true) { return '浏览器已允许本机持久化存储'; }
+    return '系统可能清理数据，请定期导出备份';
+  }
+
   /* 读库里的持久化结果：只有逐字 true 才算已开启（缺席 / 非布尔一律按未开启显示）。 */
   function storagePersistedFlag(db) {
     return settingsOf(db)[STORAGE_PERSISTENT_KEY] === true;
   }
 
-  /* A31 设置页可见行（存储组）：本机数据保护：已开启 / 未开启（…） */
+  /* A31 设置页可见行（存储组）：右值「已开启 / 未开启」，风险说明放副标题。 */
   function storageProtectRow(db) {
+    var persisted = storagePersistedFlag(db);
     return row({
       icon: 'lock',
       title: '本机数据保护',
-      value: storageProtectText(storagePersistedFlag(db)),
+      sub: storageProtectSub(persisted),
+      value: storageProtectValue(persisted),
+      valueClass: persisted === true ? null : 's-settings-row__value--warn',
       chevron: false
     });
   }
@@ -882,6 +895,7 @@
   function switchRow(ctx, options) {
     var opts = options || {};
     var checked = opts.checked === true;
+    var pending = false;
 
     var button = h('button', {
       className: 'c-switch',
@@ -906,24 +920,34 @@
     trail.appendChild(button);
     node.appendChild(trail);
 
+    function setPending(on) {
+      pending = on;
+      button.setAttribute('aria-busy', on ? 'true' : 'false');
+      node.classList.toggle('is-busy', on);
+      if (on) { button.setAttribute('disabled', 'disabled'); }
+      else { button.removeAttribute('disabled'); }
+    }
+
     function flip(next) {
+      if (pending) { return; }
       if (live.busy) { return; }
       checked = next;
       button.setAttribute('aria-checked', checked ? 'true' : 'false');
-      live.busy = true;
+      setPending(true);
       buzz(ctx);
       var result = null;
       try { result = opts.onChange ? opts.onChange(checked) : null; } catch (error) { result = null; }
       Promise.resolve(result).then(function (ok) {
-        live.busy = false;
+        setPending(false);
         if (ok === false) {
           checked = !checked;
           button.setAttribute('aria-checked', checked ? 'true' : 'false');
         }
       }, function () {
-        live.busy = false;
+        setPending(false);
         checked = !checked;
         button.setAttribute('aria-checked', checked ? 'true' : 'false');
+        toast(ctx, '设置没保存上，请重试', { type: 'danger' });
       });
     }
 
@@ -1123,12 +1147,15 @@
     } catch (error) { return null; }
   }
 
-  /* 三态右值（设计 §4.5）：未配置 · 纯本地 / 已开启 · {model} / 未就绪 */
+  /* 四态右值（设计 §4.5）：未配置 / 已关闭·纯本地 / 未就绪·纯本地 / 已开启。主页面不放模型名。 */
   function llmRowValue() {
     var cfg = llmCfg();
     if (!cfg) { return '未配置 · 纯本地'; }
-    if (cfg.enabled !== true || cfg.hasKey !== true || !cfg.baseURL) { return '未配置 · 纯本地'; }
-    return '已开启 · ' + (cfg.model || '默认模型');
+    var configured = cfg.hasKey === true && cfg.baseURL && cfg.model;
+    if (!configured) { return '未配置 · 纯本地'; }
+    if (cfg.enabled !== true) { return '已关闭 · 纯本地'; }
+    if (cfg.status !== 'ok') { return '未就绪 · 纯本地'; }
+    return '已开启';
   }
 
   function sectionAssistant(ctx) {
@@ -1162,6 +1189,43 @@
 
   /* ---------------- 记账管理（M12：按任务找入口，不按实现方式） ---------------- */
 
+  /* ---------------- 本机数据总览（2.26.0：首屏先交代数据在哪、有多少） ---------------- */
+
+  function sectionOverview(ctx, db) {
+    var counts = countsOf(db);
+    var info = storageInfo();
+
+    var wrap = h('section', { className: 'c-card s-settings-overview' });
+    var body = h('div', { className: 'c-card__body' });
+    body.appendChild(t('h2', 'c-card__title', '我的账本'));
+    body.appendChild(t('p', 's-settings-overview__lead', '数据仅保存在此设备，不需要账号'));
+
+    var grid = h('div', { className: 's-settings-overview__grid' });
+    grid.appendChild(statItem('流水', counts.transactions + ' 笔'));
+    grid.appendChild(statItem('账户', counts.accounts + ' 个'));
+    grid.appendChild(statItem('账本', counts.books + ' 个'));
+    body.appendChild(grid);
+
+    var mode = h('p', { className: 's-settings-overview__mode' });
+    mode.appendChild(t('span', 's-settings-overview__mode-label', '存储'));
+    mode.appendChild(t('span', 's-settings-overview__mode-value' + (info.mode === 'memory' ? ' is-warn' : ''),
+      info.mode === 'memory' ? '临时内存 · 关闭页面即丢失' : '本机 IndexedDB'));
+    body.appendChild(mode);
+
+    if (info.mode === 'memory') {
+      body.appendChild(noteBlock('当前是临时内存模式，关闭页面后数据会丢失，请先导出备份。', 's-settings-overview__warn'));
+    }
+
+    var btn = h('button', {
+      className: 'c-btn c-btn--primary s-settings-overview__export', type: 'button', text: '导出备份'
+    });
+    btn.addEventListener('click', function () { openExportSheet(ctx); });
+    body.appendChild(btn);
+
+    wrap.appendChild(body);
+    return wrap;
+  }
+
   function sectionManage(ctx, db) {
     var settings = settingsOf(db);
     var categories = listOf(db, 'categories').length;
@@ -1190,34 +1254,18 @@
         icon: 'book',
         title: '账本管理',
         onClick: function () { go(ctx, '#/books'); }
-      })
-    ]);
-  }
-
-  /* ---------------- 自动化 ---------------- */
-
-  function sectionAutomation(ctx, db) {
-    var settings = settingsOf(db);
-    return group('自动化', [
+      }),
+      /* 2.26.0：自动入账并入记账管理（原来单独占一个「自动化」组）。 */
       switchRow(ctx, {
         icon: 'repeat',
         title: '定期账单自动入账',
-        sub: '启动时自动补记，默认关闭',
+        sub: '打开应用时自动补记，默认关闭',
         checked: settings.recurringAutoPost === true,
         onChange: function (next) {
           return commitSetting(ctx, 'recurringAutoPost', next, next ? '开启定期自动入账' : '关闭定期自动入账');
         }
-      }),
-      switchRow(ctx, {
-        icon: 'clock',
-        title: '自动快照',
-        sub: '滚动保留最近 30 份',
-        checked: settings.snapshotAuto !== false,
-        onChange: function (next) {
-          return commitSetting(ctx, 'snapshotAuto', next, next ? '开启自动快照' : '关闭自动快照');
-        }
       })
-    ], '自动入账与快照都只在本机完成。');
+    ], '定期账单只在打开应用时补记，不会在后台运行。');
   }
 
   /* ---------------- 数据：导出 ---------------- */
@@ -2144,6 +2192,7 @@
 
   function sectionData(ctx, db) {
     var migrate = migrateApi();
+    var settings = settingsOf(db);
     var hasV1 = false;
     try { hasV1 = !!(migrate && migrate.hasV1Data && migrate.hasV1Data()); } catch (error) { hasV1 = false; }
 
@@ -2165,8 +2214,6 @@
     fillPhotosValue(ctx, photosRow);
 
     var rows = [
-      snapRow,
-      photosRow,
       row({
         icon: 'download',
         title: '导出备份',
@@ -2179,6 +2226,18 @@
         sub: '从 JSON 备份恢复，导入前自动快照',
         onClick: function () { pickImportFile(ctx); }
       }),
+      snapRow,
+      /* 2.26.0：自动快照从「自动化」并入数据与备份，紧挨快照记录。 */
+      switchRow(ctx, {
+        icon: 'clock',
+        title: '自动快照',
+        sub: '滚动保留最近 30 份',
+        checked: settings.snapshotAuto !== false,
+        onChange: function (next) {
+          return commitSetting(ctx, 'snapshotAuto', next, next ? '开启自动快照' : '关闭自动快照');
+        }
+      }),
+      photosRow,
       row({
         icon: 'import',
         title: '从旧版迁移',
@@ -2190,28 +2249,19 @@
     return group('数据与备份', rows, '导出、快照都只在本机完成，不经过服务器。');
   }
 
-  /* 危险区独立分组（M12 / D-04）：上行可回退替代，下行清空需手输确认；不进胶囊。 */
+  /* 危险区独立分组（M12 / D-04）：清空需手输确认；不进胶囊。
+     2.26.0：归档/新建入口统一由「账本管理」（#/books）承担，这里只保留清空一行。 */
   function sectionDanger(ctx, db) {
     var wrap = h('section', { className: 's-settings-group s-settings-group--danger' });
     var head = h('div', { className: 's-settings-group__head' });
     head.appendChild(t('h2', 's-settings-group__title', '危险区'));
     wrap.appendChild(head);
 
-    /* 上行：普通色（不是 danger 行）——归档可随时切回，不删任何流水 */
-    var safeList = h('div', { className: 'c-list s-settings-list' });
-    safeList.appendChild(row({
-      icon: 'folder',
-      title: '归档当前账本并新建',
-      sub: '账本先归档（可随时切回），不会删除任何流水',
-      onClick: function () { openFreshStartSheet(ctx, db); }
-    }));
-    wrap.appendChild(safeList);
-
     var list = h('div', { className: 'c-list s-settings-list s-settings-list--danger' });
     list.appendChild(row({
       icon: 'trash',
       title: '清空全部账单',
-      sub: '删除这台设备上的全部账本与流水',
+      sub: '删除这台设备上的全部账本与流水，执行前自动快照',
       className: 's-settings-row--danger',
       chevron: false,
       onClick: function () { openClearSheet(ctx); }
@@ -2221,6 +2271,7 @@
     return wrap;
   }
 
+  /* 2.26.0：归档 / 新建入口统一由「账本管理」（#/books）承担；此浮层保留，暂不挂到设置页。 */
   function openFreshStartSheet(ctx, db) {
     var sheet = XZB.ui && XZB.ui.sheet;
     var schema = schemaApi();
@@ -3199,8 +3250,6 @@
 
   function renderAbout(root, ctx, db) {
     deferTitle(ctx, '关于');
-    var store = storeApi();
-    var counts = countsOf(db);
     var info = storageInfo();
     var settings = settingsOf(db);
     /* 版本号唯一来源是 app.js 的 XZB.version；db.appVersion 只在旧库里兜底 */
@@ -3242,69 +3291,14 @@
     privacy.appendChild(privacyBody);
     page.appendChild(privacy);
 
-    var statCard = h('section', { className: 'c-card s-settings-stats' });
-    var statBody = h('div', { className: 'c-card__body' });
-    statBody.appendChild(t('h2', 'c-card__title', '数据条数'));
-    var grid = h('div', { className: 's-settings-stats__grid' });
-    grid.appendChild(statItem('流水', counts.transactions + ' 笔'));
-    grid.appendChild(statItem('分类', counts.categories + ' 个'));
-    grid.appendChild(statItem('账户', counts.accounts + ' 个'));
-    grid.appendChild(statItem('账本', counts.books + ' 个'));
-    statBody.appendChild(grid);
-    statCard.appendChild(statBody);
-    page.appendChild(statCard);
-
-    var storeRows = [];
-    storeRows.push(row({
-      icon: 'lock',
-      title: '存储方式',
-      value: info.mode === 'memory' ? '临时内存（降级）' : '本机 IndexedDB',
-      valueClass: info.mode === 'memory' ? 'c-row__value--expense' : null,
-      chevron: false
-    }));
-    storeRows.push(row({ icon: 'download', title: '已用空间', value: fmtBytes(info.bytes), chevron: false }));
-    storeRows.push(row({
-      icon: 'clock',
-      title: '最近保存',
-      value: info.savedAt ? fmtTime(info.savedAt) : '—',
-      chevron: false
-    }));
-    storeRows.push(row({
-      icon: 'info',
-      title: '数据版本',
-      value: 'v' + (info.schemaVersion || (db && db.schemaVersion) || 2),
-      chevron: false
-    }));
-    /* A31 / IA-3：这两行已上移主屏「安全」组，这里不再渲染第二个入口。 */
-    var snapRow = row({ icon: 'clock', title: '快照数量', value: '…', chevron: false });
-    storeRows.push(snapRow);
-    storeRows.push(row({
-      icon: 'phone',
-      title: '加入主屏幕',
-      value: isStandalone() ? '已添加' : (isIOS() ? 'Safari' : '浏览器'),
-      onClick: function () { openInstallSheet(ctx); }
-    }));
-
-    page.appendChild(group('存储', storeRows,
-      info.mode === 'memory'
-        ? '当前是临时内存模式，关闭页面后数据会丢失，请尽快导出备份。'
-        : '数据保存在这台设备的浏览器数据库里。'));
-
+    /* 2.26.0：数据统计上移到「我的」总览卡；存储状态也在总览卡；安全两行在「安全」组。
+       关于页只保留介绍、隐私说明与版本信息，不再重复安装入口。 */
     var foot = h('div', { className: 's-settings-foot' });
     foot.appendChild(t('p', 's-settings-foot__line', '小账本 2.0 · 本地优先 · 无账号 · 无服务器'));
-    foot.appendChild(t('p', 's-settings-foot__line s-settings-foot__line--quiet', '预算提醒阈值 ' + (settings.budgetAlertPct || 80) + '% · 快照最多 30 份'));
+    foot.appendChild(t('p', 's-settings-foot__line s-settings-foot__line--quiet',
+      '数据版本 v' + (info.schemaVersion || (db && db.schemaVersion) || 2) +
+      ' · 预算提醒阈值 ' + (settings.budgetAlertPct || 80) + '% · 快照最多 30 份'));
     page.appendChild(foot);
-
-    if (store && typeof store.listSnapshots === 'function' && snapRow) {
-      Promise.resolve(store.listSnapshots()).then(function (result) {
-        if (!alive(snapRow)) { return; }
-        var value = snapRow.querySelector('.c-row__value');
-        if (!value) { return; }
-        if (!result || !result.ok) { value.textContent = '—'; return; }
-        var list = Array.isArray(result.items) ? result.items : [];
-        value.textContent = list.length + ' 份';
-      }, function () { /* 静默 */ });
-    }
 
     root.appendChild(page);
   }
@@ -3328,7 +3322,7 @@
       }),
       row({
         icon: 'lock',
-        title: '隐私与数据',
+        title: '隐私与存储',
         value: '仅本机',
         onClick: function () { go(ctx, '#/settings/about'); }
       }),
@@ -3346,11 +3340,10 @@
 
   /* ---------------- 索引胶囊（SPEC P2-1 / DESIGN §4.2） ---------------- */
 
-  /* A–G 七项；危险区 H 按 IA-4 视觉隔离，不进胶囊。 */
+  /* A–F 六项（2.26.0 收拢：自动化并入记账/数据，安全上移主屏）；危险区 H 按 IA-4 视觉隔离，不进胶囊。 */
   var TOC_GROUPS = [
-    ['appearance', '显示与手感'], ['security', '安全'], ['assistant', '小助手与联网'],
-    ['manage', '记账与分类'], ['automation', '自动化'], ['data', '数据与备份'],
-    ['about', '支持与关于']
+    ['manage', '记账'], ['data', '数据'], ['security', '安全'],
+    ['assistant', '助手'], ['appearance', '显示'], ['about', '关于']
   ];
 
   function tocTarget(key) {
@@ -3359,12 +3352,33 @@
   }
 
   function tocActive(nav, key) {
+    if (nav.getAttribute('data-active') === key) { return; }
+    nav.setAttribute('data-active', key);
     var items = nav.querySelectorAll('.s-settings-toc__item');
+    var active = null;
     for (var i = 0; i < items.length; i += 1) {
       var on = items[i].getAttribute('data-group') === key;
       items[i].classList.toggle('is-active', on);
       items[i].setAttribute('aria-current', on ? 'true' : 'false');
+      if (on) { active = items[i]; }
     }
+    revealTocItem(nav, active);
+  }
+
+  /* 高亮换人时把胶囊横向滚进可视区：只动胶囊条自身的 scrollLeft，不碰页面滚动。 */
+  function revealTocItem(nav, item) {
+    if (!item || typeof nav.getBoundingClientRect !== 'function') { return; }
+    if (!nav.clientWidth || !item.offsetWidth) { return; }
+    var nr = nav.getBoundingClientRect();
+    var ir = item.getBoundingClientRect();
+    var left = nav.scrollLeft + (ir.left - nr.left) - (nr.width - ir.width) / 2;
+    if (left < 0) { left = 0; }
+    var reduce = false;
+    try {
+      reduce = !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (error) { reduce = false; }
+    try { nav.scrollTo({ left: left, behavior: reduce ? 'auto' : 'smooth' }); }
+    catch (error) { nav.scrollLeft = left; }
   }
 
   /* 滚动容器是路由挂载的 SECTION.app-screen，不是 window、不是 #app。 */
@@ -3470,7 +3484,7 @@
     head.appendChild(t('h2', 's-settings-group__title', '接口与密钥'));
     wrap.appendChild(head);
 
-    var status = h('p', { className: 's-settings-note', text: '还没测试过' });
+    var status = h('p', { className: 's-settings-note', text: '还没测试过', aria: { live: 'polite' } });
     var inputs = {};
     var fields = h('div', { className: 's-settings-sheet' });
     var SPEC = [
@@ -3519,6 +3533,25 @@
       return true;
     }
 
+    /* 开启在线模型的前提：三样都齐（已保存过密钥也算），否则明确提示并聚焦第一个缺口。 */
+    function configComplete(map) {
+      var saved = llmCfg() || {};
+      var typed = String(map.key.value || '');
+      var hasKey = saved.hasKey === true || (typed !== '' && typed.indexOf('••••') !== 0);
+      return String(map.baseURL.value || '').trim() !== ''
+        && String(map.model.value || '').trim() !== ''
+        && hasKey;
+    }
+
+    function focusFirstMissing(map) {
+      var saved = llmCfg() || {};
+      var typed = String(map.key.value || '');
+      var missing = String(map.baseURL.value || '').trim() === '' ? 'baseURL'
+        : (String(map.model.value || '').trim() === '' ? 'model'
+          : ((saved.hasKey === true || (typed !== '' && typed.indexOf('••••') !== 0)) ? '' : 'key'));
+      if (missing && map[missing] && typeof map[missing].focus === 'function') { map[missing].focus(); }
+    }
+
     var list = h('div', { className: 'c-list s-settings-list' });
     list.appendChild(switchRow(ctx, {
       icon: 'cloud', title: '开启在线模型', sub: '关闭时小助手只在本机解析',
@@ -3526,6 +3559,11 @@
       onChange: function (next) {
         var api = llmApi();
         if (!api || typeof api.setConfig !== 'function') { return false; }
+        if (next === true && !configComplete(inputs)) {
+          status.textContent = '先把接口地址、模型名和密钥填齐，再开启';
+          focusFirstMissing(inputs);
+          return false;
+        }
         var res = null;
         try { res = api.setConfig({ enabled: next }); } catch (error) { res = null; }
         if (!res || res.ok !== true) { toast(ctx, '保存失败，请重试', { type: 'danger' }); return false; }
@@ -3540,22 +3578,39 @@
     wrap.appendChild(list);
 
     var actions = h('div', { className: 's-settings-actions' });
-    var testBtn = h('button', { className: 'c-btn c-btn--primary', type: 'button', text: '测试连接' });
+    var saveBtn = h('button', { className: 'c-btn c-btn--primary', type: 'button', text: '保存配置' });
+    saveBtn.addEventListener('click', function () { apply(); });
+    var testBtn = h('button', { className: 'c-btn c-btn--secondary', type: 'button', text: '测试连接' });
+    var busy = false;
     testBtn.addEventListener('click', function () {
+      if (busy) { return; }
       var api = llmApi();
       if (!api || typeof api.test !== 'function' || !apply()) {
         status.textContent = '地址、模型、密钥要填齐';
         return;
       }
+      busy = true;
+      testBtn.setAttribute('disabled', 'disabled');
+      saveBtn.setAttribute('disabled', 'disabled');
+      testBtn.textContent = '正在测试…';
       status.textContent = '正在测试连接…';
       var pending = null;
       try { pending = api.test(); } catch (error) { pending = null; }
+      function done() {
+        busy = false;
+        testBtn.removeAttribute('disabled');
+        saveBtn.removeAttribute('disabled');
+        testBtn.textContent = '测试连接';
+      }
       Promise.resolve(pending).then(function (res) {
+        done();
         if (alive(status)) { status.textContent = aiStatusText(res); }
       }, function () {
+        done();
         if (alive(status)) { status.textContent = '测试失败，请重试'; }
       });
     });
+    actions.appendChild(saveBtn);
     actions.appendChild(testBtn);
     wrap.appendChild(actions);
     wrap.appendChild(status);
@@ -3614,18 +3669,20 @@
     /* A32：空库首启一次性横幅（置位后不再出现；样式沿用既有 c-* / s-settings-note） */
     firstRunBannerMaybe(root, ctx, db);
 
-    /* SPEC P2-1 / DESIGN §4.2：吸顶索引胶囊（A–G），危险区 H 不进胶囊。 */
+    /* 2.26.0：总览卡在首启横幅之后、吸顶索引之前，首屏先交代数据规模与存储方式。 */
+    root.appendChild(sectionOverview(ctx, db));
+
+    /* SPEC P2-1 / DESIGN §4.2：吸顶索引胶囊（A–F），危险区 H 不进胶囊。 */
     var toc = buildToc(ctx);
     root.appendChild(toc);
 
-    /* A→H 八段（DESIGN §4.2/§4.3）：视觉重排但条目能力零净减少。 */
+    /* A→F 六段（2.26.0 重排）：高频记账管理前置，AI 与自动化技术配置退出主屏。 */
     var sections = [
-      ['appearance', sectionAppearance(ctx)],
+      ['manage', sectionManage(ctx, db)],
+      ['data', sectionData(ctx, db)],
       ['security', sectionSecurity(ctx, db)],
       ['assistant', sectionAssistant(ctx)],
-      ['manage', sectionManage(ctx, db)],
-      ['automation', sectionAutomation(ctx, db)],
-      ['data', sectionData(ctx, db)],
+      ['appearance', sectionAppearance(ctx)],
       ['about', sectionAbout(ctx, db)]
     ];
     for (var i = 0; i < sections.length; i += 1) {
