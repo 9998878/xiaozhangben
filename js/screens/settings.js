@@ -655,7 +655,9 @@
       });
       if (!step.show) { return; }
       bannerShownThisSession = true;
-      root.insertBefore(firstRunBannerNode(), root.firstChild);
+      var strip = h('div', { className: 's-settings-notice' });
+      strip.appendChild(firstRunBannerNode());
+      root.insertBefore(strip, root.firstChild);
       if (step.mark) { commitSetting(ctx, FIRST_RUN_BANNER_KEY, true, '照片说明'); }
     });
   }
@@ -1216,10 +1218,15 @@
       body.appendChild(noteBlock('当前是临时内存模式，关闭页面后数据会丢失，请先导出备份。', 's-settings-overview__warn'));
     }
 
+    var empty = counts.transactions === 0;
     var btn = h('button', {
-      className: 'c-btn c-btn--primary s-settings-overview__export', type: 'button', text: '导出备份'
+      className: 'c-btn c-btn--primary s-settings-overview__export', type: 'button',
+      text: empty ? '导入备份' : '导出备份'
     });
-    btn.addEventListener('click', function () { openExportSheet(ctx); });
+    btn.addEventListener('click', function () {
+      if (empty) { pickImportFile(ctx); return; }
+      openExportSheet(ctx);
+    });
     body.appendChild(btn);
 
     wrap.appendChild(body);
@@ -1234,7 +1241,7 @@
       row({
         icon: 'target',
         title: '预算与存钱目标',
-        value: '计划',
+        value: listOf(db, 'budgets').length > 0 ? '已设置' : '未设置',
         onClick: function () { go(ctx, '#/plan'); }
       }),
       row({
@@ -3417,7 +3424,9 @@
       nav.appendChild(item);
     }
     for (var i = 0; i < TOC_GROUPS.length; i += 1) { add(TOC_GROUPS[i][0], TOC_GROUPS[i][1], i === 0); }
-    return nav;
+    var shell = h('div', { className: 's-settings-toc-shell' });
+    shell.appendChild(nav);
+    return shell;
   }
 
   /* 高亮只在滚动容器上算（120ms 合帧），不监听 window。 */

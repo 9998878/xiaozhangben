@@ -11278,11 +11278,25 @@ textarea::selection {
    滚动容器是 SECTION.app-screen，不是 window，故用 position:sticky
    而非 JS 监听滚动；横向滚动自带 touch 惯性。 */
 
-.s-settings-toc {
+.s-settings-toc-shell {
   position: sticky;
   /* 壳层 .app-nav 与索引条在同一条滚动链上：靠在这条 44px 顶栏下面吸住 */
   top: calc(var(--h-nav) + var(--safe-top));
   z-index: var(--z-sticky);
+  background: var(--c-bg);
+}
+/* 吸顶条下沿 12px 渐隐：滚动内容从虚化过渡，不再从半行被切断 */
+.s-settings-toc-shell::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--sp-3);
+  background: linear-gradient(to bottom, var(--c-bg), transparent);
+  pointer-events: none;
+}
+.s-settings-toc {
   display: flex;
   gap: var(--sp-2);
   margin: 0 0 var(--sp-4);
@@ -11319,6 +11333,13 @@ textarea::selection {
   color: var(--c-text);
   font-weight: var(--fw-semibold);
 }
+
+/* 2.26.2：首启横幅收成一条提示，不与账本总览卡抢层级（文案仍由 A32 逐字冻结） */
+.s-settings-notice { margin: 0 var(--page-x) var(--sp-4); }
+.s-settings-notice .c-card { border: 0; background: var(--c-tint-soft); box-shadow: none; }
+.s-settings-notice .c-card__body { padding: var(--sp-2) var(--sp-4); }
+.s-settings-notice .c-card__title { margin: 0 0 var(--sp-1); color: var(--c-text-2); font-size: var(--fs-footnote); }
+.s-settings-notice .s-settings-note { margin: 0; padding: 0; color: var(--c-text-2); font-size: var(--fs-caption-1); line-height: var(--lh-caption-1); }
 
 /* ---------------- 分组卡片 ---------------- */
 
@@ -11410,6 +11431,7 @@ textarea::selection {
 .s-settings-row__sub,
 .s-settings .c-row__sub {
   margin-top: var(--sp-1);
+  text-wrap: pretty;
   color: var(--c-text-3);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
@@ -11475,17 +11497,17 @@ textarea::selection {
 
 /* 整列表危险口径（行自身没带 --danger 变体时仍成立） */
 .s-settings-list--danger .c-row__title,
-.s-settings-list--danger .c-row__sub,
 .s-settings-list--danger .c-row__value,
 .s-settings-list--danger .s-settings-row__icon {
   color: var(--c-danger);
 }
+.s-settings-list--danger .c-row__sub { color: var(--c-text-3); }
 
 /* 危险区：更大上间距 + 危险色细边，与前一组彻底断开 */
 .s-settings-group--danger {
   margin-top: var(--sp-9);
-  border-color: var(--c-danger);
-  box-shadow: none;
+  border-color: var(--c-stroke);
+  box-shadow: var(--shadow-card);
 }
 .s-settings-group--danger .s-settings-group__title {
   color: var(--c-danger);
@@ -32435,7 +32457,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.26.1';
+  XZB.version = '2.26.2';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
