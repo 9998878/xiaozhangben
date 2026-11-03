@@ -1941,9 +1941,11 @@
   /* 设置页「照片」行的右值节点（单屏单实例；设置页重渲染时被新节点替换） */
   var photoRowValueNode = null;
 
+  /* 2.26.1：fill 发生在分组尚未挂到文档时，不能先判 alive 再订阅（会把刷新整段跳过，
+     右值永远停在「…」）。与快照行一致：先订阅，回包里再判存活。 */
   function refreshPhotoRow() {
     var node = photoRowValueNode;
-    if (!node || !alive(node)) { return; }
+    if (!node) { return; }
     if (!photoStatsReady()) {
       node.textContent = '不可用';
       return;
@@ -3426,11 +3428,18 @@
     function sync() {
       ticking = false;
       if (!alive(nav)) { return; }
-      var line = host.scrollTop + 120;
+      /* 2.26.1：线随视口比例走（固定 120px 在长卡片下会让高亮落后一整组）；
+         滚到底时强制收到最后一组，否则「关于」永远点不亮（页面已滚不动仍停在上一条）。 */
       var best = TOC_GROUPS[0][0];
-      for (var i = 0; i < TOC_GROUPS.length; i += 1) {
-        var node = tocTarget(TOC_GROUPS[i][0]);
-        if (node && node.offsetTop <= line) { best = TOC_GROUPS[i][0]; }
+      var atBottom = host.scrollTop + host.clientHeight >= host.scrollHeight - 4;
+      if (atBottom) {
+        best = TOC_GROUPS[TOC_GROUPS.length - 1][0];
+      } else {
+        var line = host.scrollTop + Math.round(host.clientHeight * 0.35);
+        for (var i = 0; i < TOC_GROUPS.length; i += 1) {
+          var node = tocTarget(TOC_GROUPS[i][0]);
+          if (node && node.offsetTop <= line) { best = TOC_GROUPS[i][0]; }
+        }
       }
       tocActive(nav, best);
     }
