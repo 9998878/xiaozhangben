@@ -753,11 +753,11 @@
     var sheet = sheetApi();
     if (!sheet) { return; }
 
-    confirmSheet(ctx, {
+    sheet.confirm({
       title: '归档账本',
       message: message,
       confirmLabel: '归档',
-      danger: true,
+      kind: 'danger',
       onConfirm: function (close) {
         ctx.commit(function (working) {
           var target = findById(working.books || [], book.id);
@@ -825,34 +825,7 @@
     });
   }
 
-  function confirmSheet(ctx, options) {
-    var opts = options || {};
-    var body = dom.el('div', { className: 's-books-confirm' });
-    body.appendChild(t('p', 's-books-confirm__text', opts.message || ''));
-
-    var handle = sheetApi().open({
-      title: opts.title || '确认',
-      content: body,
-      actions: [
-        { label: '取消', kind: 'text' },
-        {
-          label: opts.confirmLabel || '确定',
-          kind: opts.danger ? 'danger' : 'primary',
-          onClick: function () {
-            var closed = false;
-            if (typeof opts.onConfirm === 'function') {
-              opts.onConfirm(function () {
-                if (closed) { return; }
-                closed = true;
-                if (handle && typeof handle.close === 'function') { handle.close(); }
-              });
-            }
-            return false;
-          }
-        }
-      ]
-    });
-  }
+  /* 确认浮层统一走 XZB.ui.sheet.confirm —— 私有 confirmSheet 已按 DECISIONS R-05 删除。 */
 
   XZB.screens.register(KEY, {
     title: '账本',

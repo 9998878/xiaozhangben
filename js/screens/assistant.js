@@ -5,9 +5,11 @@
    契约锚点：
      - 写入只经 XZB.app.commit（assistant.execute 内部走它，本屏不碰 store / IndexedDB）；
      - 只读 XZB.app.db()；统计口径全部交给 XZB.core.assistant / XZB.core.stats；
+     - 联网解析只经 XZB.core.assistant.respondRemote（本屏不发 fetch、不碰密钥）；
+       默认仍是本地规则引擎，联网要用户在「我的 › 小助手与联网」里打开并先看到告知；
      - 屏幕自带头部（immersive：屏幕自绘头部，路由壳层不再渲染 .app-nav）；
      - 语音是可选增强：浏览器有 SpeechRecognition 才显示麦克风，没有就只留键盘。
-   本屏不做的事：不发网络请求、不调大模型、不存聊天记录（只存「待确认草稿」）。
+   本屏不存聊天记录（只存「待确认草稿」）。
    ============================================================================ */
 (function (global) {
   'use strict';
@@ -27,22 +29,38 @@
 
   var MAX_TURNS = 60;
   var QUICK_EXAMPLES = [
-    '外卖 28 微信',
-    '房租 3000 招行',
+    '午饭 35 微信',
     '昨天打车 18 支付宝',
     '工资 8000 招行',
-    '这个月外卖花了多少'
+    '这个月餐饮花了多少'
   ];
 
   var TYPE_TEXT = { expense: '支出', income: '收入', transfer: '转账' };
 
-  /* ============================== 情境上下文（P0-1） ==============================
-   * 解读 / 首页预算 / 流水详情带账期、分类、单笔流水跳进来。
-   * 账本永远以当前活动账本为准（cxNow 重取），URL 里的任何 book 参数一律不信；
-   * 切换账本后 Chip 在下一次 submit 时自动失效。 */
-  var contextChip = null;
-  var lastPrefilled = '';   /* 上一次预填过的问题：同一深链反复进入不重复占用输入框 */
-  var RANGE_LABELS = { month: '', prev: '上月', '3m': '近3个月', '6m': '近6个月' };
+  /* 顶栏副标题：不写「数据不出手机」这类做不到的承诺，只写事实 */
+  var SUBTITLE_IDLE = '离线可用 · 联网时由你配置的模型解析';
+  var SUBTITLE_LOCAL = '本地模式';
+
+  /* 首次联网告知（R-11）：两句事实，必须原样出现，不做营销化改写 */
+  var NOTICE_HEAD = '联网解析前先跟你说清楚：';
+  var NOTICE_BODY = '会把你说的话与账户名称发给你配置的模型服务';
+  var NOTICE_DETAIL = '每次只发送这一句话、账户名称、分类名和统计口径，不发账目明细。';
+  var NOTICE_TAIL = '可在「我的」里关闭（小助手与联网）';
+  var NOTICE_ASK = '现在要联网解析这一句吗？';
+
+  var UNDO_MS = 8000;
+  var TYPING_DELAY = 200;
+
+  /* 回落原因 → 一行短说明（A27/D-08：不得静默切换） */
+  var REASON_TEXT = {
+    timeout: '网络超时，已改用本地解析',
+    rate: '服务繁忙（限流），已改用本地解析',
+    config: '未启用在线模型，当前用本地解析',
+    disabled: '未启用在线模型，当前用本地解析',
+    bad: '返回内容无法识别，已改用本地解析',
+    offline: '当前没有网络，已改用本地解析',
+    none: ''
+  };
 
   /* ============================== 小工具 ============================== */
 
@@ -141,34 +159,13 @@
     return !!(st && (st.mode === 'memory' || st.degraded === true && st.mode === 'memory'));
   }
 
-  /* prefs 布尔开关：未设置 = 开（false 才算关） */
-  function prefFlag(key) {
-    var prefs = XZB.app && XZB.app.prefs;
-    var v = null;
-    if (prefs && typeof prefs.get === 'function') {
-      try { v = prefs.get(key); } catch (error) { v = null; }
-    }
-    return v !== false;
-  }
-
-  /* P0-5 本地使用统计：只写 prefs，不上传；失败静默（绝不影响主流程） */
-  function bumpMetric(key) {
-    var prefs = XZB.app && XZB.app.prefs;
-    if (!prefs || typeof prefs.get !== 'function' || typeof prefs.set !== 'function') { return; }
-    var m = null;
-    try { m = prefs.get('assistant.metrics'); } catch (error) { m = null; }
-    if (!m || typeof m !== 'object') { m = {}; }
-    m[key] = (Number(m[key]) || 0) + 1;
-    try { prefs.set('assistant.metrics', m); } catch (error) { /* 统计失败不打扰 */ }
-  }
-
   /* 助手上下文：账本 / 账户 / 分类 / 今天：一律从当前库现取，不缓存 */
   function cxNow() {
     var as = assistant();
     var app = XZB.app;
     var db = app && typeof app.db === 'function' ? app.db() : null;
     if (!as || !db) { return null; }
-    var cx = as.contextOf({
+    return as.contextOf({
       db: db,
       bookId: null,
       today: today(),
@@ -176,24 +173,93 @@
       settings: db.settings,
       readonly: storageReadonly()
     });
-    /* P0-2 开关随 cx 传入 core-assistant（contextOf 不透传额外字段，这里补上） */
-    cx.insightsEnabled = prefFlag('assistant.localInsights');
-    return cx;
+  }
+
+  /* ============================== 联网配置（只读消费，不写配置） ============================== */
+
+  function configNow() {
+    var as = assistant();
+    var llm = as && as.llm;
+    if (!llm || typeof llm.getConfig !== 'function') { return null; }
+    var out = null;
+    try { out = llm.getConfig(); } catch (error) { return null; }
+    if (!out) { return null; }
+    var cfg = out.cfg || out;
+    return cfg && typeof cfg === 'object' ? cfg : null;
+  }
+
+  function hasCredentials(cfg) {
+    return !!(cfg && cfg.baseURL && cfg.model && (cfg.hasKey === true || !!cfg.key));
+  }
+
+  function readyNow() {
+    var as = assistant();
+    var llm = as && as.llm;
+    if (!llm || typeof llm.ready !== 'function') { return false; }
+    try { return llm.ready() === true; } catch (error) { return false; }
+  }
+
+  function noticeGiven(cfg) {
+    return !!(cfg && Number(cfg.noticeAt) > 0);
+  }
+
+  /* 该不该在这一次提交前先弹告知卡：只有「用户真的填好了模型、并且打开了开关」才问 */
+  function shouldNotice(cfg) {
+    if (session.noticeDeclined) { return false; }
+    if (!cfg) { return false; }
+    if (cfg.enabled !== true) { return false; }
+    if (!hasCredentials(cfg)) { return false; }
+    return !noticeGiven(cfg);
+  }
+
+  /* 本地解析的原因：填好了但没开 / 填好了没同意 → 需要一行说明，否则安静本地 */
+  function localReason(cfg) {
+    if (!cfg) { return 'none'; }
+    if (!hasCredentials(cfg)) { return 'none'; }
+    if (cfg.enabled !== true) { return 'disabled'; }
+    return 'none';
   }
 
   /* ============================== 会话状态（内存，不持久化） ============================== */
 
   var session = {
     turns: [],
-    state: null,
-    busy: false
+    state: 'idle',        /* idle | parsing | writing —— 屏内相位 */
+    core: null,           /* core.assistant 的解析态（原 session.state） */
+    busy: false,
+    mode: 'local',        /* local | online | fallback */
+    reason: '',
+    token: 0,
+    queue: [],
+    typing: null,
+    timers: [],
+    noticeDeclined: false,
+    undoEntry: null,
+    undoUntil: 0
   };
+
+  function clearTimers() {
+    (session.timers || []).forEach(function (id) { clearTimeout(id); });
+    session.timers = [];
+  }
+
+  function later(fn, ms) {
+    var id = setTimeout(fn, ms);
+    session.timers.push(id);
+    return id;
+  }
 
   function resetSession() {
     var as = assistant();
+    clearTimers();
     session.turns = [];
-    session.state = as && as.initialState ? as.initialState() : null;
+    session.core = as && as.initialState ? as.initialState() : null;
     session.busy = false;
+    session.state = 'idle';
+    session.typing = null;
+    session.queue = [];
+    session.token += 1;
+    hideUndoBar();
   }
 
   function pushTurn(turn) {
@@ -203,7 +269,7 @@
 
   /* ============================== 渲染：外壳 ============================== */
 
-  var host = null;      /* {root, ctx, log, chipRow, input, send, banner, backBtn} */
+  var host = null;      /* {root, ctx, shell, log, chipRow, input, send, banner, voice, capsule, subText, undoBar} */
 
   function render(root, ctx) {
     root.textContent = '';
@@ -221,7 +287,10 @@
   }
 
   function renderChat(root, ctx) {
-    if (!session.state) { resetSession(); }
+    if (!session.core) { resetSession(); }
+
+    var capsule = el('span', { className: 's-assistant__flag s-assistant__capsule s-assistant__capsule--local', text: '本地' });
+    var subText = document.createTextNode(' ' + SUBTITLE_IDLE);
 
     var head = el('header', { className: 's-assistant__head' }, [
       el('button', {
@@ -232,7 +301,7 @@
       }, [icon('back', 24)]),
       el('div', { className: 's-assistant__head-mid' }, [
         el('h1', { className: 's-assistant__title', text: '小助手', tabindex: '-1' }),
-        el('p', { className: 's-assistant__subtitle', text: '离线运行 · 数据不出手机' })
+        el('p', { className: 's-assistant__subtitle' }, [capsule, subText])
       ]),
       el('button', {
         className: 's-assistant__icon-btn',
@@ -252,16 +321,14 @@
 
     var banner = el('div', { className: 's-assistant__banner', hidden: true });
 
-    var ctxRow = el('div', { className: 's-assistant__ctxrow', hidden: true, 'aria-label': '当前上下文' });
-
-    var taskRow = el('div', { className: 's-assistant__tasks', hidden: true, 'aria-label': '快捷任务' });
+    var undoBar = el('div', { className: 's-assistant__undo-bar', hidden: true, role: 'status', 'aria-label': '刚才的写入可撤销' });
 
     var chipRow = el('div', { className: 's-assistant__chips', 'aria-label': '快捷示例' });
 
     var input = el('textarea', {
       className: 's-assistant__input',
       rows: '1',
-      placeholder: '说一句：外卖 28 微信',
+      placeholder: '说一句：午饭 35 微信',
       'aria-label': '对助手说一句',
       autocomplete: 'off',
       enterkeyhint: 'send'
@@ -272,15 +339,6 @@
       type: 'submit',
       'aria-label': '发送'
     }, [icon('arrow-up', 20)]);
-
-    /* 「停止生成」：仅在云端生成中可见；与 send 同尺寸，切换只动 hidden/disabled */
-    var stop = el('button', {
-      className: 's-assistant__stop',
-      type: 'button',
-      'aria-label': '停止生成',
-      hidden: true,
-      onclick: function () { stopEnhance(); }
-    }, [icon('close', 18)]);
 
     var mic = null;
     var voice = makeVoice({
@@ -300,10 +358,7 @@
         'aria-label': '语音输入',
         'aria-pressed': 'false',
         onclick: function () {
-          startVoiceWithConsent(voice, function (on) {
-            mic.setAttribute('aria-pressed', on ? 'true' : 'false');
-            mic.classList.toggle('is-on', on);
-          });
+          voice.toggle(function (on) { mic.setAttribute('aria-pressed', on ? 'true' : 'false'); mic.classList.toggle('is-on', on); });
         }
       }, [icon('chat', 20)]);
     }
@@ -311,70 +366,47 @@
     var composer = el('form', { className: 's-assistant__composer' }, [
       el('div', { className: 's-assistant__field' }, [input]),
       mic,
-      stop,
       send
     ]);
 
     var foot = el('div', { className: 's-assistant__foot' }, [
+      undoBar,
       banner,
-      ctxRow,
-      taskRow,
       chipRow,
       composer,
-      el('p', { className: 's-assistant__privacy', text: '文字解析与账目保存在本机；语音识别由你的浏览器服务处理' })
+      el('p', { className: 's-assistant__privacy', text: '本地解析优先 · 联网需你在设置里开启' })
     ]);
 
     var shell = el('section', { className: 's-assistant', 'data-assistant-screen': '1' }, [head, log, foot]);
     root.appendChild(shell);
 
-    host = { root: root, ctx: ctx, shell: shell, log: log, chipRow: chipRow, ctxRow: ctxRow, taskRow: taskRow, input: input, send: send, stop: stop, banner: banner, voice: voice };
+    host = {
+      root: root,
+      ctx: ctx,
+      shell: shell,
+      log: log,
+      chipRow: chipRow,
+      input: input,
+      send: send,
+      banner: banner,
+      undoBar: undoBar,
+      capsule: capsule,
+      subText: subText,
+      voice: voice
+    };
 
-    /* 预热 AI chunk 并按状态刷新头部副标题 / 底部隐私行（P0-10，AC11 冷启动） */
-    ensureAiBoot();
-
-    /* 情境上下文：每次按当前 hash 参数重建（无参进入 = 无 Chip，不留旧状态） */
-    contextChip = readContextParams(ctx, cxNow());
-    renderCtxRow();
-
-    /* 空会话：先说一句欢迎 + 示例 */
+    /* 空会话：先说一句欢迎 + 2 条可点示例（点了只填进输入框，不替用户发） */
     if (!session.turns.length) {
       pushTurn({
         who: 'bot',
         reply: {
           kind: 'hint',
-          text: '我是小账本助手。说一句话就能记账，也能查账、改账、删账。试试下面这些：'
+          text: '我是小账本助手。说一句话就能记账，也能查账、改账、删账。试试下面这些：',
+          examples: QUICK_EXAMPLES.slice(0, 3)
         }
       });
     }
-
-    /* 「问这笔账」：有 tx 参数就补一张单条流水卡（同一笔只补一次） */
-    if (contextChip && contextChip.txId && contextChip.tx) {
-      var seenTx = session.turns.some(function (t) {
-        return t.who === 'bot' && t.reply && t.reply.kind === 'tx' && t.reply.txId === contextChip.txId;
-      });
-      if (!seenTx) {
-        pushTurn({
-          who: 'bot',
-          reply: {
-            kind: 'tx',
-            text: '帮你看这笔账：',
-            txId: contextChip.txId,
-            tx: contextChip.tx,
-            categoryName: contextChip.categoryName
-          }
-        });
-      }
-    }
-
-    /* 预填问题：只填空输入框，不自动发送（写操作永远要用户亲口确认）；
-     * 同一深链反复进出只预填一次，不反复覆盖用户正在输入的内容 */
-    if (contextChip && contextChip.question && !input.value.trim() && contextChip.question !== lastPrefilled) {
-      input.value = contextChip.question;
-      lastPrefilled = contextChip.question;
-      autoGrow(input);
-      try { input.focus({ preventScroll: true }); } catch (error) { /* 老浏览器不支持参数 */ }
-    }
-
+    setMode(session.mode, session.reason);
     paint();
     refreshBanner();
     renderChips();
@@ -384,8 +416,6 @@
       event.preventDefault();
       var text = input.value;
       if (!text || !text.trim()) { return; }
-      input.value = '';
-      autoGrow(input);
       submit(text);
     });
 
@@ -395,8 +425,6 @@
         event.preventDefault();
         var text = input.value;
         if (!text || !text.trim()) { return; }
-        input.value = '';
-        autoGrow(input);
         submit(text);
       }
     });
@@ -405,259 +433,56 @@
     scrollToEnd(false);
   }
 
-  /* ============================== 情境上下文：解析与渲染 ============================== */
+  /* ============================== 模式胶囊 / 副标题（A27：不得静默） ============================== */
 
-  function monthLabelCN(m) {
-    var parts = /^(\d{4})-(\d{2})$/.exec(String(m || ''));
-    if (!parts) { return ''; }
-    return Number(parts[1]) + '年' + Number(parts[2]) + '月';
-  }
-
-  /* 深链参数 → 上下文 Chip。只信账期 / 分类 / 流水 id；非法值一律静默丢弃。
-   * 返回 null 表示没有可用上下文（含「只有 q」的情况：只预填，不出 Chip）。 */
-  function readContextParams(ctx, cx) {
-    var params = (ctx && ctx.params) || {};
-    var keys = ['from', 'm', 'r', 'cat', 'tx', 'q'];
-    var hasAny = false;
-    for (var k = 0; k < keys.length; k += 1) {
-      if (params[keys[k]] !== undefined && params[keys[k]] !== '') { hasAny = true; break; }
-    }
-    if (!hasAny) { return null; }
-
-    var from = String(params.from || '');
-    if (['insights', 'home', 'ledger', 'stats'].indexOf(from) < 0) { from = ''; }
-    var month = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(params.m || '')) ? String(params.m) : '';
-    if (month && month > today().slice(0, 7)) { month = ''; } /* 未来账期不认 */
-    var rangeKey = String(params.r || '');
-    if (['month', 'prev', '3m', '6m'].indexOf(rangeKey) < 0) { rangeKey = 'month'; }
-
-    var chip = {
-      from: from,
-      month: month,
-      rangeKey: rangeKey,
-      categoryId: '',
-      categoryName: '',
-      txId: '',
-      tx: null,
-      question: String(params.q || '').trim().slice(0, 60),
-      bookId: ''
-    };
-
-    if (cx) {
-      chip.bookId = cx.bookId || '';
-      var catId = String(params.cat || '');
-      if (catId) {
-        var cat = null;
-        for (var i = 0; i < (cx.categories || []).length; i += 1) {
-          if (cx.categories[i] && cx.categories[i].id === catId) { cat = cx.categories[i]; break; }
-        }
-        if (cat && cat.hidden !== true) {
-          chip.categoryId = cat.id;
-          chip.categoryName = String(cat.name || '');
-        }
-      }
-      var txId = String(params.tx || '');
-      if (txId) {
-        var tx = null;
-        var list = (cx.db && cx.db.transactions) || [];
-        for (var j = 0; j < list.length; j += 1) {
-          if (list[j] && list[j].id === txId && list[j].deleted !== true) { tx = list[j]; break; }
-        }
-        if (tx && (!tx.bookId || tx.bookId === cx.bookId)) {
-          chip.txId = tx.id;
-          chip.tx = tx;
-          if (!chip.categoryId && tx.categoryId && tx.type !== 'transfer') {
-            var tcat = null;
-            for (var n = 0; n < (cx.categories || []).length; n += 1) {
-              if (cx.categories[n] && cx.categories[n].id === tx.categoryId) { tcat = cx.categories[n]; break; }
-            }
-            if (tcat) { chip.categoryId = tcat.id; chip.categoryName = String(tcat.name || ''); }
-          }
-        }
-      }
-    }
-
-    if (!chip.month && !chip.categoryId && !chip.txId) { return null; }
-    return chip;
-  }
-
-  function contextChipValid(cx) {
-    if (!contextChip) { return false; }
-    if (!cx || !cx.bookId) { return false; }
-    /* 没有账本锚点的 Chip（数据未就绪时生成）不可信：直接失效重建 */
-    if (!contextChip.bookId) { return false; }
-    /* 账本换了：旧上下文立即失效，避免跨账本串数据 */
-    return contextChip.bookId === cx.bookId;
-  }
-
-  function contextChipText(chip) {
-    var bits = [];
-    if (chip.txId) {
-      bits.push('这笔账' + (chip.tx && chip.tx.date ? ' · ' + chip.tx.date : ''));
-    } else if (chip.month) {
-      var label = monthLabelCN(chip.month);
-      if (RANGE_LABELS[chip.rangeKey]) { label += ' · ' + RANGE_LABELS[chip.rangeKey]; }
-      bits.push(label);
-    }
-    if (chip.categoryName) { bits.push(chip.categoryName); }
-    return bits.join(' · ');
-  }
-
-  function renderCtxRow() {
-    if (!host || !host.ctxRow) { return; }
-    var row = host.ctxRow;
-    clear(row);
-    var chip = contextChip;
-    if (!chip) { row.hidden = true; return; }
-    row.hidden = false;
-    row.appendChild(el('span', { className: 's-assistant__ctxchip' }, [
-      el('span', { className: 's-assistant__ctxchip-text', text: contextChipText(chip) }),
-      el('button', {
-        className: 's-assistant__ctxchip-close',
-        type: 'button',
-        'aria-label': '移除上下文',
-        onclick: function () {
-          contextChip = null;
-          renderCtxRow();
-        }
-      }, ['\u00d7'])
-    ]));
-  }
-
-  /* 「问这笔账」单条流水卡：只读展示 + 两个追问 Chip（都走现有查账解析，不新增写路径） */
-  function keywordOfNote(note) {
-    /* 去掉金额/数字片段后取前几个字做关键词，如「午饭35」→「午饭」 */
-    var kw = String(note || '')
-      .replace(/[0-9０-９一二两三四五六七八九十百千万.．]+[元块]?/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 6);
-    return kw && kw.length >= 2 ? kw : '';
-  }
-
-  function txCard(reply) {
-    var tx = reply.tx || {};
-    var wrap = el('div', { className: 's-assistant__txcard' });
-    wrap.appendChild(el('div', { className: 's-assistant__tr-main' }, [
-      el('span', { className: 's-assistant__tr-cat', text: reply.categoryName || TYPE_TEXT[tx.type] || '—' }),
-      el('span', {
-        className: 's-assistant__tr-amount ' + (tx.type === 'income' ? 'is-income' : 'is-expense'),
-        text: (tx.type === 'income' ? '+' : (tx.type === 'transfer' ? '' : '\u2212')) + money(tx.amountCents)
-      })
-    ]));
-    var bits = [String(tx.date || '')];
-    if (tx.note) { bits.push(String(tx.note)); }
-    wrap.appendChild(el('div', { className: 's-assistant__tr-meta', text: bits.join(' · ') }));
-
-    var opts = [];
-    if (tx.type !== 'transfer' && reply.categoryName) {
-      opts.push({ label: '这个月「' + reply.categoryName + '」花了多少', value: '这个月' + reply.categoryName + '花了多少' });
-    }
-    var kw = keywordOfNote(tx.note);
-    if (kw) {
-      opts.push({ label: '这个月「' + kw + '」相关支出', value: '这个月「' + kw + '」花了多少' });
-    }
-    if (opts.length) { wrap.appendChild(optionChips(opts)); }
-    return wrap;
-  }
-
-  /* ============================== 快捷推荐 / 任务入口（P0-3） ============================== */
-
-  var TASK_ENTRIES = [
-    { label: '记一笔', kind: 'focus' },
-    { label: '查账', kind: 'query' },
-    { label: '看趋势', kind: 'trend' },
-    { label: '调预算', kind: 'plan' }
-  ];
-
-  /* 动态推荐：按上下文/数据出 2-4 条；没有账目时只推记账示例，不出答不了的分析问题 */
-  function suggestChips() {
-    if (session.turns.length > 3) { return []; }
-    var cx = cxNow();
-    if (!cx) { return QUICK_EXAMPLES.slice(); }
-
-    var hasData = false;
-    var list = (cx.db && cx.db.transactions) || [];
-    for (var i = 0; i < list.length; i += 1) {
-      if (list[i] && list[i].deleted !== true && (!cx.bookId || list[i].bookId === cx.bookId)) { hasData = true; break; }
-    }
-    if (!hasData) {
-      return [{ label: '记一笔：外卖 28 微信', value: '外卖 28 微信' }, { label: '记一笔：房租 3000 招行', value: '房租 3000 招行' }];
-    }
-
-    if (contextChip && contextChip.from === 'insights') {
-      var chips = [];
-      if (contextChip.rangeKey === '3m') { chips.push('近3个月支出趋势怎么样？'); }
-      else if (contextChip.rangeKey === '6m') { chips.push('近6个月支出趋势怎么样？'); }
-      else if (contextChip.month) { chips.push(monthLabelCN(contextChip.month) + '支出和上月比差在哪？'); }
-      chips.push(contextChip.categoryName ? contextChip.categoryName + '多在哪？' : '这个月消费结构有什么变化？');
-      chips.push('最大的三笔是哪些？');
-      return chips.slice(0, 4);
-    }
-    if (contextChip && contextChip.from === 'home') {
-      return [{ label: '记一笔', value: '外卖 28 微信' }, '今天花了多少？', '本月预算还能用多少？'];
-    }
-    return QUICK_EXAMPLES.slice();
-  }
-
-  function renderChips() {
+  function setMode(mode, reason) {
+    session.mode = mode || 'local';
+    session.reason = reason || '';
     if (!host) { return; }
-    var row = host.chipRow;
-    clear(row);
-    var chips = suggestChips();
-    chips.forEach(function (chip) {
-      var isObj = chip && typeof chip === 'object';
-      var label = isObj ? chip.label : chip;
-      var value = isObj ? chip.value : chip;
-      row.appendChild(el('button', {
-        className: 's-assistant__chip',
-        type: 'button',
-        onclick: function () {
-          if (host && host.input) { host.input.value = ''; }
-          submit(value);
-        }
-      }, [label]));
-    });
-  }
-
-  /* 空会话的 4 个任务入口；说过一句话后整行收起 */
-  function renderTasks() {
-    if (!host || !host.taskRow) { return; }
-    clear(host.taskRow);
-    if (session.turns.length > 1) { host.taskRow.hidden = true; return; }
-    host.taskRow.hidden = false;
-    TASK_ENTRIES.forEach(function (task) {
-      host.taskRow.appendChild(el('button', {
-        className: 's-assistant__task',
-        type: 'button',
-        onclick: function () {
-          if (!host || !host.input) { return; }
-          if (task.kind === 'focus') {
-            host.input.focus();
-          } else if (task.kind === 'query') {
-            host.input.value = '';
-            submit('这个月花了多少？');
-          } else if (task.kind === 'trend') {
-            host.input.value = '';
-            submit('近3个月支出趋势怎么样？');
-          } else if (task.kind === 'plan') {
-            location.hash = '#/plan';
-          }
-        }
-      }, [task.label]));
-    });
+    var cls = 's-assistant__flag s-assistant__capsule ';
+    var label = '本地';
+    if (mode === 'online') {
+      cls += 's-assistant__capsule--remote';
+      label = '在线';
+    } else if (mode === 'fallback') {
+      cls += 's-assistant__capsule--fallback';
+      label = '本地（已回落）';
+    } else {
+      cls += 's-assistant__capsule--local';
+      label = '本地';
+    }
+    if (host.capsule) {
+      host.capsule.className = cls;
+      host.capsule.textContent = label;
+    }
+    if (host.subText) {
+      host.subText.nodeValue = ' ' + (mode === 'fallback' ? SUBTITLE_LOCAL : SUBTITLE_IDLE);
+    }
   }
 
   /* ============================== 话语气泡 ============================== */
 
   function paint() {
     if (!host) { return; }
-    AI.node = null;   /* 流式节点引用每次重画重建（botBubble 里回填） */
     clear(host.log);
     session.turns.forEach(function (turn) {
       host.log.appendChild(turn.who === 'user' ? userBubble(turn.text) : botBubble(turn));
     });
-    renderTasks();
+    if (session.typing) { host.log.appendChild(typingRow()); }
+  }
+
+  function typingRow() {
+    var typing = session.typing || {};
+    var body = el('div', { className: 's-assistant__bubble s-assistant__bubble--bot' }, [
+      el('p', { className: 's-assistant__text s-assistant__text--dim', text: typing.label || '正在解析…' })
+    ]);
+    if (typing.soft) {
+      body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: '正在用本地模式…' }));
+    }
+    return el('div', { className: 's-assistant__row s-assistant__row--bot', 'aria-live': 'polite' }, [
+      el('div', { className: 's-assistant__avatar', 'aria-hidden': 'true' }, [icon('sparkles', 16)]),
+      body
+    ]);
   }
 
   function userBubble(text) {
@@ -670,35 +495,29 @@
     var reply = turn.reply || {};
     var body = el('div', { className: 's-assistant__bubble s-assistant__bubble--bot' + (turn.tone === 'ok' ? ' is-ok' : '') + (turn.tone === 'err' ? ' is-err' : '') });
 
-    if (turn.text) {
-      body.appendChild(el('p', { className: 's-assistant__text', text: turn.text }));
-    } else if (reply.text) {
-      var textNode = el('p', {
-        className: 's-assistant__text' + (turn.pending && reply.streaming ? ' is-streaming' : ''),
-        text: reply.text
-      });
-      /* 中途 repaint 也要保住流式节点引用，否则 onDelta 会写到已脱离 DOM 的节点上 */
-      if (turn.pending && reply.streaming) { AI.node = textNode; }
-      body.appendChild(textNode);
-    } else if (turn.pending && reply.streaming) {
-      /* 流式回合：先给一行阶段文案；首个增量到达后由 onDelta 直接改这个节点的文字 */
-      var think = el('p', { className: 's-assistant__text s-assistant__aithink', text: aiPhaseText() });
-      AI.node = think;
-      body.appendChild(think);
+    /* 首次联网告知卡（A28/R-11）：就地展开，不跳页、不弹全局层 */
+    if (turn.notice) {
+      return el('div', { className: 's-assistant__row s-assistant__row--bot' }, [
+        el('div', { className: 's-assistant__avatar', 'aria-hidden': 'true' }, [icon('sparkles', 16)]),
+        noticeCard(turn)
+      ]);
     }
 
     var kind = reply.kind;
 
+    if (turn.text) {
+      body.appendChild(el('p', { className: 's-assistant__text', text: turn.text }));
+    } else if (reply.text && kind !== 'preview') {
+      body.appendChild(el('p', { className: 's-assistant__text', text: reply.text }));
+    }
+
     if (kind === 'preview') {
-      body.appendChild(previewTable(reply, turn.consumed));
+      body.appendChild(previewHeadline(reply));
+      body.appendChild(previewTable(reply));
     } else if (kind === 'query') {
       body.appendChild(totalsBlock(reply.totals));
       if (reply.rows && reply.rows.length) { body.appendChild(queryRows(reply.rows)); }
       if (reply.link) { body.appendChild(linkButton(reply.link)); }
-    } else if (kind === 'tx') {
-      body.appendChild(txCard(reply));
-    } else if (kind === 'insight') {
-      body.appendChild(insightCard(reply));
     } else if (kind === 'targets') {
       body.appendChild(targetList(reply));
     } else if (kind === 'clarify') {
@@ -707,6 +526,7 @@
       body.appendChild(optionChips(reply.options));
     } else if (kind === 'hint') {
       body.appendChild(replyOptions(reply));
+      if (reply.examples && reply.examples.length) { body.appendChild(exampleList(reply.examples)); }
     } else if (kind === 'confirm-undo') {
       /* 撤销确认：把「要撤销的那一条」摘要摆出来，按钮直接执行逆操作 */
       if (reply.entry) { body.appendChild(undoCard(reply.entry)); }
@@ -715,11 +535,13 @@
           el('button', {
             className: 's-assistant__primary',
             type: 'button',
+            'aria-label': '撤销这一笔',
             onclick: function () { undoEntry(reply.entry); }
           }, ['撤销这笔']),
           el('button', {
             className: 's-assistant__ghost',
             type: 'button',
+            'aria-label': '不撤销了',
             onclick: function () { submit('算了'); }
           }, ['算了'])
         ]));
@@ -735,45 +557,34 @@
     if (kind === 'preview' && reply.plan) {
       if (turn.consumed) {
         body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: '已写入，上面的按钮不再重复执行' }));
+      } else if (turn.dismissed) {
+        body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: '已放弃这次预览，改好后再发。' }));
       } else {
-        body.appendChild(previewActions(reply));
+        body.appendChild(previewActions(reply, turn));
       }
     }
 
-    if (reply.degrade) {
-      /* 降级说明在消息位内（P0-5）：说清为什么 + 数字仍来自账本 + 可重试 */
-      var degradeRow = el('div', { className: 's-assistant__degrade' }, [
-        el('span', {
-          className: 's-assistant__degrade-text',
-          text: '已切回本机：' + (reply.degrade.text || '云端这次没答上') + '。下面的数字仍来自你的账本。'
-        })
-      ]);
-      if (turn.aiQuestion) {
-        degradeRow.appendChild(el('button', {
-          className: 's-assistant__degrade-btn',
-          type: 'button',
-          text: '重试',
-          onclick: function () { retryEnhance(turn); }
-        }));
-      }
-      body.appendChild(degradeRow);
+    /* 模式说明：回落必须说清原因（A27），纯本地与在线都不打扰 */
+    var reasonLine = '';
+    if (turn.mode === 'fallback') {
+      reasonLine = REASON_TEXT[turn.reason] || '在线解析没有成功，已改用本地解析';
+    } else if (turn.mode === 'local' && (turn.reason === 'disabled' || turn.reason === 'config')) {
+      reasonLine = REASON_TEXT[turn.reason] || '未启用在线模型，当前用本地解析';
+    }
+    if (reasonLine) {
+      body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: reasonLine }));
     }
 
-    if (reply.source === 'remote' && reply.provider) {
-      body.appendChild(el('p', { className: 's-assistant__srcnote', text: '由 ' + reply.provider + ' 辅助理解' }));
-    }
-
-    /* P1-3 表达增强：本地 query/insight 结果可一键「换个说法解释」。
-       数字结构（rows/totals/metrics）原样带回，只有文字会变；已重写过的不再叠按钮。 */
-    if ((reply.kind === 'query' || reply.kind === 'insight') && !reply.rewritten && !turn.pending && !reply.streaming) {
-      var explainTurn = turn;
-      body.appendChild(el('div', { className: 's-assistant__explainrow' }, [
+    if (turn.mode === 'fallback') {
+      body.appendChild(failureActions(turn));
+    } else if (reasonLine) {
+      body.appendChild(el('div', { className: 's-assistant__actions' }, [
         el('button', {
-          className: 's-assistant__explain',
+          className: 's-assistant__ghost',
           type: 'button',
-          text: '换个说法解释',
-          onclick: function () { aiExplainTurn(explainTurn); }
-        })
+          'aria-label': '去设置里开启联网解析',
+          onclick: function () { gotoSettings(); }
+        }, ['去设置'])
       ]));
     }
 
@@ -783,15 +594,99 @@
     ]);
   }
 
+  /* 失败按因分流 + 保留原文：三个出口都留着（AS-4） */
+  function failureActions(turn) {
+    var raw = String(turn.raw || '');
+    return el('div', { className: 's-assistant__actions' }, [
+      el('button', {
+        className: 's-assistant__ghost',
+        type: 'button',
+        'aria-label': '重试联网解析',
+        onclick: function () { if (raw) { submit(raw); } }
+      }, ['重试']),
+      el('button', {
+        className: 's-assistant__ghost',
+        type: 'button',
+        'aria-label': '改用本地解析这一句',
+        onclick: function () { if (raw) { submitLocalOnly(raw); } }
+      }, ['改用本地解析']),
+      el('button', {
+        className: 's-assistant__ghost',
+        type: 'button',
+        'aria-label': '去设置里检查联网配置',
+        onclick: function () { gotoSettings(); }
+      }, ['去设置'])
+    ]);
+  }
+
+  function gotoSettings() {
+    if (host && host.ctx && typeof host.ctx.go === 'function') {
+      host.ctx.go('#/settings');
+      return;
+    }
+    try { global.location.hash = '#/settings'; } catch (error) { /* 忽略 */ }
+  }
+
+  function noticeCard(turn) {
+    var body = el('div', { className: 's-assistant__bubble s-assistant__bubble--bot' });
+    body.appendChild(el('p', { className: 's-assistant__text', text: NOTICE_HEAD }));
+    body.appendChild(el('p', { className: 's-assistant__text', text: NOTICE_BODY }));
+    body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: NOTICE_DETAIL }));
+    body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: NOTICE_TAIL }));
+    body.appendChild(el('p', { className: 's-assistant__text', text: NOTICE_ASK }));
+    if (turn.noticeAnswer) {
+      body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: turn.noticeAnswer }));
+      return body;
+    }
+    body.appendChild(el('div', { className: 's-assistant__actions' }, [
+      el('button', {
+        className: 's-assistant__primary',
+        type: 'button',
+        'aria-label': '同意联网并继续解析',
+        onclick: function () { acceptNotice(turn); }
+      }, ['同意并继续']),
+      el('button', {
+        className: 's-assistant__ghost',
+        type: 'button',
+        'aria-label': '只用本地解析这一句',
+        onclick: function () { declineNotice(turn); }
+      }, ['只用本地'])
+    ]));
+    return body;
+  }
+
+  function acceptNotice(turn) {
+    if (!turn || turn.noticeAnswer) { return; }
+    var as = assistant();
+    var llm = as && as.llm;
+    if (llm && typeof llm.setConfig === 'function') {
+      try { llm.setConfig({ noticeAt: Date.now() }); } catch (error) { /* 写不进去就按未同意处理 */ }
+    }
+    turn.noticeAnswer = '已同意联网，这一句用在线解析。';
+    paint();
+    sendRemote(String(turn.raw || ''));
+  }
+
+  function declineNotice(turn) {
+    if (!turn || turn.noticeAnswer) { return; }
+    session.noticeDeclined = true;
+    turn.noticeAnswer = '这次只用本地解析；想开联网随时去「我的 › 小助手与联网」。';
+    paint();
+    sendLocal(String(turn.raw || ''), 'none');
+  }
+
   function replyOptions(reply) {
     if (!reply.options || !reply.options.length) { return document.createDocumentFragment(); }
     var wrap = el('div', { className: 's-assistant__opts' });
     reply.options.forEach(function (opt) {
+      var value = opt && typeof opt === 'object' ? String(opt.value || opt.label) : String(opt);
+      var label = opt && typeof opt === 'object' ? String(opt.label || opt.value) : String(opt);
       wrap.appendChild(el('button', {
         className: 's-assistant__opt',
         type: 'button',
-        onclick: function () { submit(String(opt.value || opt.label)); }
-      }, [String(opt.label || opt.value)]));
+        'aria-label': '回复：' + label,
+        onclick: function () { submit(value); }
+      }, [label]));
     });
     return wrap;
   }
@@ -805,29 +700,55 @@
       wrap.appendChild(el('button', {
         className: 's-assistant__opt',
         type: 'button',
+        'aria-label': '选择：' + label,
         onclick: function () { submit(value); }
       }, [label]));
     });
     return wrap;
   }
 
-  function previewTable(reply, consumed) {
+  /* 空态示例句（AS-8）：点了只填进输入框，不替用户发出去 */
+  function exampleList(list) {
+    var wrap = el('div', { className: 's-assistant__opts' });
+    list.forEach(function (text) {
+      wrap.appendChild(el('button', {
+        className: 's-assistant__opt',
+        type: 'button',
+        'aria-label': '示例：' + text + '（点了只填进输入框）',
+        onclick: function () { fillInput(text); }
+      }, [String(text)]));
+    });
+    return wrap;
+  }
+
+  function fillInput(text) {
+    if (!host || !host.input) { return; }
+    host.input.value = String(text);
+    autoGrow(host.input);
+    try {
+      host.input.focus();
+      if (host.input.setSelectionRange) { host.input.setSelectionRange(host.input.value.length, host.input.value.length); }
+    } catch (error) { /* 忽略 */ }
+    scrollToEnd(false);
+  }
+
+  /* 结果卡片标题（AS-2）：条数 + 合计 */
+  function previewHeadline(reply) {
     var rows = reply.rows || [];
-    var editable = !!(reply.plan && reply.plan.kind === 'create' && !consumed);
+    var count = rows.length || (reply.totals && reply.totals.count) || 0;
+    var total = 0;
+    rows.forEach(function (row) { total += Math.abs(Number(row.amountCents || 0)); });
+    return el('p', { className: 's-assistant__text', text: '识别到 ' + count + ' 笔，合计 ' + money(total) });
+  }
+
+  function previewTable(reply) {
+    var rows = reply.rows || [];
     var wrap = el('div', { className: 's-assistant__table', role: 'table', 'aria-label': '待写入的账目' });
-    rows.forEach(function (row, index) {
+    rows.forEach(function (row) {
       var main = el('div', { className: 's-assistant__tr-main' }, [
         el('span', { className: 's-assistant__tr-cat', text: row.categoryText || TYPE_TEXT[row.type] || '—' }),
         el('span', { className: 's-assistant__tr-amount ' + (row.type === 'income' ? 'is-income' : 'is-expense'), text: (row.type === 'income' ? '+' : (row.type === 'transfer' ? '' : '−')) + money(row.amountCents) })
       ]);
-      if (editable) {
-        main.appendChild(el('button', {
-          className: 's-assistant__tr-edit',
-          type: 'button',
-          'aria-label': '编辑第 ' + (index + 1) + ' 笔',
-          onclick: function () { openItemEditor(reply, index, row); }
-        }, ['编辑']));
-      }
       var metaBits = [row.dateText, row.accountText];
       if (row.type === 'transfer' && row.toAccountText) { metaBits = [row.dateText, row.accountText + ' → ' + row.toAccountText]; }
       if (row.note) { metaBits.push(row.note); }
@@ -838,7 +759,6 @@
       }
       if (row.future) { flags.appendChild(el('span', { className: 's-assistant__flag is-warn', text: '未来日期' })); }
       if (row.dup) { flags.appendChild(el('span', { className: 's-assistant__flag is-warn', text: '和已有账目相似' })); }
-      if (row.edited) { flags.appendChild(el('span', { className: 's-assistant__flag', text: '已手动修改' })); }
       if ((row.issues || []).length) {
         row.issues.forEach(function (issue) {
           flags.appendChild(el('span', { className: 's-assistant__flag is-warn', text: issue.message || '需要补充' }));
@@ -856,186 +776,56 @@
     return wrap;
   }
 
-  function previewActions(reply) {
+  /* 对称二选一（AS-2）：[再改改] [确认记 N 笔]；主按钮不自动抢焦点 */
+  function previewActions(reply, turn) {
     var wrap = el('div', { className: 's-assistant__actions' });
     var plan = reply.plan;
     var canConfirm = reply.canConfirm === true;
     var needDup = reply.needDupConfirm === true;
-    var count = (reply.rows || []).length;
+    var rows = reply.rows || [];
+    var count = rows.length || (reply.totals && reply.totals.count) || 0;
+    var primaryLabel = count > 0 ? (needDup ? '仍要记 ' + count + ' 笔' : '确认记 ' + count + ' 笔') : '确认记这笔';
 
     wrap.appendChild(el('button', {
       className: 's-assistant__primary',
       type: 'button',
       disabled: canConfirm ? null : 'disabled',
+      'aria-label': primaryLabel,
       onclick: function (event) {
         if (!canConfirm) { return; }
         var btn = event.currentTarget;
         if (needDup) {
-          confirmSheet(host.ctx, {
+          XZB.ui.sheet.confirm({
             title: '和已有账目相似',
-            text: '有 ' + (reply.rows || []).filter(function (r) { return r.dup; }).length + ' 笔看起来和最近记过的重复，仍要记吗？',
-            okLabel: '仍要记',
-            onOk: function () { doConfirm(plan, { forced: true }); }
+            message: '有 ' + rows.filter(function (r) { return r.dup; }).length + ' 笔看起来和最近记过的重复，仍要记吗？',
+            confirmLabel: '仍要记',
+            onConfirm: function (close) { close(); doConfirm(plan, { forced: true }); }
           });
           return;
         }
         if (btn) { btn.disabled = true; }
         doConfirm(plan, {});
       }
-    }, [reply.needDupConfirm ? '仍要写入' : (count > 1 ? '确认写入 ' + count + ' 笔' : '确认写入')]));
+    }, [primaryLabel]));
 
     wrap.appendChild(el('button', {
       className: 's-assistant__ghost',
       type: 'button',
-      onclick: function () { submit('取消'); }
-    }, ['不用了']));
+      'aria-label': '再改改这一句',
+      onclick: function () { dismissPreview(turn, plan); }
+    }, ['再改改']));
     return wrap;
   }
 
-  /* ============================== 草稿行内编辑（P0-4） ============================== */
-
-  /* 编辑后重算预览（金额合计 / 重复标记 / 可确认性），并把草稿同步进 prefs */
-  function refreshPreviewTurn(reply) {
+  /* 「再改改」：把原话放回输入框，用户接着改，不替他再发一次 */
+  function dismissPreview(turn, plan) {
+    var raw = String((plan && plan.raw) || (turn && turn.raw) || '');
+    if (turn) { turn.dismissed = true; }
     var as = assistant();
-    var cx = cxNow();
-    if (!as || !cx || !reply || !reply.plan) { return; }
-    var view = as.previewRows ? as.previewRows(reply.plan, cx) : null;
-    if (!view) { return; }
-    reply.rows = view.rows;
-    reply.totals = view.totals;
-    reply.warnings = view.warnings;
-    reply.canConfirm = !view.blocked;
-    reply.needDupConfirm = (view.rows || []).some(function (row) { return row.dup; });
-    if (as.draft && as.draft.save) { as.draft.save(reply.plan, { note: 'waiting-confirm' }); }
+    if (plan && as && as.draft && as.draft.clear) { as.draft.clear(); }
+    if (raw) { fillInput(raw); }
     paint();
-    scrollToEnd(false);
-  }
-
-  function formRow(label, control) {
-    return el('div', { className: 's-assistant__form-row' }, [
-      el('span', { className: 's-assistant__form-label', text: label }),
-      control
-    ]);
-  }
-
-  /* 选项列表（分类/账户）：单选，点中切换 is-active */
-  function optionList(options, selectedId, onPick) {
-    var wrap = el('div', { className: 's-assistant__optwrap', role: 'listbox', 'aria-label': '选项' });
-    function paintActive() {
-      var kids = wrap.childNodes;
-      for (var i = 0; i < kids.length; i += 1) {
-        if (kids[i].dataset && kids[i].dataset.id === selectedId) { kids[i].classList.add('is-active'); }
-        else { kids[i].classList.remove('is-active'); }
-      }
-    }
-    (options || []).forEach(function (option) {
-      var btn = el('button', {
-        className: 's-assistant__opt',
-        type: 'button',
-        role: 'option',
-        dataset: { id: option.id },
-        onclick: function () {
-          selectedId = option.id;
-          paintActive();
-          if (typeof onPick === 'function') { onPick(option.id); }
-        }
-      }, [String(option.name || option.id)]);
-      wrap.appendChild(btn);
-    });
-    paintActive();
-    return wrap;
-  }
-
-  function openItemEditor(reply, index, row) {
-    var plan = reply && reply.plan;
-    var item = plan && plan.items && plan.items[index];
-    var sheetApi = XZB.ui && XZB.ui.sheet;
-    var cx = cxNow();
-    if (!plan || !item || !sheetApi || typeof sheetApi.open !== 'function' || !cx) { return; }
-
-    var picked = { categoryId: item.categoryId || '', accountId: item.accountId || '' };
-    var isTransfer = item.type === 'transfer';
-
-    var amountInput = el('input', {
-      className: 's-assistant__form-input', type: 'number', inputmode: 'decimal',
-      step: '0.01', min: '0', value: String((Number(item.amountCents) || 0) / 100), 'aria-label': '金额'
-    });
-    var dateInput = el('input', {
-      className: 's-assistant__form-input', type: 'date',
-      value: String(item.date || ''), 'aria-label': '日期'
-    });
-    var noteInput = el('input', {
-      className: 's-assistant__form-input', type: 'text', maxlength: '80',
-      value: String(item.note || ''), 'aria-label': '备注', placeholder: '可选'
-    });
-
-    var catOptions = isTransfer ? [] : (cx.liveCategories || []).filter(function (cat) {
-      return cat && (cat.kind || 'expense') === item.type;
-    });
-    var catList = catOptions.length ? optionList(catOptions, picked.categoryId, function (id) { picked.categoryId = id; }) : null;
-    var acctList = optionList(cx.liveAccounts || [], picked.accountId, function (id) { picked.accountId = id; });
-
-    var content = el('div', { className: 's-assistant__form' }, [
-      formRow('金额', amountInput),
-      catList ? formRow('分类', catList) : null,
-      formRow(isTransfer ? '转出账户' : '账户', acctList),
-      formRow('日期', dateInput),
-      formRow('备注', noteInput)
-    ]);
-
-    var actions = [{ label: '取消', kind: 'text' }];
-    if ((plan.items || []).length > 1) {
-      actions.push({
-        label: '删除此笔',
-        kind: 'danger',
-        onClick: function () {
-          var asX = assistant();
-          var cxX = cxNow();
-          if (!asX || !cxX) { return false; }
-          var res = asX.removePlanItem(plan, index, cxX);
-          if (!res || !res.ok) {
-            toast(host && host.ctx, (res && res.message) || '删不掉这一笔', 'warning');
-            return false;
-          }
-          refreshPreviewTurn(reply);
-        }
-      });
-    }
-    actions.push({
-      label: '保存',
-      kind: 'primary',
-      onClick: function () {
-        var asX = assistant();
-        var cxX = cxNow();
-        if (!asX || !cxX) { return false; }
-        var patch = {};
-        if (amountInput.value !== '') {
-          var amt = Number(amountInput.value);
-          if (!isFinite(amt) || Math.round(amt * 100) <= 0) {
-            toast(host && host.ctx, '金额要大于 0', 'warning');
-            return false;
-          }
-          patch.amountCents = Math.round(amt * 100);
-        }
-        if (picked.categoryId && picked.categoryId !== item.categoryId) { patch.categoryId = picked.categoryId; }
-        if (picked.accountId && picked.accountId !== item.accountId) { patch.accountId = picked.accountId; }
-        if (dateInput.value && dateInput.value !== item.date) { patch.date = dateInput.value; }
-        if ((noteInput.value || '') !== (item.note || '')) { patch.note = noteInput.value; }
-        if (!Object.keys(patch).length) { return; } /* 什么都没改：直接关 */
-        var res = asX.updatePlanItem(plan, index, patch, cxX);
-        if (!res || !res.ok) {
-          toast(host && host.ctx, (res && res.message) || '没保存上', 'warning');
-          return false;
-        }
-        refreshPreviewTurn(reply);
-      }
-    });
-
-    sheetApi.open({
-      title: '编辑第 ' + (index + 1) + ' 笔',
-      content: content,
-      actions: actions
-    });
+    refreshBanner();
   }
 
   function totalsBlock(totals) {
@@ -1083,6 +873,7 @@
       wrap.appendChild(el('button', {
         className: 's-assistant__target',
         type: 'button',
+        'aria-label': '第 ' + (index + 1) + ' 笔：' + label,
         onclick: function () { submit(tx.id); }
       }, [
         el('span', { className: 's-assistant__target-idx', text: String(index + 1) }),
@@ -1108,6 +899,7 @@
       el('button', {
         className: 's-assistant__ghost',
         type: 'button',
+        'aria-label': '看这笔的明细',
         onclick: function () {
           if (hash) { location.hash = hash; }
         }
@@ -1115,380 +907,221 @@
     ]);
   }
 
-  /* ============================== 洞察答案卡（P0-2） ==============================
-   * 结构固定：口径 → 结论 → 指标 → 原因/证据 → 假设 → 操作/追问。
-   * 所有数字都是 insight-qa 本地算好后传进来的，这里只渲染、不计算。 */
+  /* ============================== 忙碌态（异步边界） ============================== */
 
-  function insightMetricsBlock(metrics) {
-    if (!metrics || !metrics.length) { return null; }
-    var wrap = el('div', { className: 's-assistant__totals' });
-    metrics.forEach(function (metric) {
-      wrap.appendChild(el('div', { className: 's-assistant__total' }, [
-        el('span', { className: 's-assistant__total-label', text: metric.label }),
-        el('span', {
-          className: 's-assistant__total-value' + (metric.tone ? ' is-' + metric.tone : ''),
-          text: metric.value || '—'
-        })
-      ]));
-      if (metric.sub) {
-        wrap.appendChild(el('div', { className: 's-assistant__metric-sub', text: metric.sub }));
-      }
-    });
-    return wrap;
-  }
-
-  function insightCard(reply) {
-    var wrap = el('div', { className: 's-assistant__insight' });
-
-    if (reply.scope) {
-      wrap.appendChild(el('p', { className: 's-assistant__insight-scope', text: '口径：' + reply.scope }));
+  function beginBusy(label, phase, delayTyping) {
+    session.busy = true;
+    session.state = phase === 'writing' ? 'writing' : 'parsing';
+    if (host && host.input) { host.input.disabled = true; }
+    if (host && host.send) {
+      host.send.disabled = true;
+      host.send.setAttribute('aria-busy', 'true');
     }
+    /* ≥200ms 才出「正在解析…」，避免本地/快速返回时闪一下（DESIGN §3.1） */
+    session.typing = delayTyping ? null : { label: label || '正在解析…', soft: false };
+  }
 
-    if (reply.empty) {
-      wrap.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: reply.text || '数据不足，没法下结论。' }));
-      return wrap;
+  function endBusy() {
+    session.busy = false;
+    session.state = 'idle';
+    session.typing = null;
+    clearTimers();
+    if (host && host.input) { host.input.disabled = false; }
+    if (host && host.send) {
+      host.send.disabled = false;
+      host.send.setAttribute('aria-busy', 'false');
     }
-
-    var metrics = insightMetricsBlock(reply.metrics);
-    if (metrics) { wrap.appendChild(metrics); }
-
-    /* 原因分类（环比卡）：每类一条，金额 + 对比 + 证据流水 */
-    if (reply.causes && reply.causes.length) {
-      var causeList = el('div', { className: 's-assistant__causes' });
-      reply.causes.forEach(function (cause) {
-        var head = el('div', { className: 's-assistant__cause-head' }, [
-          el('span', { className: 's-assistant__cause-name', text: cause.name }),
-          el('span', {
-            className: 's-assistant__cause-delta ' + (cause.sign === '\u2212' ? 'is-income' : 'is-expense'),
-            text: cause.sign + cause.amountText
-          })
-        ]);
-        if (cause.countText) {
-          head.appendChild(el('span', { className: 's-assistant__cause-count', text: cause.countText }));
-        }
-        causeList.appendChild(head);
-        if (cause.evidence && cause.evidence.length) {
-          causeList.appendChild(queryRows(cause.evidence));
-        }
-      });
-      wrap.appendChild(causeList);
-    }
-
-    /* 证据流水（分类下钻 / 最大的三笔） */
-    if (reply.rows && reply.rows.length) {
-      wrap.appendChild(queryRows(reply.rows));
-    }
-
-    if (reply.assumption) {
-      wrap.appendChild(el('p', { className: 's-assistant__assumption', text: reply.assumption }));
-    }
-
-    if (reply.links && reply.links.length) {
-      var actions = el('div', { className: 's-assistant__actions' });
-      reply.links.forEach(function (link) {
-        actions.appendChild(el('button', {
-          className: 's-assistant__ghost',
-          type: 'button',
-          onclick: function () { if (link && link.hash) { location.hash = link.hash; } }
-        }, [String(link.label || '看明细')]));
-      });
-      wrap.appendChild(actions);
-    }
-
-    if (reply.followUps && reply.followUps.length) {
-      wrap.appendChild(optionChips(reply.followUps.map(function (q) { return { label: q, value: q }; })));
-    }
-    return wrap;
-  }
-
-  /* ============================== 云端增强（P1，BYOK） ==============================
-   * 契约锚点：
-   *  - 只有本地返回 kind:'hint'（听不懂的兜底）才可能进云端；clarify/preview/query 等一律不调模型（P0-3）；
-   *  - 流式只更新文字节点，不整屏 paint；确认按钮永远来自本地 plan，模型不产（§8.1）；
-   *  - 失败/降级在消息位内说明并给「重试」；连续 2 次失败才升到顶部 banner（§10.4 优先级）；
-   *  - ai-* 三个 chunk 不在 DEPS 里，按需 ensure；加载失败 = 增强不可用，本地路径完全不受影响。
-   */
-  var AI = { store: null, enhance: null, ensuring: null, ctl: null, busy: false, question: '', fails: 0, phase: '', node: null };
-
-  function aiEnsuring() {
-    if (AI.enhance) { return Promise.resolve(AI.enhance); }
-    var chunks = XZB.chunks;
-    if (!chunks || typeof chunks.ensure !== 'function') { return Promise.resolve(null); }
-    if (!AI.ensuring) {
-      AI.ensuring = chunks.ensure('ai-enhance').then(function () {
-        var core = XZB.core || {};
-        AI.enhance = core.aiEnhance || null;
-        AI.store = core.aiStore || null;
-        return AI.enhance;
-      }, function () {
-        AI.ensuring = null;   /* 允许下次重试 */
-        return null;
-      });
-    }
-    return AI.ensuring;
-  }
-
-  function aiSubtitleText() {
-    var st = AI.store;
-    if (!st || typeof st.platform !== 'function') { return '离线运行 · 数据不出手机'; }
-    if (st.platform().ok !== true) { return '离线运行 · 数据不出手机'; }
-    var consented = false;
-    try { consented = st.consent().granted === true; } catch (error) { consented = false; }
-    if (!consented) { return '离线运行 · 数据不出手机'; }
-    var name = '';
-    try { name = String(st.labelOf(st.getActive().id) || ''); } catch (error) { name = ''; }
-    return '本机记账 · 复杂问题由' + (name || '所选供应商') + '辅助';
-  }
-
-  /* 头部副标题 / 底部隐私行随增强状态切换（P0-10：不得保留绝对化承诺） */
-  function updateAiChrome() {
-    if (!host || !host.shell) { return; }
-    var sub = host.shell.querySelector('.s-assistant__subtitle');
-    if (sub) { sub.textContent = aiSubtitleText(); }
-    var foot = host.shell.querySelector('.s-assistant__privacy');
-    if (foot) {
-      var st = AI.store;
-      var on = false;
-      try { on = !!(st && typeof st.consent === 'function' && st.platform().ok === true && st.consent().granted === true); } catch (error) { on = false; }
-      foot.textContent = on
-        ? '本机记账；开启增强后，问题与必要摘要会发给所选供应商（备注默认不发送）'
-        : '文字解析与账目保存在本机；语音识别由你的浏览器服务处理';
-    }
-  }
-
-  /* 预热：进屏就 ensure + load 一次，把首次 getItem 的开销挪出「本地命中」的热路径（AC11） */
-  function ensureAiBoot() {
-    aiEnsuring().then(function () { updateAiChrome(); });
-  }
-
-  function setAiBusy(busy) {
-    AI.busy = busy === true;
-    if (host && host.send) { host.send.disabled = AI.busy; }
-    if (host && host.stop) { host.stop.hidden = !AI.busy; }
-  }
-
-  function stopEnhance() {
-    if (AI.ctl && typeof AI.ctl.abort === 'function') {
-      try { AI.ctl.abort(); } catch (error) { /* 已结束 */ }
-    }
-  }
-
-  function aiPhaseText() {
-    return AI.phase === 'streaming' ? '正在生成…' : '正在理解…';
-  }
-
-  /* P1-3：把一条已有的本地 query/insight 结论交给模型重写表达。
-     数字全在 reply.rows/totals 上且 explain() 原样带回；守卫仍会校验文字里的数字。 */
-  function aiExplainTurn(turn) {
-    var reply = turn && turn.reply;
-    if (!reply || AI.busy) { return; }
-    var begin = function (enh) {
-      if (!enh || AI.busy) { return; }
-      var gate = enh.ready(null);
-      if (!gate || gate.ok !== true) {
-        if (XZB.ui && XZB.ui.toast && XZB.ui.toast.show) {
-          XZB.ui.toast.show('智能增强还没开启或额度用完了，去设置里看看', { type: 'info' });
-        }
-        return;
-      }
-      var newTurn = {
-        who: 'bot',
-        reply: {
-          kind: reply.kind === 'insight' ? 'insight' : 'query',
-          text: '',
-          streaming: true,
-          rows: reply.rows,
-          totals: reply.totals,
-          metrics: reply.metrics
-        }
-      };
-      pushTurn(newTurn);
-      AI.phase = 'thinking';
-      setAiBusy(true);
-      paint();
-      scrollToEnd(true);
-
-      var client = XZB.core && XZB.core.aiClient;
-      var ctl = client && typeof client.abortHandle === 'function' ? client.abortHandle() : null;
-      enh.explain({
-        reply: reply,
-        cx: cxNow(),
-        ctl: ctl,
-        onDelta: function (delta, all) {
-          AI.phase = 'streaming';
-          newTurn.reply.text = all == null ? '' : String(all);
-          if (AI.node) {
-            AI.node.textContent = newTurn.reply.text;
-            scrollToEnd(false);
-          }
-        }
-      }).then(function (out) {
-        newTurn.pending = false;
-        newTurn.reply = out || reply;
-        setAiBusy(false);
-        if (newTurn.reply.source === 'remote') { AI.fails = 0; }
-        else if (newTurn.reply.degrade) { AI.fails += 1; }
-        paint();
-        refreshBanner();
-        scrollToEnd(true);
-      });
-    };
-    if (AI.enhance) { begin(AI.enhance); } else { aiEnsuring().then(begin); }
-  }
-
-  function maybeEnhance(raw, reply) {
-    if (!reply || reply.kind !== 'hint') { return; }
-    if (AI.busy) { return; }
-    var st = AI.store;
-    if (st && typeof st.platform === 'function') {
-      var pf = st.platform();
-      if (pf && pf.ok !== true) { return; }   /* file://：静默留在本地答案（AC19） */
-    }
-    aiEnsuring().then(function (enh) {
-      if (!enh || AI.busy) { return; }
-      var gate = enh.ready(null);
-      if (!gate || gate.ok !== true) { return; }   /* 未授权/无 Key/额度尽/断网：静默留在本地答案 */
-      startEnhance(raw, reply, enh);
-    });
-  }
-
-  function startEnhance(raw, reply, enh) {
-    var turn = session.turns[session.turns.length - 1];
-    if (!turn || turn.who !== 'bot' || turn.reply !== reply) { return; }
-    var cx = cxNow();
-    if (!cx) { return; }
-
-    turn.aiQuestion = String(raw || '');
-    AI.question = turn.aiQuestion;
-    AI.phase = 'thinking';
-    /* 注意：AI.fails 是「跨提问的连续失败计数」（≥2 升 banner），
-       不能在这里清零——否则每次新提问都从 0 数起，banner 永远不出现。
-       清零只发生在成功（then 里 source==='remote'）。 */
-    turn.reply = { kind: 'hint', text: '', streaming: true };
-    turn.pending = true;
-    setAiBusy(true);
-    paint();
-    scrollToEnd(true);
-
-    runEnhance(turn, raw, reply, enh, false);
-  }
-
-  /* 降级卡上的「重试」：同一回合重跑同一载荷，retry:true → 不计入每日额度（P0-8） */
-  function retryEnhance(turn) {
-    var enh = AI.enhance;
-    if (!enh || AI.busy || !turn || !turn.aiQuestion) { return; }
-    var localReply = { kind: 'hint', text: '', options: [] };
-    turn.reply = { kind: 'hint', text: '', streaming: true };
-    turn.pending = true;
-    AI.question = turn.aiQuestion;
-    AI.phase = 'thinking';
-    setAiBusy(true);
-    paint();
-    scrollToEnd(true);
-    runEnhance(turn, turn.aiQuestion, localReply, enh, true);
-  }
-
-  function runEnhance(turn, raw, localReply, enh, isRetry) {
-    var cx = cxNow();
-    if (!cx) {
-      turn.pending = false;
-      setAiBusy(false);
-      paint();
-      return;
-    }
-
-    var client = XZB.core && XZB.core.aiClient;
-    AI.ctl = client && typeof client.abortHandle === 'function' ? client.abortHandle() : null;
-
-    enh.run({
-      question: raw,
-      localReply: localReply,
-      state: session.state,
-      cx: cx,
-      ctl: AI.ctl,
-      retry: isRetry === true,
-      onDelta: function (delta, all) {
-        AI.phase = 'streaming';
-        turn.reply.text = all == null ? '' : String(all);
-        if (AI.node) {
-          AI.node.textContent = turn.reply.text;
-          scrollToEnd(false);
-        }
-      },
-      onPhase: function (name) {
-        AI.phase = String(name || '');
-        if (turn.pending && AI.node && !turn.reply.text) { AI.node.textContent = aiPhaseText(); }
-      }
-    }).then(function (out) {
-      turn.pending = false;
-      turn.reply = out || { kind: 'hint', text: '这次没能给出更好的回答，换个说法试试' };
-      setAiBusy(false);
-      if (turn.reply.source === 'remote') { AI.fails = 0; }
-      else if (turn.reply.degrade) { AI.fails += 1; }
-      paint();
-      refreshBanner();
-      scrollToEnd(true);
-    });
   }
 
   /* ============================== 提交 / 回复 ============================== */
 
-  function submit(text) {
+  function submit(text, opts) {
     if (!host || !text || !String(text).trim()) { return; }
-    if (AI.busy) { return; }   /* 生成中不接受新问题，避免流式回合被打断 */
     var raw = String(text).trim();
-    if (session.busy) { return; }
+
+    /* 忙的时候不静默吞掉：排进队列，并明确告诉用户（A1） */
+    if (session.busy) {
+      session.queue.push(raw);
+      pushTurn({ who: 'bot', reply: { kind: 'hint', text: '上一条还在处理，这条先排在后面，等它完我接着记。' } });
+      paint();
+      scrollToEnd(true);
+      return;
+    }
 
     pushTurn({ who: 'user', text: raw });
+    if (host.input) {
+      host.input.value = '';
+      autoGrow(host.input);
+    }
+    paint();
+    scrollToEnd(true);
+    dispatch(raw, opts || {});
+  }
+
+  function queueNext() {
+    if (!session.queue.length) { return; }
+    var next = session.queue.shift();
+    later(function () { submit(next); }, 0);
+  }
+
+  function dispatch(raw, opts) {
+    var as = assistant();
+    var cx = cxNow();
+    if (!as || !cx) {
+      pushTurn({ who: 'bot', text: '数据还没准备好，稍等一下再试', tone: 'err' });
+      restoreInput(raw);
+      paint();
+      scrollToEnd(true);
+      return;
+    }
+
+    var cfg = configNow();
+    if (!opts.local && shouldNotice(cfg)) {
+      pushTurn({ who: 'bot', notice: true, raw: raw });
+      paint();
+      scrollToEnd(true);
+      return;
+    }
+
+    if (!opts.local && readyNow()) {
+      sendRemote(raw);
+      return;
+    }
+    sendLocal(raw, opts.reason || localReason(cfg));
+  }
+
+  /* 异步边界：远端解析 + 5s 软提示 + 令牌防过期（硬 6s/总 8s 由 core 保证） */
+  function sendRemote(raw) {
+    var as = assistant();
+    var cx = cxNow();
+    if (!as || !cx || typeof as.respondRemote !== 'function') {
+      sendLocal(raw, 'none');
+      return;
+    }
+
+    session.token += 1;
+    var token = session.token;
+    beginBusy('正在解析…', 'parsing', true);
     paint();
     scrollToEnd(true);
 
-    var cx = cxNow();
-    var as = assistant();
-    if (!cx) {
-      pushTurn({ who: 'bot', text: '数据还没准备好，稍等一下再试', tone: 'err' });
+    /* 200ms 后才把「正在解析…」画出来；5s 时追加「正在用本地模式…」（R-04 软提示） */
+    later(function () {
+      if (token !== session.token) { return; }
+      session.typing = { label: '正在解析…', soft: false };
       paint();
+      scrollToEnd(false);
+    }, TYPING_DELAY);
+
+    var softMs = Number(as.LLM_SOFT_MS) || 5000;
+    later(function () {
+      if (token !== session.token || !session.typing) { return; }
+      session.typing.soft = true;
+      paint();
+      scrollToEnd(false);
+    }, softMs);
+
+    var pending;
+    try {
+      pending = as.respondRemote(raw, session.core, cx);
+    } catch (error) {
+      endBusy();
+      finishFallback(raw, 'bad');
       return;
     }
 
-    /* 上下文账本校验：进助手后换过账本，旧 Chip 立即失效（防跨账本串数据） */
-    if (contextChip && !contextChipValid(cx)) {
-      contextChip = null;
-      renderCtxRow();
-    }
-    /* Chip 快照随对话状态传给 respond（洞察类问题继承账期/分类用） */
-    if (session.state) { session.state.contextChip = contextChip || null; }
+    Promise.resolve(pending).then(function (out) {
+      /* 过期响应一律丢弃（用户已经发了新的一句） */
+      if (token !== session.token) { return; }
+      endBusy();
+      var reply = (out && out.reply) || { kind: 'hint', text: '我这边没有拿到结果，再说一次试试。' };
+      session.core = (out && out.state) || session.core;
+      var mode = out && out.mode === 'online' ? 'online' : 'fallback';
+      var reason = (out && out.reason) || 'bad';
+      setMode(mode, mode === 'online' ? '' : reason);
+      afterReply(raw, reply, { mode: mode, reason: reason });
+    }, function () {
+      if (token !== session.token) { return; }
+      endBusy();
+      finishFallback(raw, 'bad');
+    });
+  }
 
+  /* 远端彻底失败（正常不会走到：respondRemote 自带回落，这里只是兜底） */
+  function finishFallback(raw, reason) {
+    var as = assistant();
+    var out = null;
+    try { out = as.respond(raw, session.core, cxNow()); } catch (error) { out = null; }
+    var reply = (out && out.reply) || { kind: 'hint', text: '我这边没有拿到结果，再说一次试试。' };
+    session.core = (out && out.state) || session.core;
+    setMode('fallback', reason);
+    afterReply(raw, reply, { mode: 'fallback', reason: reason });
+  }
+
+  /* 本地解析：不经网络，同步返回 */
+  function sendLocal(raw, reason) {
+    var as = assistant();
+    var cx = cxNow();
+    if (!as || !cx) { return; }
     var out;
     try {
-      out = as.respond(raw, session.state, cx);
+      out = as.respond(raw, session.core, cx);
     } catch (error) {
-      pushTurn({ who: 'bot', text: '我这边出问题了，再试一次或手动记一笔', tone: 'err' });
+      pushTurn({ who: 'bot', text: '我这边出问题了，再试一次或手动记一笔', tone: 'err', mode: 'local', raw: raw });
+      restoreInput(raw);
       paint();
+      scrollToEnd(true);
       return;
     }
-    session.state = out.state || session.state;
+    session.core = out.state || session.core;
     var reply = out.reply || { kind: 'hint', text: '' };
+    setMode('local', reason || 'none');
+    afterReply(raw, reply, { mode: 'local', reason: reason || 'none' });
+  }
 
-    /* 本地使用统计（P0-5）：只计数，不记内容 */
-    bumpMetric('ask');
-    if (reply.kind === 'insight') { bumpMetric('insight'); }
-    else if (reply.kind === 'query') { bumpMetric('query'); }
-    else if (reply.kind === 'preview') { bumpMetric('draft'); }
+  /* 「改用本地解析」按钮：跳过联网，直接跑规则引擎 */
+  function submitLocalOnly(raw) {
+    var cfg = configNow();
+    sendLocal(raw, localReason(cfg));
+  }
+
+  function needsInputBack(reply, meta) {
+    if (meta && meta.mode === 'fallback') { return true; }
+    if (reply && reply.tone === 'err') { return true; }
+    if (reply && reply.code && String(reply.code).indexOf('E_') === 0) { return true; }
+    return false;
+  }
+
+  function restoreInput(raw) {
+    if (!host || !host.input || !raw) { return; }
+    if (host.input.value) { return; }
+    host.input.value = String(raw);
+    autoGrow(host.input);
+  }
+
+  function afterReply(raw, reply, meta) {
+    var as = assistant();
 
     /* 草稿是否需要写进 prefs：只在「待确认」时留，确认/放弃后清掉 */
-    if (reply.kind === 'preview' && reply.plan) {
+    if (reply && reply.kind === 'preview' && reply.plan && as && as.draft && as.draft.save) {
       as.draft.save(reply.plan, { note: 'waiting-confirm' });
     }
 
-    pushTurn({ who: 'bot', reply: reply });
+    var turn = {
+      who: 'bot',
+      reply: reply,
+      raw: raw,
+      mode: meta ? meta.mode : 'local',
+      reason: meta ? meta.reason : ''
+    };
+    if (needsInputBack(reply, meta)) { restoreInput(raw); }
+
+    pushTurn(turn);
     paint();
     refreshBanner();
     scrollToEnd(true);
     renderChips();
-
-    /* 本地听不懂（hint 兜底）才考虑云端；其他 kind 一律不调模型（P0-3） */
-    maybeEnhance(raw, reply);
+    queueNext();
   }
 
   function markConsumed(plan) {
@@ -1506,8 +1139,9 @@
     var cx = cxNow();
     if (!as || !cx) { return; }
     if (session.busy) { return; }
-    session.busy = true;
-    if (host && host.send) { host.send.disabled = true; }
+    beginBusy('正在写入…', 'writing');
+    paint();
+    scrollToEnd(true);
 
     var confirmPlan = plan;
     if (opts && opts.forced) {
@@ -1521,18 +1155,16 @@
     }
 
     as.execute(confirmPlan, cx).then(function (res) {
-      session.busy = false;
-      if (host && host.send) { host.send.disabled = false; }
+      endBusy();
       if (!res || !res.ok) {
-        pushTurn({ who: 'bot', text: (res && res.message) || '没写成功，请再试一次', tone: 'err' });
+        pushTurn({ who: 'bot', text: (res && res.message) || '没写成功，请再试一次', tone: 'err', mode: 'local' });
         paint();
         scrollToEnd(true);
         return;
       }
       var result = res.result || {};
-      bumpMetric('confirm');
       /* 写入成功后：草稿作废、这一屏的确认按钮收掉，否则横幅会一直说「上次还有 N 笔没确认」 */
-      if (session.state) { session.state.draft = null; session.state.pending = null; }
+      if (session.core) { session.core.draft = null; session.core.pending = null; }
       if (as.draft && as.draft.clear) { as.draft.clear(); }
       markConsumed(plan);
       var created = (result.created || []).length;
@@ -1543,24 +1175,70 @@
       if (updated) { parts.push('修改 ' + updated + ' 笔'); }
       if (deleted) { parts.push('删除 ' + deleted + ' 笔'); }
       var doneText = res.already ? '这几笔之前已经记过了，没有重复入账' : ('搞定，' + (parts.join('、') || '已写入'));
-      pushTurn({ who: 'bot', text: doneText, tone: 'ok' });
-      /* 俏皮点评：新增入账时，挑第一笔支出/收入补一句 ≤40 字调侃；取不到就静默跳过 */
-      if (created && !res.already && XZB.core && XZB.core.quips && plan && plan.items) {
-        for (var qi = 0; qi < plan.items.length; qi += 1) {
-          var quipText = XZB.core.quips.for(plan.items[qi]);
-          if (quipText) { pushTurn({ who: 'bot', text: quipText }); break; }
-        }
-      }
+      pushTurn({ who: 'bot', text: doneText, tone: 'ok', mode: 'local' });
       paint();
-      refreshBanner();
       scrollToEnd(true);
-      /* 不弹全局 toast：它固定在底部、会盖住输入框；撤销入口已经在顶部横幅里了。 */
+      /* 成功后的撤销条不依赖 toast 的 5s：屏内自绘，8s 常驻（C3=A）。
+       * 只有真动过账目才出条：already（幂等重放）指向的是上一笔无关记录，不能给撤销。 */
+      var touched = created + updated + deleted;
+      if (touched) { showUndoBar(touched); }
+      refreshBanner();
+      queueNext();
     }, function () {
-      session.busy = false;
-      if (host && host.send) { host.send.disabled = false; }
-      pushTurn({ who: 'bot', text: '写入失败，请再试一次', tone: 'err' });
+      endBusy();
+      pushTurn({ who: 'bot', text: '写入失败，请再试一次', tone: 'err', mode: 'local' });
       paint();
+      scrollToEnd(true);
+      queueNext();
     });
+  }
+
+  /* ============================== 撤销条（8s 常驻） ============================== */
+
+  function latestEntry() {
+    var history = historyApi();
+    return history && history.list ? (history.list()[0] || null) : null;
+  }
+
+  function showUndoBar(count) {
+    if (!host || !host.undoBar) { return; }
+    var entry = latestEntry();
+    if (!entry) { return; }
+    session.undoEntry = entry;
+    session.undoUntil = Date.now() + UNDO_MS;
+    var bar = host.undoBar;
+    clear(bar);
+    bar.hidden = false;
+    bar.appendChild(el('span', {
+      className: 's-assistant__banner-text',
+      text: '已记 ' + (count || 1) + ' 笔（助手记账）'
+    }));
+    bar.appendChild(el('button', {
+      className: 's-assistant__undo-bar-btn',
+      type: 'button',
+      'aria-label': '撤销刚才写入的 ' + (count || 1) + ' 笔',
+      onclick: function () { confirmUndo(session.undoEntry); }
+    }, ['撤销']));
+    if (session.undoTimer) { clearTimeout(session.undoTimer); }
+    session.undoTimer = setTimeout(function () {
+      session.undoTimer = null;
+      hideUndoBar();
+      if (host) { refreshBanner(); }
+    }, UNDO_MS);
+  }
+
+  function hideUndoBar() {
+    if (session.undoTimer) { clearTimeout(session.undoTimer); session.undoTimer = null; }
+    session.undoEntry = null;
+    session.undoUntil = 0;
+    if (host && host.undoBar) {
+      host.undoBar.hidden = true;
+      clear(host.undoBar);
+    }
+  }
+
+  function undoBarActive() {
+    return !!(session.undoUntil && session.undoUntil > Date.now());
   }
 
   function undoEntry(entry) {
@@ -1569,11 +1247,38 @@
     if (!as || !cx || !entry) { return; }
     as.undoEntry(entry, cx).then(function (res) {
       var msg = res && res.ok ? '已撤销：' + (entry.summary || entry.label || '') : ((res && res.message) || '撤销失败');
-      if (res && res.ok) { bumpMetric('undo'); }
       XZB.ui.toast.show(msg, { type: res && res.ok ? 'success' : 'danger' });
+      hideUndoBar();
       if (host) { paint(); refreshBanner(); }
     }, function () {
       XZB.ui.toast.show('撤销失败', { type: 'danger' });
+    });
+  }
+
+  /* 统一的撤销确认：撤销条与撤销历史屏共用同一套语义 */
+  function confirmUndo(entry, after) {
+    if (!entry) { return; }
+    XZB.ui.sheet.confirm({
+      title: '撤销这次操作？',
+      message: (entry.summary || entry.label || '') + '\n撤销会按记录逐条改回；改不回去的条目会被跳过并告诉你。',
+      confirmLabel: '撤销',
+      kind: 'danger',
+      onConfirm: function (close) {
+        close();
+        var as = assistant();
+        var cx = cxNow();
+        if (!as || !cx) { return; }
+        as.undoEntry(entry, cx).then(function (res) {
+          if (res && res.ok) {
+            XZB.ui.toast.show('已撤销：' + (entry.summary || ''), { type: 'success' });
+          } else {
+            XZB.ui.toast.show((res && res.message) || '撤销失败', { type: 'danger' });
+          }
+          if (typeof after === 'function') { after(); }
+        }, function () {
+          XZB.ui.toast.show('撤销失败', { type: 'danger' });
+        });
+      }
     });
   }
 
@@ -1594,16 +1299,6 @@
       return;
     }
 
-    /* 云端增强连续失败才升到 banner（§10.4：只读存储 > 降级持续 > 未确认草稿） */
-    if (AI.fails >= 2) {
-      banner.hidden = false;
-      append(banner, [
-        icon('warning', 18),
-        el('span', { className: 's-assistant__banner-text', text: '云端增强连续没答上，已自动切回本机；账目不受影响，稍后可再试。' })
-      ]);
-      return;
-    }
-
     var as = assistant();
     var history = historyApi();
     var last = history && history.list ? (history.list()[0] || null) : null;
@@ -1612,7 +1307,7 @@
     if (draft && draft.plan) {
       onScreen = session.turns.some(function (turn) {
         return turn.who === 'bot' && turn.reply && turn.reply.kind === 'preview' &&
-          turn.reply.plan && turn.reply.plan.id === draft.plan.id && !turn.consumed;
+          turn.reply.plan && turn.reply.plan.id === draft.plan.id && !turn.consumed && !turn.dismissed;
       });
     }
     if (draft && draft.plan && draft.plan.kind === 'create' && (draft.plan.items || []).length && !onScreen) {
@@ -1623,6 +1318,7 @@
         el('button', {
           className: 's-assistant__banner-btn',
           type: 'button',
+          'aria-label': '接着确认上次那批',
           onclick: function () {
             var asX = assistant();
             var cxX = cxNow();
@@ -1640,7 +1336,9 @@
                 plan: draft.plan,
                 canConfirm: view ? !view.blocked : false,
                 needDupConfirm: rows.some(function (row) { return row.dup; })
-              }
+              },
+              mode: 'local',
+              reason: 'none'
             });
             paint();
             scrollToEnd(true);
@@ -1650,7 +1348,8 @@
       return;
     }
 
-    if (last && !session.busy && session.turns.length > 1) {
+    /* 撤销条在的这 8 秒里，横幅让位，避免两处撤销入口同时出现 */
+    if (last && !session.busy && session.turns.length > 1 && !undoBarActive()) {
       banner.hidden = false;
       append(banner, [
         icon('undo', 18),
@@ -1658,34 +1357,29 @@
         el('button', {
           className: 's-assistant__banner-btn',
           type: 'button',
+          'aria-label': '撤销刚才的操作',
           onclick: function () { undoEntry(last); }
         }, ['撤销'])
       ]);
     }
   }
 
-  /* ============================== 语音（可选增强） ============================== */
-
-  /* P0-5 首次点麦克风先讲清楚：语音识别走浏览器服务，文字与账目仍只存本机。
-   * 同意一次后记 prefs，之后不再打扰。 */
-  function startVoiceWithConsent(voice, onState) {
-    if (prefFlag('assistant.voiceAgreed')) {
-      voice.toggle(onState);
-      return;
-    }
-    confirmSheet(host && host.ctx, {
-      title: '语音输入说明',
-      text: '语音识别由你的浏览器或系统服务处理，可能不是端上完成；识别出的文字和之后的账目数据都只保存在本机，不会上传给小账本。',
-      okLabel: '知道了',
-      onOk: function () {
-        var prefs = XZB.app && XZB.app.prefs;
-        if (prefs && typeof prefs.set === 'function') {
-          try { prefs.set('assistant.voiceAgreed', true); } catch (error) { /* 存不上就下次再问 */ }
-        }
-        voice.toggle(onState);
-      }
+  function renderChips() {
+    if (!host) { return; }
+    var row = host.chipRow;
+    clear(row);
+    if (session.turns.length > 3) { return; }
+    QUICK_EXAMPLES.forEach(function (text) {
+      row.appendChild(el('button', {
+        className: 's-assistant__chip',
+        type: 'button',
+        'aria-label': '示例：' + text + '（点了只填进输入框）',
+        onclick: function () { fillInput(text); }
+      }, [text]));
     });
   }
+
+  /* ============================== 语音（可选增强） ============================== */
 
   function makeVoice(handlers) {
     var Ctor = global.SpeechRecognition || global.webkitSpeechRecognition;
@@ -1787,6 +1481,7 @@
           row.appendChild(el('button', {
             className: 's-assistant__filter' + (active ? ' is-active' : ''),
             type: 'button',
+            'aria-label': group.label + '：' + pair[1],
             'aria-pressed': active ? 'true' : 'false',
             onclick: function () {
               historyFilter[group.key] = pair[0];
@@ -1828,35 +1523,12 @@
             el('button', {
               className: 's-assistant__hcard-btn',
               type: 'button',
-              onclick: function () { confirmUndo(entry); }
+              'aria-label': '撤销：' + (entry.summary || entry.label || '这条记录'),
+              onclick: function () { confirmUndo(entry, paintList); }
             }, ['撤销'])
           ])
         ]);
         listHost.appendChild(card);
-      });
-    }
-
-    function confirmUndo(entry) {
-      confirmSheet(ctx, {
-        title: '撤销这次操作？',
-        text: (entry.summary || entry.label || '') + '\n撤销会按记录逐条改回；改不回去的条目会被跳过并告诉你。',
-        okLabel: '撤销',
-        danger: true,
-        onOk: function () {
-          var as = assistant();
-          var cx = cxNow();
-          if (!as || !cx) { return; }
-          as.undoEntry(entry, cx).then(function (res) {
-            if (res && res.ok) {
-              XZB.ui.toast.show('已撤销：' + (entry.summary || ''), { type: 'success' });
-            } else {
-              XZB.ui.toast.show((res && res.message) || '撤销失败', { type: 'danger' });
-            }
-            paintList();
-          }, function () {
-            XZB.ui.toast.show('撤销失败', { type: 'danger' });
-          });
-        }
       });
     }
   }
@@ -1865,44 +1537,17 @@
     var history = historyApi();
     if (!history) { return; }
     if (!history.list().length) { toast(ctx, '还没有记录', 'info'); return; }
-    confirmSheet(ctx, {
+    XZB.ui.sheet.confirm({
       title: '清空撤销历史？',
-      text: '只清空「可撤销的记录」，已经记好的账不受影响。',
-      okLabel: '清空',
-      danger: true,
-      onOk: function () {
+      message: '只清空「可撤销的记录」，已经记好的账不受影响。',
+      confirmLabel: '清空',
+      kind: 'danger',
+      onConfirm: function (close) {
+        close();
         history.clear();
         toast(ctx, '已清空', 'success');
         if (ctx && ctx.refresh) { ctx.refresh(); }
       }
-    });
-  }
-
-  /* ============================== 通用确认浮层 ============================== */
-
-  function confirmSheet(ctx, opts) {
-    var sheet = XZB.ui && XZB.ui.sheet;
-    if (!sheet || typeof sheet.open !== 'function') {
-      if (global.confirm && global.confirm(opts.title + '\n' + (opts.text || ''))) {
-        if (typeof opts.onOk === 'function') { opts.onOk(); }
-      }
-      return;
-    }
-    var content = el('div', { className: 's-assistant__confirm' }, [
-      el('p', { className: 's-assistant__confirm-text', text: opts.text || '' })
-    ]);
-    sheet.open({
-      title: opts.title || '确认',
-      content: content,
-      actions: [
-        { label: '取消', kind: 'default' },
-        {
-          label: opts.okLabel || '确定',
-          kind: opts.danger ? 'danger' : 'primary',
-          closeOnClick: true,
-          onClick: function () { if (typeof opts.onOk === 'function') { opts.onOk(); } }
-        }
-      ]
     });
   }
 
@@ -1935,7 +1580,8 @@
   }
 
   function destroy() {
-    if (host && host.voice) { /* 语音不额外收尾 */ }
+    clearTimers();
+    hideUndoBar();
     host = null;
   }
 

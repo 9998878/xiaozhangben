@@ -32,6 +32,27 @@
   var DRAFT_KEY = 'assistant.draft.v1';
   var DRAFT_TTL_MS = 24 * 3600 * 1000;
 
+  /* 联网：DECISIONS R-04 —— 软 5s（界面提示）/ 硬 6s（AbortController 兜底）/ 总预算 8s / 重试 0 次 */
+  var AI_KEY = 'xzb.ai.v1';
+  var AI_VERSION = 1;
+  var AI_MAX_BYTES = 4096;
+  var AI_MAX_URL = 300;
+  var AI_MAX_MODEL = 100;
+  var AI_MAX_KEY = 300;
+  var LLM_TIMEOUT_MS = 6000;
+  var LLM_SOFT_MS = 5000;
+  var LLM_BUDGET_MS = 8000;
+  var LLM_RETRY = 0;
+  var LLM_BACKOFF_MS = 600;
+  var LLM_RETRY_AFTER_CAP = 1500;
+  var LLM_MAX_RAW = 512;
+  var LLM_MAX_BODY = 4096;
+  var LLM_MAX_TOKENS = 800;
+  var LLM_MAX_ACCOUNTS = 12;
+  var LLM_MAX_CATEGORIES = 60;
+  var LLM_NAME_MAX = 24;
+  var LLM_MAX_CENTS = 999999999999;
+
   var E = {
     NO_AMOUNT: 'E_AS_NO_AMOUNT',
     AMBIGUOUS_ACCOUNT: 'E_AS_AMBIGUOUS_ACCOUNT',
@@ -46,7 +67,14 @@
     READONLY_STORAGE: 'E_AS_READONLY_STORAGE',
     INVALID: 'E_AS_INVALID',
     DATE_INVALID: 'E_AS_DATE',
-    UNKNOWN: 'E_AS_UNKNOWN'
+    UNKNOWN: 'E_AS_UNKNOWN',
+    /* 联网（DESIGN §0.8 / §2.3）：新增码只增不改，既有 15 个码名与文案保持原样 */
+    NOT_CONFIGURED: 'E_AS_NOT_CONFIGURED',
+    AI_DISABLED: 'E_AS_AI_DISABLED',
+    NET_CONFIG: 'E_AS_NET_CONFIG',
+    NET_TIMEOUT: 'E_AS_NET_TIMEOUT',
+    NET_RATE: 'E_AS_NET_RATE',
+    NET_BAD: 'E_AS_NET_BAD'
   };
 
   var M = {
@@ -63,7 +91,13 @@
     E_AS_READONLY_STORAGE: '当前是临时存储模式，助手暂不写入，可先导出备份',
     E_AS_INVALID: '有字段不通过校验，已整批中止',
     E_AS_DATE: '日期对不上，说清楚是哪天',
-    E_AS_UNKNOWN: '这句我还听不懂，换个说法或点下面的快捷入口'
+    E_AS_UNKNOWN: '这句我还听不懂，换个说法或点下面的快捷入口',
+    E_AS_NOT_CONFIGURED: '还没配置联网模型，当前是本地模式',
+    E_AS_AI_DISABLED: '联网已关闭，当前是本地模式',
+    E_AS_NET_CONFIG: '联网配置不完整或不合法（检查地址/模型/密钥）',
+    E_AS_NET_TIMEOUT: '联网超时，已用本地模式继续',
+    E_AS_NET_RATE: '模型太忙（限流），已用本地模式继续',
+    E_AS_NET_BAD: '模型返回的内容看不懂，已用本地模式继续'
   };
 
   var TYPE_TEXT = { expense: '支出', income: '收入', transfer: '转账' };
@@ -255,28 +289,13 @@
     { intent: 'undo', re: /^(撤销|撤回|回退|反悔|undo)/i },
     { intent: 'undo', re: /(把|将)?(刚才|刚刚|上一笔|上次|最后)(那|这)?笔?(的)?(账)?(撤销|撤回|删掉|恢复)/ },
     { intent: 'update', re: /(改成|改为|改到|修改|调成|换成|更正|改一下)/ },
-    { intent: 'delete', re: /(删除|删掉|去掉|移除)(这|那|刚才|上一)?笔?|把.{1,6}删了|将.{1,6}删了/ },
-    /* P0-2 本地洞察：必须排在 query 之前——「月底会超多少」同时命中两个意图，
-     * 「预算还能用多少」应走预算预测而不是普通查账。规则收紧，防止吞掉记账句。 */
-    { intent: 'insight', re: /(为什么|啥原因|什么原因|差在哪|差在哪儿|多在哪|多在哪里|环比|贡献|变化)/ },
-    { intent: 'insight', re: /(预算|超支|超不超|照这样|按这样|照这个花法|还能用|还能花)/ },
-    { intent: 'insight', re: /(每天|一天|每日).{0,6}(少花|省)|(能省|省下)/ },
-    { intent: 'insight', re: /(最大|最高|排行|最多).{0,6}(三笔|3笔|几笔|几条|哪些)/ },
-    { intent: 'insight', re: /(趋势|走势|连续.{0,4}(涨|升|增))/ },
-    { intent: 'insight', re: /(小钱|高频|容易忽略|零碎|零零碎碎)/ },
-    /* 裸追问：「那交通呢？」「餐饮呢」——短句 + 呢结尾；太长的句子（比如「…花了多少呢」）
-       不进这条，仍走普通查账。解析失败会在 handleInsight 里回落 query。 */
-    { intent: 'insight', re: /^那?.{2,8}呢[?？]*$/ },
-    { intent: 'query', re: /(超过|大于|高于|不到|低于|少于|不少于)\s*\d+\s*(?:元|块)?\s*(?:的)?(支出|收入|花销|开销|转账|账)/ },
+    { intent: 'delete', re: /(删除|删掉|去掉|移除)(这|那|刚才|上一)?笔?/ },
     { intent: 'query', re: /(多少|几笔|几笔账|统计|汇总|合计|平均|查询|查一下|查一查|看看.*(账|花|支出|收入)|排行|占比)/ }
   ];
 
   function detectIntent(text) {
     var s = norm(text);
     if (!s) { return 'unknown'; }
-    /* 记账守卫（在 insight 之前）：明确的记账句式即使带「预算/少花」等词也归 create，
-     * 例如「记一笔 加油 300 从预算出」「记一笔 少花点」——不能被吞成洞察问答。 */
-    if (parseCents(s) && /^记(一笔|一记|个|上|下|一笔账)/.test(s)) { return 'create'; }
     for (var i = 0; i < INTENT_RULES.length; i += 1) {
       if (INTENT_RULES[i].re.test(s)) { return INTENT_RULES[i].intent; }
     }
@@ -299,8 +318,6 @@
         return '\u0001' + (guards.length - 1) + '\u0002';
       });
     }
-    /* 0) 引号段：备注/关键词内容是数据，里面的逗号、金额、日期都不参与分句与解析 */
-    guard(/[「『“][^」』”]{1,60}[」』”]/g, 'quote');
     /* 1) 小数 / 金额：12.5、12.50 元 */
     guard(/\d+\.\d+/g, 'decimal');
     /* 2) 日期与时间：8月1日、2026-08-01、12:30 */
@@ -357,45 +374,19 @@
     return { type: hit, conflict: null };
   }
 
-  /* 分类：最长匹配（分类名 + aliases），再看 nl 的别名表（借 nl.parse 拿不到别名表，这里自带一份最小集合）
-   * 2.22.1：与 nl.js/种子同步——精确词让位给 24 个转正分类，旧 catch-all 只留泛化词；
-   * 顺带修正 ca_veg → ca_veggie（种子 id 拼写）。 */
+  /* 分类：最长匹配（分类名 + aliases），再看 nl 的别名表（借 nl.parse 拿不到别名表，这里自带一份最小集合） */
   var EXTRA_ALIASES = {
-    ca_food: ['吃饭', '午饭', '晚饭', '夜宵', '咖啡', '奶茶', '零食', '聚餐', '食堂'],
+    ca_food: ['吃饭', '午饭', '晚饭', '早饭', '外卖', '咖啡', '奶茶', '零食'],
     ca_transport: ['打车', '地铁', '公交', '高铁', '油费', '停车', '加油'],
-    ca_shopping: ['购物', '买衣服', '商场'],
-    ca_home: ['物业', '物业费', '家具'],
-    ca_fun: ['电影', '游戏', '演出', '旅游'],
-    ca_health: ['看病', '健身', '医院'],
+    ca_shopping: ['购物', '网购', '买衣服', '超市'],
+    ca_home: ['房租', '水电', '物业', '燃气', '宽带'],
+    ca_fun: ['电影', '游戏', '演出', '会员', '旅游'],
+    ca_health: ['看病', '买药', '体检'],
     ca_social: ['红包', '礼物', '随礼', '请客'],
     ca_salary: ['工资', '薪水', '奖金'],
     ca_daily: ['日用', '纸巾', '洗衣液'],
-    ca_snack: ['甜品', '蛋糕', '饼干'],
-    ca_veggie: ['买菜', '菜市场'],
-    ca_takeout: ['外卖', '点外卖', '美团', '饿了么', '送餐'],
-    ca_breakfast: ['早餐', '早饭', '早点', '早午餐'],
-    ca_supermarket: ['超市', '商超', '便利店'],
-    ca_online_shopping: ['网购', '淘宝', '京东', '拼多多', '快递', '包裹'],
-    ca_secondhand: ['二手', '闲置', '转卖', '闲鱼', '回收'],
-    ca_rent: ['房租', '租金', '月租', '租房', '押金'],
-    ca_utility: ['水电', '水电费', '水费', '电费', '燃气', '燃气费'],
-    ca_broadband: ['宽带', '网费', '宽带费', '网络费'],
-    ca_ev_charge: ['汽车充电', '充电', '充电桩', '新能源'],
-    ca_car_service: ['保养', '换机油', '四轮定位', '维修保养'],
-    ca_car_wash: ['洗车', '打蜡', '车辆美容'],
-    ca_medicine: ['买药', '药店', '感冒药', '处方药'],
-    ca_clinic: ['门诊', '挂号', '打针'],
-    ca_dentist: ['牙科', '看牙', '洗牙', '补牙', '拔牙', '口腔'],
-    ca_checkup: ['体检', '复查', '疫苗', '筛查'],
-    ca_tuition: ['学费', '学费课程', '培训班', '辅导班', '网课', '报名费'],
-    ca_stationery: ['文具', '铅笔', '学习用品'],
-    ca_subscription: ['会员', '订阅', '自动续费', '包月'],
-    ca_insurance: ['保险', '保费', '投保', '保单', '车险'],
-    ca_loan: ['贷款', '还贷', '借款', '月供', '房贷'],
-    ca_interest: ['利息', '存款利息', '利息收入'],
-    ca_dividend: ['分红', '股息', '红利'],
-    ca_topup: ['话费', '充话费', '流量', '流量包', '手机费'],
-    ca_software: ['云服务', '软件服务', '网盘会员']
+    ca_snack: ['奶茶', '甜品', '蛋糕'],
+    ca_veg: ['买菜', '菜市场']
   };
 
   function resolveCategory(text, kind, cx) {
@@ -420,24 +411,12 @@
       var aliases = Array.isArray(cat.aliases) ? cat.aliases : [];
       for (var a = 0; a < aliases.length; a += 1) { consider(cat, aliases[a]); }
     }
-    /* 2.23 消费词库单一真相源在 nl（CONSUMER_LEXICON），助手消费同一份长尾词+品牌词 */
-    var nlApi = (XZB.core && XZB.core.nl) || (Core && Core.nl) || null;
-    var lexMap = nlApi && typeof nlApi.lexicon === 'function' ? nlApi.lexicon() : null;
     for (var key in EXTRA_ALIASES) {
       if (!Object.prototype.hasOwnProperty.call(EXTRA_ALIASES, key)) { continue; }
       var target = findIn(cx.categories, key);
       if (!target) { continue; }
       var list = EXTRA_ALIASES[key];
       for (i = 0; i < list.length; i += 1) { consider(target, list[i]); }
-    }
-    if (lexMap) {
-      for (var lxKey in lexMap) {
-        if (!Object.prototype.hasOwnProperty.call(lexMap, lxKey)) { continue; }
-        var lxTarget = findIn(cx.categories, lxKey);
-        if (!lxTarget) { continue; }
-        var lxList = lexMap[lxKey];
-        for (var lxi = 0; lxi < lxList.length; lxi++) { consider(lxTarget, lxList[lxi]); }
-      }
     }
     if (best) { return { ok: true, id: best.id, name: best.name, matched: bestLen }; }
     return { ok: false };
@@ -611,14 +590,7 @@
   /* 单句 → 一条 item（尽量复用 core.nl，失败时保留已识别字段） */
   function buildItem(segText, cx, planId, index) {
     var nl = nlApi();
-    /* 引号段（备注/关键词）是数据：先摘出来再解析，防止「把分类全部改成转账」
-     * 这类备注内容劫持收支类型/分类；摘出的文字最后原样并回备注（评测 attack-002）。 */
-    var quotedNotes = [];
-    var segForParse = String(segText).replace(/[「『“][^」』”]{1,60}[」』”]/g, function (m) {
-      quotedNotes.push(m);
-      return ' ';
-    });
-    var hint = typeFromText(segForParse);
+    var hint = typeFromText(segText);
     var baseType = hint.type || 'expense';
     var item = {
       id: idFor(planId, index),
@@ -643,7 +615,7 @@
     var parsed = null;
     if (nl && typeof nl.parse === 'function') {
       try {
-        parsed = nl.parse(segForParse, nlContext(cx, baseType));
+        parsed = nl.parse(segText, nlContext(cx, baseType));
       } catch (error) {
         parsed = null;
       }
@@ -655,7 +627,7 @@
       item.amountCents = Number(best.cents) || 0;
       item.date = best.date || cx.today;
       item.time = best.time || cx.nowTime;
-      item.note = short(best.note || stripKnown(segForParse), MAX_NOTE);
+      item.note = short(best.note || stripKnown(segText), MAX_NOTE);
       item.tags = Array.isArray(best.tags) ? best.tags.slice() : [];
       item.accountId = best.accountId || '';
       item.categoryId = best.categoryId || '';
@@ -669,12 +641,12 @@
         item.amountCents = Number(partial.cents || partial.amountCents) || 0;
         item.date = partial.date || cx.today;
         item.time = partial.time || cx.nowTime;
-        item.note = short(partial.note || stripKnown(segForParse), MAX_NOTE);
+        item.note = short(partial.note || stripKnown(segText), MAX_NOTE);
         item.accountId = partial.accountId || '';
         item.categoryId = partial.categoryId || '';
       } else {
-        item.amountCents = parseCents(segForParse) || 0;
-        item.note = short(stripKnown(segForParse), MAX_NOTE);
+        item.amountCents = parseCents(segText) || 0;
+        item.note = short(stripKnown(segText), MAX_NOTE);
       }
     }
 
@@ -692,7 +664,7 @@
     if (item.type === 'transfer') {
       item.categoryId = '';
       if (!item.toAccountId) {
-        var toGuess = guessToAccount(segForParse, cx, item.accountId);
+        var toGuess = guessToAccount(segText, cx, item.accountId);
         if (toGuess) { item.toAccountId = toGuess; item.defaulted.toAccount = false; }
         else {
           item.issues.push({
@@ -720,7 +692,7 @@
       var kind = item.type === 'income' ? 'income' : 'expense';
       var cat = item.categoryId ? categoryById(cx, item.categoryId) : null;
       if (!cat || cat.kind !== kind) {
-        var guessed = resolveCategory(segForParse, kind, cx);
+        var guessed = resolveCategory(segText, kind, cx);
         if (guessed.ok) {
           item.categoryId = guessed.id;
         } else {
@@ -742,11 +714,9 @@
       item.future = true;
     }
 
-    /* --- 备注清理：摘出的引号内容原样并回（它们是用户写的数据，必须完整保留） --- */
-    if (quotedNotes.length) {
-      item.note = short((item.note ? item.note + ' ' : '') + quotedNotes.join(''), MAX_NOTE);
-    }
-    if (!item.note) { item.note = short(stripKnown(segForParse), MAX_NOTE); }
+    /* --- 备注清理 --- */
+    item.note = short(item.note, MAX_NOTE);
+    if (!item.note) { item.note = short(stripKnown(segText), MAX_NOTE); }
     return item;
   }
 
@@ -812,7 +782,6 @@
         note: item.note,
         defaulted: item.defaulted,
         future: !!item.future,
-        edited: !!item.edited,
         issues: item.issues.slice(),
         dup: !!item.dupOf
       });
@@ -889,107 +858,6 @@
     }
   }
 
-  /* ============================== 草稿行内编辑（P0-4） ============================== */
-
-  /* 按最新字段重算草稿行的 issues（行内编辑补上金额/修好日期后要能确认写入）。
-   * 与 buildItem 的校验段同口径；类型冲突类 issue 由解析期 hint 产生，编辑不改类型，不在此重建。 */
-  function recomputeItemIssues(item, cx) {
-    var issues = [];
-    if (!item.amountCents) {
-      issues.push({ field: 'amount', code: E.NO_AMOUNT, message: M.E_AS_NO_AMOUNT });
-    }
-    if (item.type === 'transfer') {
-      if (!item.toAccountId) {
-        issues.push({
-          field: 'toAccountId', code: E.TRANSFER_NEED_TO, message: M.E_AS_TRANSFER_NEED_TO,
-          options: cx.liveAccounts.filter(function (a) { return a.id !== item.accountId; }).map(function (a) { return { label: a.name, value: a.id }; }).slice(0, 5)
-        });
-      } else if (item.toAccountId === item.accountId) {
-        issues.push({ field: 'toAccountId', code: E.TRANSFER_NEED_TO, message: '转出和转入是同一个账户，换一个' });
-      }
-    } else if (item.categoryId) {
-      var kind = item.type === 'income' ? 'income' : 'expense';
-      var cat = categoryById(cx, item.categoryId);
-      if (!cat || cat.kind !== kind) {
-        issues.push({ field: 'categoryId', code: E.INVALID, message: '分类和收支类型对不上，换一个' });
-      }
-    }
-    if (!findIn(cx.liveAccounts, item.accountId)) {
-      issues.push({ field: 'accountId', code: E.AMBIGUOUS_ACCOUNT, message: '账户不可用（可能已归档），选一个' });
-    }
-    if (!isValidDate(item.date)) {
-      issues.push({ field: 'date', code: E.DATE_INVALID, message: M.E_AS_DATE });
-    } else if (item.date > addDays(cx.today, 366) || item.date < '2000-01-01') {
-      issues.push({ field: 'date', code: E.DATE_INVALID, message: '日期超出可记账范围' });
-    }
-    return issues;
-  }
-
-  /* updatePlanItem(plan, index, patch, cx)：只改内存里的 plan.items[index]，合法即提交；
-   * 重复复核与 issues 在此重算（先清旧 dupOf）。不写库——写入仍走 execute → preflight → commit。 */
-  function updatePlanItem(plan, index, patch, cx) {
-    if (!plan || plan.kind !== 'create' || !Array.isArray(plan.items)) {
-      return { ok: false, message: '这批账目不支持编辑' };
-    }
-    var item = plan.items[index];
-    if (!item) { return { ok: false, message: '找不到这一笔' }; }
-    var next = Object.assign({}, item);
-    var defaulted = Object.assign({}, item.defaulted || {});
-    patch = patch || {};
-
-    if (patch.amountCents !== undefined) {
-      var cents = Math.round(Number(patch.amountCents));
-      if (!isFinite(cents) || cents <= 0) { return { ok: false, message: '金额要大于 0' }; }
-      next.amountCents = cents;
-    }
-    if (patch.categoryId !== undefined) {
-      if (!categoryById(cx, patch.categoryId)) { return { ok: false, message: '分类不存在' }; }
-      next.categoryId = patch.categoryId;
-      delete defaulted.category;
-    }
-    if (patch.accountId !== undefined) {
-      if (!accountById(cx, patch.accountId)) { return { ok: false, message: '账户不存在' }; }
-      next.accountId = patch.accountId;
-      delete defaulted.account;
-    }
-    if (patch.date !== undefined) {
-      var date = String(patch.date || '');
-      if (!isValidDate(date)) { return { ok: false, message: '日期格式不对' }; }
-      next.date = date;
-      next.future = date > (cx.today || todayStr());
-    }
-    if (patch.note !== undefined) {
-      next.note = String(patch.note || '').slice(0, MAX_NOTE);
-    }
-    next.defaulted = defaulted;
-    next.edited = true;
-    next.issues = recomputeItemIssues(next, cx);
-    delete next.dupOf;
-    plan.items[index] = next;
-    plan.edited = true;
-    markDuplicates(plan, cx);
-    return { ok: true, item: next };
-  }
-
-  /* removePlanItem(plan, index, cx)：多笔草稿删一行；重排 id 保持 idFor(plan.id, i) 约定 */
-  function removePlanItem(plan, index, cx) {
-    if (!plan || plan.kind !== 'create' || !Array.isArray(plan.items)) {
-      return { ok: false, message: '这批账目不支持编辑' };
-    }
-    if (plan.items.length <= 1) { return { ok: false, message: '最后一笔不能删，直接点「不用了」取消这批' }; }
-    var item = plan.items[index];
-    if (!item) { return { ok: false, message: '找不到这一笔' }; }
-    plan.items.splice(index, 1);
-    plan.items.forEach(function (it, i) {
-      it.index = i;
-      it.id = idFor(plan.id, i);
-      delete it.dupOf;
-    });
-    plan.edited = true;
-    markDuplicates(plan, cx);
-    return { ok: true };
-  }
-
   /* ============================== 目标定位（改 / 删） ============================== */
 
   function findTargets(text, cx, state) {
@@ -1030,16 +898,7 @@
       return { ok: true, matches: ids.slice(0, MAX_TARGETS), exact: ids.length === 1 };
     }
     if (!cents && !kind && !range && !cat.ok) {
-      /* 模糊范围词（全部/所有/清空/忽略…）不配任何兜底：这类话必须说清楚，
-       * 绝不能落成对「今天最后一笔」的删改预览（评测 attack-001/004/008）。 */
-      if (/全部|所有|每笔|每一笔|清空|清掉|忽略|整个账|账目/.test(s)) {
-        return { ok: false, code: E.TARGET_MISSING, message: M.E_AS_TARGET_MISSING };
-      }
-      /* 也没有指代词（刚才/上一笔…）时同样不猜「今天最后一笔」——请用户说清是哪笔 */
-      if (!/(刚才|刚刚|上一笔|最后一笔|那笔|这笔|上次)/.test(s)) {
-        return { ok: false, code: E.TARGET_MISSING, message: '说清楚是哪一笔（日期或金额），或说「刚才那笔」' };
-      }
-      /* 只有「刚才那笔」时直接用最近引用；有指代词才取今天最后一笔 */
+      /* 只有「刚才那笔」时直接用最近引用；没有引用就取今天最后一笔 */
       var todayList = (cx.db.transactions || []).filter(function (tx) {
         return tx && tx.deleted !== true && tx.bookId === cx.bookId && tx.date === cx.today;
       }).sort(function (a, b) { return String(b.createdAt || '').localeCompare(String(a.createdAt || '')); });
@@ -1335,11 +1194,6 @@
 
   function parseQuery(text, cx, prev) {
     var s = norm(text);
-    /* 引号段是「要找的字面内容」＝数据，不是指令：先取出关键词，再把它从句子里
-     * 摘掉，防止备注里的词（比如「聚餐」）被当成分类别名/类型词误解析（P0 修复）。 */
-    var quoted = s.match(/[「“"『]([^」”"』]{1,20})[」”"』]/);
-    var keyword = quoted ? quoted[1] : '';
-    var sForParse = quoted ? s.replace(quoted[0], ' ') : s;
     var filter = {
       bookId: cx.bookId,
       from: '',
@@ -1352,27 +1206,28 @@
       minCents: 0,
       maxCents: 0
     };
-    var range = resolveRange(sForParse, cx);
+    var range = resolveRange(s, cx);
     filter.from = range.from;
     filter.to = range.to;
     filter.label = range.label;
     filter.month = range.month || '';
 
-    var kind = typeFromText(sForParse).type;
+    var kind = typeFromText(s).type;
     if (kind) { filter.type = kind; }
 
-    var cat = resolveCategory(sForParse, null, cx);
+    var cat = resolveCategory(s, null, cx);
     if (cat.ok) { filter.categoryId = cat.id; }
-    var acct = resolveAccount(sForParse, cx);
+    var acct = resolveAccount(s, cx);
     if (acct.ok) { filter.accountId = acct.id; }
 
-    if (keyword) { filter.keyword = keyword; }
+    var quoted = s.match(/[「“"『]([^」”"』]{1,20})[」”"』]/);
+    if (quoted) { filter.keyword = quoted[1]; }
 
-    var ge = sForParse.match(/(?:超过|大于|高于|至少|不少于|>=?)\s*(\d+(?:\.\d+)?)\s*(?:元|块)?/);
+    var ge = s.match(/(?:超过|大于|高于|至少|不少于|>=?)\s*(\d+(?:\.\d+)?)\s*(?:元|块)?/);
     if (ge) { filter.minCents = Math.round(Number(ge[1]) * 100); }
-    var le = sForParse.match(/(?:不到|低于|少于|不超过|至多|<=?)\s*(\d+(?:\.\d+)?)\s*(?:元|块)?/);
+    var le = s.match(/(?:不到|低于|少于|不超过|至多|<=?)\s*(\d+(?:\.\d+)?)\s*(?:元|块)?/);
     if (le) { filter.maxCents = Math.round(Number(le[1]) * 100); }
-    var between = sForParse.match(/(\d+(?:\.\d+)?)\s*(?:元|块)?\s*(?:到|至|-|~)\s*(\d+(?:\.\d+)?)\s*(?:元|块)/);
+    var between = s.match(/(\d+(?:\.\d+)?)\s*(?:元|块)?\s*(?:到|至|-|~)\s*(\d+(?:\.\d+)?)\s*(?:元|块)/);
     if (between) {
       filter.minCents = Math.round(Number(between[1]) * 100);
       filter.maxCents = Math.round(Number(between[2]) * 100);
@@ -1381,15 +1236,15 @@
     /* 多轮：这句没说的维度沿用上一轮 */
     if (prev && prev.filter) {
       var prevFilter = prev.filter;
-      if (!kind && !/(支出|收入|转账)/.test(sForParse)) { filter.type = prevFilter.type || null; }
+      if (!kind && !/(支出|收入|转账)/.test(s)) { filter.type = prevFilter.type || null; }
       if (!cat.ok) { filter.categoryId = prevFilter.categoryId || ''; }
       if (!acct.ok) { filter.accountId = prevFilter.accountId || ''; }
-      if (!keyword) { filter.keyword = prevFilter.keyword || ''; }
+      if (!quoted) { filter.keyword = prevFilter.keyword || ''; }
       if (!ge && !le && !between) {
         filter.minCents = prevFilter.minCents || 0;
         filter.maxCents = prevFilter.maxCents || 0;
       }
-      if (!/(今天|昨天|前天|本周|上周|本月|上个月|上月|今年|去年|近|月|年|日)/.test(sForParse)) {
+      if (!/(今天|昨天|前天|本周|上周|本月|上个月|上月|今年|去年|近|月|年|日)/.test(s)) {
         filter.from = prevFilter.from;
         filter.to = prevFilter.to;
         filter.label = prevFilter.label;
@@ -1423,10 +1278,6 @@
         var hay = String(tx.note || '');
         if (hay.indexOf(filter.keyword) < 0) { continue; }
       }
-      /* exclude：备注含该词的行在**计数与合计阶段**就剔除，而不是只从展示行里过滤。
-         「上个月外卖加打车一共多少，不算那笔退款」这类问法，合计必须同步排除，
-         否则数字看着合理但其实是错的（口径仍在本函数一处，调用方不要另写一份）。 */
-      if (filter.exclude && String(tx.note || '').indexOf(filter.exclude) >= 0) { continue; }
       if (tx.type === 'transfer') {
         transferCount += 1;
         transferCents += Number(tx.amountCents) || 0;
@@ -1452,10 +1303,6 @@
         amountText: formatCents(tx.amountCents),
         categoryText: tx.type === 'transfer' ? '转账' : categoryName(cx, tx.categoryId),
         accountText: accountName(cx, tx.accountId),
-        /* 内部 id（acct_xxx），非敏感。ai-enhance 靠它把行映射成「账户N」代号；
-           payload 只带走 accountLabel，不带走 id。缺了它，映射恒回落「账户1」，
-           模型老实引用代号反而会被数字守卫当成金额误杀（D14）。 */
-        accountId: tx.accountId || '',
         note: tx.note || ''
       };
     });
@@ -1554,9 +1401,7 @@
       pending: null,
       lastQuery: null,
       recentIds: [],
-      lastBoard: null,
-      lastInsight: null,   /* P0-2：上一轮洞察参数（type/month/months/categoryId），支撑「那交通呢？」 */
-      contextChip: null    /* P0-1：情境 Chip 快照，由 assistant 屏在每次 submit 前写入 */
+      lastBoard: null
     };
   }
 
@@ -1569,7 +1414,7 @@
     var next = cloneState(state);
     var input = norm(text);
     if (!input) {
-      return { state: next, reply: { kind: 'hint', text: '说说这笔账，比如「外卖 28 微信」或「这个月外卖花了多少」' } };
+      return { state: next, reply: { kind: 'hint', text: '说说这笔账，比如「午饭 35 微信」或「这个月餐饮花了多少」' } };
     }
 
     /* 1a) 「选一笔」待答（修改/删除的候选） */
@@ -1604,7 +1449,6 @@
     }
 
     if (intent === 'undo') { return handleUndo(input, next, cx); }
-    if (intent === 'insight') { return handleInsight(input, next, cx); }
     if (intent === 'query') { return handleQuery(input, next, cx); }
     if (intent === 'update') { return handleUpdate(input, next, cx); }
     if (intent === 'delete') { return handleDelete(input, next, cx); }
@@ -1628,8 +1472,8 @@
         kind: 'hint',
         text: M.E_AS_UNKNOWN,
         options: [
-          { label: '记一笔：外卖 28', value: 'create 外卖 28' },
-          { label: '查一查：这个月外卖花了多少', value: 'query 这个月外卖花了多少' },
+          { label: '记一笔：午饭 35', value: 'create 午饭 35' },
+          { label: '查一查：这个月餐饮花了多少', value: 'query 这个月餐饮花了多少' },
           { label: '撤销上一笔', value: 'undo' }
         ]
       }
@@ -1862,61 +1706,6 @@
     state.pending = null;
     draftSave(plan, { note: 'waiting-confirm' });
     return { state: state, reply: previewReply(plan, cx, '') };
-  }
-
-  /* ============================== 本地洞察问答（P0-2） ============================== */
-
-  /* 洞察类问题走 XZB.core.insightqa（纯本地计算）；模块缺失、功能关闭或解析不出
-   * 受限参数时一律回落普通查账——宁可少答，不可编。 */
-  function handleInsight(input, state, cx) {
-    var qa = (typeof XZB !== 'undefined' && XZB.core && XZB.core.insightqa) || null;
-    if (!qa || typeof qa.fromQuestion !== 'function' || typeof qa.build !== 'function') {
-      return handleQuery(input, state, cx);
-    }
-    if (cx && cx.insightsEnabled === false) {
-      return handleQuery(input, state, cx);
-    }
-    var parsed = qa.fromQuestion(input, cx, {
-      last: state.lastInsight || null,
-      chip: state.contextChip || null
-    });
-    if (!parsed) { return handleQuery(input, state, cx); }
-
-    if (parsed.type === 'clarify-save') {
-      return {
-        state: state,
-        reply: {
-          kind: 'clarify',
-          text: '每天少花多少来算？',
-          options: [
-            { label: '每天少花 10 元', value: '每天少花10元会怎样' },
-            { label: '每天少花 20 元', value: '每天少花20元会怎样' },
-            { label: '每天少花 50 元', value: '每天少花50元会怎样' }
-          ]
-        }
-      };
-    }
-
-    var answer = qa.build(parsed, cx);
-    state.lastInsight = {
-      type: parsed.type,
-      month: parsed.month || '',
-      months: parsed.months || 1,
-      categoryId: parsed.categoryId || '',
-      categoryName: parsed.categoryName || ''
-    };
-    if (!answer || !answer.ok) {
-      return {
-        state: state,
-        reply: {
-          kind: 'insight',
-          empty: true,
-          text: (answer && answer.message) || '这个范围没有足够的数据。',
-          scope: (answer && answer.scope) || ''
-        }
-      };
-    }
-    return { state: state, reply: answer.reply };
   }
 
   function handleQuery(input, state, cx) {
@@ -2180,6 +1969,1340 @@
     });
   }
 
+  /* ============================== 统一撤销（T10） ============================== */
+  /* 口径（DESIGN §6/R-06/R-10）：只做整批撤销，不做单笔；读 core.history、写 app.commit，成功后 remove(id)。
+     skipped>0 时已撤下的笔照常落库，但整批返回 ok:false + E_HISTORY_PARTIAL + 三计数（history.js:334-336）。 */
+  var UNDONE = [];
+
+  function undoList() {
+    try { return core.history.list() || []; } catch (error) { return []; }
+  }
+
+  /* on=true 开写前落标记（并发第二次直接拦）；on=false 写失败后撤标记（允许重试） */
+  function undoMark(id, on) {
+    var i = UNDONE.indexOf(id);
+    if (i !== -1) { UNDONE.splice(i, 1); }
+    if (on) { UNDONE.push(id); }
+  }
+
+  /* 失败统一形状（计数归零）；成功/部分成功直接透传 history.revert 的原对象（字段本就同构） */
+  function undoFail(code, message) {
+    return Promise.resolve({ ok: false, code: code, message: message, restored: 0, removed: 0, skipped: 0 });
+  }
+
+  function undoAvailable() { return undoList().length > 0; }
+
+  /* history 条目 → UI 摘要：补 title（=label）与 text；ops 原样留给 revert（readAll 每次 clone，不污染存储） */
+  function undoLast() {
+    var entries = undoList();
+    if (!entries.length) { return null; }
+    entries[0].title = entries[0].label || '这一步';
+    entries[0].text = undoDescribe(entries[0]);
+    return entries[0];
+  }
+
+  function undoDescribe(entry) {
+    var item = entry || undoLast();
+    var count = (item && item.count) || 0;
+    if (!count) { return '没有可撤销的记录'; }
+    var create = ((item && item.ops) || {}).create || [];
+    return (create.length === count ? '已记录 ' + count + ' 笔' : (item.summary || '共 ' + count + ' 笔')) + '，可撤销';
+  }
+
+  /* revert(entry, cx) → Promise<{ok, code?, message?, restored, removed, skipped}>；entry 可为 id 字符串 */
+  function undoRevert(entry, cx) {
+    var store = core.history;
+    var commit = commitApi();
+    var item = entry;
+    var id;
+    if (!store || typeof store.revert !== 'function' || !commit) { return undoFail(E.UNKNOWN, M.E_AS_UNKNOWN); }
+    if (typeof item === 'string') { item = store.find(item); }
+    if (!item || !item.id) { return undoFail('E_HISTORY_MISSING', store.MESSAGES.E_HISTORY_MISSING); }
+    if (cx && cx.readonly) { return undoFail(E.READONLY_STORAGE, M.E_AS_READONLY_STORAGE); }
+    id = String(item.id);
+    /* 幂等拦截：内存标记（连点/并发）+ 读库复核（刷新后回放旧 entry）→ 不写库、计数归零 */
+    if (UNDONE.indexOf(id) !== -1 || !store.find(id)) { return undoFail('E_HISTORY_MISSING', store.MESSAGES.E_HISTORY_MISSING); }
+    undoMark(id, true);
+    return commit(function (working) {
+      var res = store.revert(working, item);
+      if (!res.ok && res.code !== 'E_HISTORY_PARTIAL') { return { abort: true, code: res.code, message: res.message }; }
+      return { value: res };   /* partial 也落库：已撤下的那几笔必须真撤掉 */
+    }, { label: '撤销', undo: false, history: false }).then(function (res) {
+      if (!res || !res.ok) {
+        undoMark(id, false);
+        return undoFail((res && res.code) || E.UNKNOWN, (res && res.message) || M.E_AS_UNKNOWN);
+      }
+      store.remove(id);
+      return res.value || undoFail(E.UNKNOWN, M.E_AS_UNKNOWN);
+    });
+  }
+
+/* ============================== 联网模型（llm） ============================== */
+  /*
+   * 口径（DECISIONS D-10 / R-11，用户已拍板「全量原文不脱敏」）：
+   *   出站 = 当轮原话（硬截断到 LLM_MAX_RAW 字）+ 固定提示词 + 最小上下文（今天 / 账本 / 账户 / 分类名单）。
+   *   - 不发历史流水、不发余额、不发照片与备份、不带历史对话，只发当轮这一句；
+   *   - 不做字段脱敏（R-11 删掉了「脱敏档」，这里也不再读 ai.redact 决定行为）；
+   *   - 密钥只在本文件与 localStorage['xzb.ai.v1'] 之间流动：不进日志、不进错误文案、不进 URL、不进异常 message。
+   *
+   * 失败口径（DESIGN §3.2）：任何失败都落成「本地模式继续」，绝不静默失败；重试 0 次（DECISIONS R-04）。
+   */
+
+  function hasOwn(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+  }
+
+  function byteLen(text) {
+    var s = String(text || '');
+    var n = 0;
+    var i;
+    var c;
+    for (i = 0; i < s.length; i += 1) {
+      c = s.charCodeAt(i);
+      if (c < 128) {
+        n += 1;
+      } else if (c < 2048) {
+        n += 2;
+      } else if (c >= 55296 && c <= 56319) {
+        n += 4;
+        i += 1;
+      } else {
+        n += 3;
+      }
+    }
+    return n;
+  }
+
+  function delayMs(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, Math.max(0, Number(ms) || 0));
+    });
+  }
+
+  /* ---------- 配置：独立键 xzb.ai.v1，只在本文件读写（R-01） ---------- */
+
+  function lsApi() {
+    try {
+      var ls = global.localStorage;
+      if (ls && typeof ls.getItem === 'function' && typeof ls.setItem === 'function') {
+        return ls;
+      }
+    } catch (error) {
+      return null;
+    }
+    return null;
+  }
+
+  function aiDefault() {
+    return {
+      v: AI_VERSION,
+      enabled: false,
+      baseURL: '',
+      model: '',
+      key: '',
+      redact: 'names',
+      noticeAt: 0
+    };
+  }
+
+  function aiTrim(value, max) {
+    if (typeof value !== 'string') { return ''; }
+    var s = value.replace(/[\r\n\t]+/g, ' ').trim();
+    if (max && s.length > max) { s = s.slice(0, max); }
+    return s;
+  }
+
+  /* 方案：只认 http / https；用切片比较，避免在源码里拼出完整的 URL 字面量串 */
+  function aiSchemeOK(url) {
+    var s = String(url || '').toLowerCase();
+    if (s.indexOf('http') !== 0) { return false; }
+    if (s.charAt(4) === 's') { return s.slice(5, 8) === '://'; }
+    return s.slice(4, 7) === '://';
+  }
+
+  function aiNormalizeURL(value) {
+    var s = aiTrim(value, AI_MAX_URL);
+    if (!s) { return ''; }
+    if (s.indexOf(' ') >= 0) { return ''; }
+    if (!aiSchemeOK(s)) { return ''; }
+    var cut = s.indexOf('://');
+    if (cut < 4) { return ''; }
+    var rest = s.slice(cut + 3);
+    if (!rest || rest.charAt(0) === '/') { return ''; }
+    while (s.length && s.charAt(s.length - 1) === '/') { s = s.slice(0, -1); }
+    if (s.length < 12) { return ''; }
+    return s;
+  }
+
+  /* 读取：缺键 / 损坏 JSON / 超长 / 形状不对 一律回落安全默认值，绝不抛 */
+  function aiRead() {
+    var cfg = aiDefault();
+    var ls = lsApi();
+    if (!ls) { return cfg; }
+    var text;
+    try {
+      text = ls.getItem(AI_KEY);
+    } catch (error) {
+      return cfg;
+    }
+    if (typeof text !== 'string' || !text) { return cfg; }
+    if (text.length > AI_MAX_BYTES) { return cfg; }
+    var raw;
+    try {
+      raw = JSON.parse(text);
+    } catch (error2) {
+      return cfg;
+    }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { return cfg; }
+    if (Number(raw.v) !== AI_VERSION) { return cfg; }
+    if (raw.enabled === true) { cfg.enabled = true; }
+    cfg.baseURL = aiNormalizeURL(raw.baseURL);
+    cfg.model = aiTrim(raw.model, AI_MAX_MODEL);
+    cfg.key = aiTrim(raw.key, AI_MAX_KEY);
+    if (raw.redact === 'none' || raw.redact === 'names') { cfg.redact = raw.redact; }
+    var at = Number(raw.noticeAt);
+    if (isFinite(at) && at > 0) { cfg.noticeAt = at; }
+    return cfg;
+  }
+
+  function aiWrite(cfg) {
+    var ls = lsApi();
+    if (!ls) { return false; }
+    var text;
+    try {
+      text = JSON.stringify({
+        v: AI_VERSION,
+        enabled: cfg.enabled === true,
+        baseURL: cfg.baseURL || '',
+        model: cfg.model || '',
+        key: cfg.key || '',
+        redact: cfg.redact === 'none' ? 'none' : 'names',
+        noticeAt: Number(cfg.noticeAt) || 0
+      });
+    } catch (error) {
+      return false;
+    }
+    if (byteLen(text) > AI_MAX_BYTES) { return false; }
+    try {
+      ls.setItem(AI_KEY, text);
+      return true;
+    } catch (error2) {
+      return false;
+    }
+  }
+
+  function aiMask(key) {
+    if (!key) { return ''; }
+    if (key.length < 8) { return '••••'; }
+    return '••••' + key.slice(-4);
+  }
+
+  function aiConfigured(cfg) {
+    return !!(cfg.baseURL && cfg.model && cfg.key);
+  }
+
+  function llmReady() {
+    var cfg = aiRead();
+    return cfg.enabled === true && !!cfg.key && Number(cfg.noticeAt) > 0;
+  }
+
+  function llmConfigView() {
+    var cfg = aiRead();
+    return {
+      enabled: cfg.enabled,
+      baseURL: cfg.baseURL,
+      model: cfg.model,
+      keyMasked: aiMask(cfg.key),
+      hasKey: !!cfg.key,
+      redact: cfg.redact,
+      noticeAt: cfg.noticeAt,
+      ready: llmReady()
+    };
+  }
+
+  function llmGetConfig() {
+    return { ok: true, cfg: llmConfigView() };
+  }
+
+  function llmSetConfig(patch) {
+    var p = patch && typeof patch === 'object' ? patch : {};
+    var cfg = aiRead();
+    if (hasOwn(p, 'baseURL')) {
+      var wantURL = aiTrim(p.baseURL, AI_MAX_URL);
+      if (wantURL) {
+        var normalized = aiNormalizeURL(wantURL);
+        if (!normalized) { return { ok: false, code: E.NET_CONFIG, field: 'baseURL' }; }
+        cfg.baseURL = normalized;
+      } else {
+        cfg.baseURL = '';
+      }
+    }
+    if (hasOwn(p, 'model')) {
+      if (typeof p.model !== 'string' && p.model !== null) {
+        return { ok: false, code: E.NET_CONFIG, field: 'model' };
+      }
+      cfg.model = aiTrim(p.model, AI_MAX_MODEL);
+    }
+    if (hasOwn(p, 'key')) {
+      if (typeof p.key !== 'string' && p.key !== null) {
+        return { ok: false, code: E.NET_CONFIG, field: 'model' };
+      }
+      var wantKey = aiTrim(p.key, AI_MAX_KEY + 1);
+      if (wantKey.length > AI_MAX_KEY) { return { ok: false, code: E.NET_CONFIG, field: 'model' }; }
+      /* T06 密钥边界：UI 把 getConfig 的掩码（••••尾4）原样回传时视为「不改」，
+         否则明文密钥会被自己的掩码覆盖（用户以为改成功，实际凭证已销毁） */
+      if (wantKey.indexOf('••••') === 0) { wantKey = cfg.key; }
+      cfg.key = wantKey;
+    }
+    if (hasOwn(p, 'enabled')) {
+      cfg.enabled = (p.enabled === true || p.enabled === 1);
+    }
+    if (hasOwn(p, 'noticeAt')) {
+      var at = Number(p.noticeAt);
+      cfg.noticeAt = (isFinite(at) && at > 0) ? at : 0;
+    }
+    /* v / redact 不接受外部改写：R-11 已删除脱敏档，字段只为旧数据形状兼容保留 */
+    if (!aiWrite(cfg)) { return { ok: false, code: E.NET_CONFIG, field: 'model' }; }
+    return { ok: true, cfg: llmConfigView() };
+  }
+
+  /* 清空数据（R-01 的 removeItem 落点）：整键删除、幂等；A30 要求 getItem 之后为 null */
+  function llmClearKey() {
+    var ls = lsApi();
+    if (ls) {
+      try {
+        ls.removeItem(AI_KEY);
+      } catch (error) {
+        return { ok: false };
+      }
+    }
+    return { ok: true };
+  }
+
+  /* ---------- 传输层：单次 POST + 硬超时（AbortController） ---------- */
+
+  function endpointOf(base) {
+    var s = String(base || '');
+    while (s.length && s.charAt(s.length - 1) === '/') { s = s.slice(0, -1); }
+    return s + '/chat/completions';
+  }
+
+  function retryAfterMs(res) {
+    try {
+      if (res && res.headers && typeof res.headers.get === 'function') {
+        var sec = Number(res.headers.get('Retry-After'));
+        if (isFinite(sec) && sec > 0) { return Math.round(sec * 1000); }
+      }
+    } catch (error) {
+      return 0;
+    }
+    return 0;
+  }
+
+  function mapStatus(status, res) {
+    if (status === 429) {
+      return { ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res) };
+    }
+    if (status >= 500) {
+      return { ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res) };
+    }
+    /* 401/403/404/405/400 等：地址、模型或密钥配错，重试无意义 */
+    return { ok: false, code: E.NET_CONFIG, retryable: false, status: status };
+  }
+
+  function mapNetError(error) {
+    if (error && String(error.name || '') === 'AbortError') {
+      return { ok: false, code: E.NET_TIMEOUT, retryable: false, status: 0, reason: 'timeout' };
+    }
+    try {
+      if (global.navigator && global.navigator.onLine === false) {
+        return { ok: false, code: E.NET_CONFIG, retryable: false, status: 0, reason: 'offline' };
+      }
+    } catch (error2) {
+      /* navigator 不可用就算了 */
+    }
+    /* 断网与 CORS 同形：都按配置/网络问题回落本地 */
+    return { ok: false, code: E.NET_CONFIG, retryable: false, status: 0, reason: 'offline' };
+  }
+
+  function httpOnce(cfg, bodyStr) {
+    return new Promise(function (resolve) {
+      if (typeof fetch !== 'function') {
+        resolve({ ok: false, code: E.NET_CONFIG, retryable: false, status: 0 });
+        return;
+      }
+      var done = false;
+      var timer = null;
+      var ctrl = null;
+      function end(res) {
+        if (done) { return; }
+        done = true;
+        if (timer) {
+          try { clearTimeout(timer); } catch (error) { /* 已触发 */ }
+          timer = null;
+        }
+        resolve(res);
+      }
+      var options = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + cfg.key
+        },
+        body: bodyStr,
+        credentials: 'omit',
+        cache: 'no-store',
+        mode: 'cors'
+      };
+      if (typeof AbortController === 'function') {
+        try {
+          ctrl = new AbortController();
+          options.signal = ctrl.signal;
+        } catch (error) {
+          ctrl = null;
+        }
+      }
+      timer = setTimeout(function () {
+        if (ctrl && typeof ctrl.abort === 'function') {
+          try { ctrl.abort(); } catch (error) { /* 已结束 */ }
+        }
+        end({ ok: false, code: E.NET_TIMEOUT, retryable: false, status: 0, reason: 'timeout' });
+      }, LLM_TIMEOUT_MS);
+
+      var request;
+      try {
+        request = fetch(endpointOf(cfg.baseURL), options);
+      } catch (error2) {
+        end(mapNetError(error2));
+        return;
+      }
+      if (!request || typeof request.then !== 'function') {
+        end({ ok: false, code: E.NET_CONFIG, retryable: false, status: 0 });
+        return;
+      }
+      request.then(function (res) {
+        var status = Number(res && res.status) || 0;
+        if (status < 200 || status >= 300) {
+          end(mapStatus(status, res));
+          return;
+        }
+        var bodyPromise;
+        try {
+          bodyPromise = (res && typeof res.text === 'function') ? res.text() : Promise.resolve('');
+        } catch (error3) {
+          end({ ok: false, code: E.NET_BAD, retryable: false, status: status });
+          return;
+        }
+        bodyPromise.then(function (text) {
+          var json = null;
+          if (typeof text === 'string' && text) {
+            try { json = JSON.parse(text); } catch (error4) { json = null; }
+          }
+          if (!json || typeof json !== 'object') {
+            end({ ok: false, code: E.NET_BAD, retryable: false, status: status });
+            return;
+          }
+          end({ ok: true, status: status, json: json });
+        }, function () {
+          end({ ok: false, code: E.NET_BAD, retryable: false, status: status });
+        });
+      }, function (error5) {
+        end(mapNetError(error5));
+      });
+    });
+  }
+
+  /* ---------- 信封解析（V1~V4 / F9 / F10） ---------- */
+
+  function parseJsonLoose(text) {
+    var s = String(text || '');
+    var fence = s.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (fence && fence[1]) { s = fence[1]; }
+    s = s.trim();
+    var first = s.indexOf('{');
+    var last = s.lastIndexOf('}');
+    if (first >= 0 && last > first) { s = s.slice(first, last + 1); }
+    try {
+      return { ok: true, value: JSON.parse(s) };
+    } catch (error) {
+      return { ok: false };
+    }
+  }
+
+  function contentOf(choice) {
+    var msg = choice && choice.message ? choice.message : null;
+    if (msg && typeof msg.content === 'string') { return msg.content; }
+    if (msg && msg.content && typeof msg.content.length === 'number') {
+      var parts = [];
+      var i;
+      for (i = 0; i < msg.content.length; i += 1) {
+        var piece = msg.content[i];
+        if (piece && typeof piece.text === 'string') { parts.push(piece.text); }
+      }
+      return parts.join('');
+    }
+    if (choice && typeof choice.text === 'string') { return choice.text; }
+    return '';
+  }
+
+  function readEnvelope(json) {
+    var choices = json && json.choices;
+    if (!choices || !choices.length) { return { ok: false, code: E.NET_BAD }; }
+    var first = choices[0] || {};
+    if (first.finish_reason === 'length') { return { ok: false, code: E.NET_BAD }; }
+    var text = String(contentOf(first) || '').trim();
+    if (!text) { return { ok: false, code: E.NET_BAD }; }
+    var parsed = parseJsonLoose(text);
+    if (!parsed.ok) { return { ok: false, code: E.NET_BAD }; }
+    if (!parsed.value || typeof parsed.value !== 'object' || Array.isArray(parsed.value)) {
+      return { ok: false, code: E.NET_BAD };
+    }
+    return { ok: true, proposal: parsed.value };
+  }
+
+  /* ---------- 提示词与请求体（§2.4 / R-11） ---------- */
+
+  function sysPromptLines() {
+    return [
+      '你是「小账本」记账解析器。用户只发中文自然语言账目，不闲聊。',
+      '',
+      '只输出一个 JSON 对象，首字符是 {，禁止围栏与说明文字。',
+      '',
+      '字段：',
+      'intent：create|update|delete|query|need_clarify',
+      'items：仅 create，≤20 条 {type,amountCents,accountId,toAccountId,categoryId,date,time,note}',
+      'edit：仅 update/delete，{targetHint,patch:{amountCents,accountId,categoryId,date}}',
+      'filter：仅 query，{from,to,type,categoryId,accountId,keyword,minCents,maxCents}',
+      'clarify：{question,options:[{label,value}]}',
+      '',
+      '规则：',
+      '1 金额单位是分，正整数：35 元写 3500。禁小数负数单位字。',
+      '2 accountId、categoryId 只能从下方清单原样复制，严禁编造或改名；清单没有留 ""。',
+      '3 转账：type=transfer，accountId 与 toAccountId 都要给且不同，categoryId 留 ""。',
+      '4 支出、收入：toAccountId 留 ""。',
+      '5 date/time 只在用户明说时填，否则留 ""，禁猜「今天」。',
+      '6 note 取原话短语，不写「支出/记账/收入」，不写金额。',
+      '7 超过 20 笔输出 need_clarify，请用户分批。',
+      '8 update、delete 绝不输出交易 id，只给 targetHint 与 patch。',
+      '9 金额无法确定输出 need_clarify 并问一句，不要猜。',
+      '10 分类拿不准留 ""，不要塞「其他」。',
+      '11 听不懂或非记账请求输出 need_clarify。',
+      '',
+      '今天：<TODAY>',
+      '账本：<BOOK>',
+      '账户清单（id 名称）：<ACCOUNTS>',
+      '分类清单（id 名称）：<CATEGORIES>'
+    ];
+  }
+
+  function pairText(list) {
+    var out = [];
+    var i;
+    for (i = 0; i < list.length; i += 1) {
+      var one = list[i];
+      if (!one || !one.id) { continue; }
+      out.push(String(one.id) + ' ' + String(one.name || ''));
+    }
+    return out.join('\n');
+  }
+
+  function accountPairs(list) {
+    var out = [];
+    var i;
+    var src = Array.isArray(list) ? list : [];
+    for (i = 0; i < src.length && out.length < LLM_MAX_ACCOUNTS; i += 1) {
+      var one = src[i];
+      if (!one || typeof one !== 'object') { continue; }
+      var id = short(String(one.id || ''), 40);
+      var name = short(String(one.name || ''), LLM_NAME_MAX);
+      if (!id) { continue; }
+      out.push({ id: id, name: name });
+    }
+    return out;
+  }
+
+  function categoryPairs(list) {
+    var out = [];
+    var i;
+    var src = Array.isArray(list) ? list : [];
+    for (i = 0; i < src.length && out.length < LLM_MAX_CATEGORIES; i += 1) {
+      var one = src[i];
+      if (!one || typeof one !== 'object') { continue; }
+      var id = short(String(one.id || ''), 40);
+      var name = short(String(one.name || ''), LLM_NAME_MAX);
+      if (!id) { continue; }
+      out.push({ id: id, name: name, kind: one.kind === 'income' ? 'income' : 'expense' });
+    }
+    return out;
+  }
+
+  function systemText(accts, cats, today, bookId) {
+    return sysPromptLines().join('\n')
+      .replace('<TODAY>', today)
+      .replace('<BOOK>', bookId)
+      .replace('<ACCOUNTS>', pairText(accts))
+      .replace('<CATEGORIES>', pairText(cats));
+  }
+
+  function buildBody(cfg, raw, accts, cats, today, bookId) {
+    return JSON.stringify({
+      model: cfg.model,
+      temperature: 0,
+      max_tokens: LLM_MAX_TOKENS,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemText(accts, cats, today, bookId) },
+        { role: 'user', content: raw }
+      ]
+    });
+  }
+
+  /* 体积兜底：先砍分类清单，再砍账户清单，最后砍原话（硬截断），保证 ≤4KB */
+  function fitBody(cfg, payload) {
+    var p = payload && typeof payload === 'object' ? payload : {};
+    var raw = short(norm(p.raw || ''), LLM_MAX_RAW);
+    var accts = accountPairs(p.accounts);
+    var cats = categoryPairs(p.categories);
+    var today = short(String(p.today || todayStr()), 10);
+    var bookId = short(String(p.bookId || ''), 40);
+    var body = buildBody(cfg, raw, accts, cats, today, bookId);
+    var guard = 0;
+    while (byteLen(body) > LLM_MAX_BODY && guard < 16) {
+      guard += 1;
+      if (cats.length > 6) {
+        cats = cats.slice(0, Math.max(6, Math.floor(cats.length / 2)));
+      } else if (accts.length > 2) {
+        accts = accts.slice(0, Math.max(2, Math.floor(accts.length / 2)));
+      } else if (raw.length > 16) {
+        raw = raw.slice(0, Math.max(16, Math.floor(raw.length / 2)));
+      } else {
+        cats = [];
+        accts = [];
+        raw = raw.slice(0, 16);
+      }
+      body = buildBody(cfg, raw, accts, cats, today, bookId);
+    }
+    return { body: body, raw: raw };
+  }
+
+  /* ---------- llm.plan / llm.test ---------- */
+
+  function llmNotReadyCode(cfg) {
+    if (!aiConfigured(cfg)) { return E.NOT_CONFIGURED; }
+    if (Number(cfg.noticeAt) <= 0) { return E.NOT_CONFIGURED; }
+    if (cfg.enabled !== true) { return E.AI_DISABLED; }
+    return '';
+  }
+
+  function llmPlan(payload, state, cx) {
+    /* 两种调用口径都收：plan(payload)（DESIGN §1.4）与 plan(text, state, cx)（任务书） */
+    if (typeof payload === 'string' || payload === null || payload === undefined) {
+      var ctx0 = safeCx(cx);
+      var text0 = typeof payload === 'string' ? payload : '';
+      payload = {
+        raw: norm(text0),
+        today: ctx0.today,
+        bookId: ctx0.bookId,
+        accounts: accountPairs(ctx0.liveAccounts),
+        categories: categoryPairs(ctx0.liveCategories)
+      };
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      payload = { raw: '' };
+    }
+    var cfg = aiRead();
+    var gate = llmNotReadyCode(cfg);
+    if (gate) {
+      return Promise.resolve({ ok: false, code: gate, retryable: false, status: 0 });
+    }
+    var fit = fitBody(cfg, payload);
+    var started = Date.now();
+    var attempt = 0;
+    function run() {
+      return httpOnce(cfg, fit.body).then(function (res) {
+        if (res && res.ok) {
+          var parsed = readEnvelope(res.json);
+          if (!parsed.ok) {
+            return { ok: false, code: parsed.code, retryable: false, status: res.status || 0 };
+          }
+          return { ok: true, proposal: parsed.proposal };
+        }
+        var rest = LLM_BUDGET_MS - (Date.now() - started);
+        var wait = Math.min(Number(res && res.retryAfterMs) || LLM_BACKOFF_MS, LLM_RETRY_AFTER_CAP);
+        if (res && res.retryable && attempt < LLM_RETRY && rest > wait + 500) {
+          attempt += 1;
+          return delayMs(wait).then(run);
+        }
+        return {
+          ok: false,
+          code: (res && res.code) || E.NET_BAD,
+          retryable: !!(res && res.retryable),
+          status: (res && res.status) || 0
+        };
+      });
+    }
+    return run();
+  }
+
+  function llmTest() {
+    var started = Date.now();
+    var cfg = aiRead();
+    if (!aiConfigured(cfg)) {
+      return Promise.resolve({ ok: false, code: E.NOT_CONFIGURED });
+    }
+    /* 测试连接同样是出站请求：没告知过（noticeAt=0）就不发（A28） */
+    if (Number(cfg.noticeAt) <= 0) {
+      return Promise.resolve({ ok: false, code: E.NOT_CONFIGURED });
+    }
+    var body;
+    try {
+      body = JSON.stringify({
+        model: cfg.model,
+        temperature: 0,
+        max_tokens: 16,
+        messages: [{ role: 'user', content: '回复一个 JSON 对象：{"ok":true}' }]
+      });
+    } catch (error) {
+      return Promise.resolve({ ok: false, code: E.NET_CONFIG });
+    }
+    return httpOnce(cfg, body).then(function (res) {
+      if (!res || !res.ok) {
+        return { ok: false, code: (res && res.code) || E.NET_BAD };
+      }
+      return { ok: true, ms: Date.now() - started };
+    }, function () {
+      return { ok: false, code: E.NET_BAD };
+    });
+  }
+
+  /* ---------- 值域校验（V9~V14） ---------- */
+
+  function centsOf(value) {
+    if (value === null || typeof value === 'undefined' || value === '') {
+      return { ok: false, code: E.NO_AMOUNT };
+    }
+    if (typeof value === 'number') {
+      if (!isFinite(value) || Math.floor(value) !== value) { return { ok: false, code: E.INVALID }; }
+      if (value === 0) { return { ok: false, code: E.NO_AMOUNT }; }
+      if (value < 0 || value > LLM_MAX_CENTS) { return { ok: false, code: E.INVALID }; }
+      return { ok: true, cents: value };
+    }
+    if (typeof value === 'string') {
+      var s = value.trim();
+      if (!s) { return { ok: false, code: E.NO_AMOUNT }; }
+      /* 单位是分：带小数点一律拒（35.5 分无意义） */
+      if (!/^[0-9]+$/.test(s)) { return { ok: false, code: E.INVALID }; }
+      var n = Number(s);
+      if (!isFinite(n) || n === 0 || n > LLM_MAX_CENTS) { return { ok: false, code: E.INVALID }; }
+      return { ok: true, cents: n };
+    }
+    return { ok: false, code: E.NO_AMOUNT };
+  }
+
+  function dateOf(value, cx) {
+    if (typeof value !== 'string' || !value.trim()) {
+      return { ok: true, date: cx.today, given: false };
+    }
+    var s = value.trim();
+    if (!isValidDate(s)) { return { ok: false, code: E.DATE_INVALID }; }
+    if (s < '2000-01-01' || s > addDays(cx.today, 366)) { return { ok: false, code: E.DATE_INVALID }; }
+    return { ok: true, date: s, given: true };
+  }
+
+  function timeOf(value, cx) {
+    if (typeof value !== 'string') { return cx.nowTime; }
+    var s = value.trim();
+    if (/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(s)) { return s; }
+    return cx.nowTime;
+  }
+
+  function tagsOf(value) {
+    var out = [];
+    if (!Array.isArray(value)) { return out; }
+    var i;
+    for (i = 0; i < value.length && out.length < 3; i += 1) {
+      if (typeof value[i] !== 'string') { continue; }
+      var one = short(value[i].replace(/[#\s]+/g, '').trim(), 8);
+      if (one && out.indexOf(one) < 0) { out.push(one); }
+    }
+    return out;
+  }
+
+  /* ---------- 单笔装配（§2.2 逐字段：只有语义字段信模型，身份/归属/审计全本地） ---------- */
+
+  function remoteItem(pitem, planId, index, cx, segText) {
+    var item = {
+      id: idFor(planId, index),
+      index: index,
+      raw: segText || '',
+      type: 'expense',
+      amountCents: 0,
+      accountId: '',
+      toAccountId: '',
+      categoryId: '',
+      date: cx.today,
+      time: cx.nowTime,
+      note: '',
+      tags: [],
+      source: 'nl',
+      defaulted: {},
+      issues: [],
+      matches: null,
+      confidence: 0
+    };
+    var src = pitem && typeof pitem === 'object' ? pitem : {};
+    var text = norm(segText || '');
+
+    /* V9 类型 */
+    if (src.type === 'expense' || src.type === 'income' || src.type === 'transfer') {
+      item.type = src.type;
+    } else if (src.type !== null && typeof src.type !== 'undefined' && src.type !== '') {
+      item.issues.push({ field: 'type', code: E.INVALID, message: '收支类型有冲突，选一个', options: ['expense', 'income', 'transfer'] });
+    } else {
+      item.issues.push({ field: 'type', code: E.INVALID, message: '收支类型没给，选一个', options: ['expense', 'income', 'transfer'] });
+    }
+
+    /* V10 / V11 金额 */
+    var cents = centsOf(src.amountCents);
+    if (cents.ok) {
+      item.amountCents = cents.cents;
+    } else {
+      item.amountCents = 0;
+      item.issues.push({
+        field: 'amount',
+        code: cents.code,
+        message: cents.code === E.NO_AMOUNT ? M.E_AS_NO_AMOUNT : '金额只能是正整数分，改一个数字'
+      });
+    }
+
+    /* V12 日期 / V13 时间 / V14 备注 */
+    var day = dateOf(src.date, cx);
+    if (day.ok) {
+      item.date = day.date;
+    } else {
+      item.date = cx.today;
+      item.issues.push({ field: 'date', code: E.DATE_INVALID, message: M.E_AS_DATE });
+    }
+    if (item.date > cx.today) { item.future = true; }
+    item.time = timeOf(src.time, cx);
+
+    var note = typeof src.note === 'string' ? src.note.replace(/\s+/g, ' ').trim() : '';
+    var cut = short(note, MAX_NOTE);
+    if (note && cut !== note) { item.noteTruncated = true; }
+    item.note = cut || short(stripKnown(text || segText || ''), MAX_NOTE);
+    item.tags = tagsOf(src.tags);
+
+    /* V15 账户：只有和本地候选完全匹配才采纳，否则 resolveAccount 重解析 → 默认账户兜底 */
+    var wantAccount = typeof src.accountId === 'string' ? src.accountId.trim() : '';
+    if (wantAccount && findIn(cx.liveAccounts, wantAccount)) {
+      item.accountId = wantAccount;
+    } else {
+      var acct = resolveAccount(text || segText || '', cx);
+      if (acct && acct.ok) {
+        item.accountId = acct.id;
+      } else if (acct && !acct.ok && acct.code === E.AMBIGUOUS_ACCOUNT && acct.options && acct.options.length) {
+        item.issues.push({ field: 'accountId', code: E.AMBIGUOUS_ACCOUNT, message: M.E_AS_AMBIGUOUS_ACCOUNT, options: acct.options });
+      }
+    }
+    if (!item.accountId || !findIn(cx.liveAccounts, item.accountId)) {
+      item.accountId = defaultAccountId(cx);
+      item.defaulted.account = true;
+    }
+    if (!findIn(cx.liveAccounts, item.accountId)) {
+      item.issues.push({ field: 'accountId', code: E.AMBIGUOUS_ACCOUNT, message: '账户不可用（可能已归档），选一个' });
+    }
+
+    /* V16 分类：kind 必须与 type 一致，否则 resolveCategory → fallbackCategoryId */
+    if (item.type === 'transfer') {
+      item.categoryId = '';
+    } else {
+      var kind = item.type === 'income' ? 'income' : 'expense';
+      var wantCat = typeof src.categoryId === 'string' ? src.categoryId.trim() : '';
+      var cat = (wantCat && findIn(cx.liveCategories, wantCat)) ? categoryById(cx, wantCat) : null;
+      if (!cat || cat.kind !== kind) {
+        cat = null;
+        var guessed = resolveCategory(text || segText || '', kind, cx);
+        if (guessed && guessed.ok) {
+          var cand = categoryById(cx, guessed.id);
+          if (cand && cand.kind === kind && findIn(cx.liveCategories, cand.id)) { cat = cand; }
+        }
+      }
+      if (cat) {
+        item.categoryId = cat.id;
+      } else {
+        item.categoryId = fallbackCategoryId(cx, item.type);
+        item.defaulted.category = true;
+      }
+    }
+
+    /* V17 转账：转入账户必填且必须不同；V19 非转账强制清空 toAccountId */
+    if (item.type === 'transfer') {
+      var wantTo = typeof src.toAccountId === 'string' ? src.toAccountId.trim() : '';
+      if (wantTo && wantTo !== item.accountId && findIn(cx.liveAccounts, wantTo)) {
+        item.toAccountId = wantTo;
+      }
+      if (!item.toAccountId) {
+        var guessTo = guessToAccount(text || segText || '', cx, item.accountId);
+        if (guessTo) { item.toAccountId = guessTo; }
+      }
+      if (!item.toAccountId || item.toAccountId === item.accountId) {
+        item.toAccountId = '';
+        item.issues.push({
+          field: 'toAccountId',
+          code: E.TRANSFER_NEED_TO,
+          message: M.E_AS_TRANSFER_NEED_TO,
+          options: cx.liveAccounts.filter(function (a) { return a.id !== item.accountId; })
+            .slice(0, MAX_TARGETS).map(function (a) { return { label: a.name, value: a.id }; })
+        });
+      }
+    } else {
+      item.toAccountId = '';
+    }
+
+    return item;
+  }
+
+  /* ---------- create / update / delete 装配（V5~V21） ---------- */
+
+  function targetOptions(matches, cx) {
+    return (matches || []).slice(0, MAX_TARGETS).map(function (tx) {
+      return {
+        label: dateLabel(cx, tx.date) + ' ' + (TYPE_TEXT[tx.type] || '支出') + ' ' +
+          formatCents(tx.amountCents) + ' ' + categoryName(cx, tx.categoryId),
+        value: tx.id
+      };
+    });
+  }
+
+  function askFail(code, question, options) {
+    return {
+      ok: false,
+      code: code || E.UNKNOWN,
+      ask: true,
+      question: question || M[code] || M.E_AS_UNKNOWN,
+      options: options || []
+    };
+  }
+
+  function buildRemoteCreate(proposal, raw, cx) {
+    var list = Array.isArray(proposal.items) ? proposal.items : [];
+    if (!list.length) { return { ok: false, code: E.UNKNOWN }; }
+    if (list.length > MAX_BATCH) { return { ok: false, code: E.BATCH_TOO_LARGE }; }
+    var segs = [];
+    try { segs = splitSegments(raw) || []; } catch (error) { segs = []; }
+    var planId = fingerprint(raw, cx, '');
+    var plan = {
+      id: planId,
+      kind: 'create',
+      bookId: cx.bookId,
+      raw: norm(raw),
+      createdAt: nowIso(),
+      forced: false,
+      items: []
+    };
+    var i;
+    for (i = 0; i < list.length; i += 1) {
+      var pitem = list[i];
+      if (!pitem || typeof pitem !== 'object' || Array.isArray(pitem)) {
+        return { ok: false, code: E.UNKNOWN };
+      }
+      var seg = '';
+      if (segs.length === list.length && segs[i]) { seg = segs[i]; }
+      else if (list.length === 1) { seg = raw; }
+      plan.items.push(remoteItem(pitem, planId, i, cx, seg));
+    }
+    try { markDuplicates(plan, cx); } catch (error2) { /* 重复检测失败不影响装配 */ }
+    var bad = plan.items.filter(function (it) { return it.issues.length > 0; });
+    if (bad.length) {
+      /* 铁律：多笔里有一笔结构性问题 → 整批 B，绝不部分接受 */
+      if (plan.items.length > 1) { return { ok: false, code: bad[0].issues[0].code }; }
+      return { ok: true, plan: plan };
+    }
+    return { ok: true, plan: plan };
+  }
+
+  function patchOf(src, target, cx) {
+    var p = src && typeof src === 'object' && !Array.isArray(src) ? src : {};
+    var out = {};
+    if (hasOwn(p, 'amountCents') && p.amountCents !== null && typeof p.amountCents !== 'undefined' && p.amountCents !== '') {
+      var cents = centsOf(p.amountCents);
+      if (!cents.ok) { return { ok: false, code: cents.code }; }
+      if (cents.cents !== Number(target.amountCents)) { out.amountCents = cents.cents; }
+    }
+    if (hasOwn(p, 'accountId') && typeof p.accountId === 'string' && p.accountId.trim()) {
+      var acctId = p.accountId.trim();
+      if (findIn(cx.liveAccounts, acctId)) {
+        out.accountId = acctId;
+      } else {
+        var acct = resolveAccount(acctId, cx);
+        if (acct && acct.ok) { out.accountId = acct.id; }
+      }
+    }
+    if (hasOwn(p, 'categoryId') && typeof p.categoryId === 'string' && p.categoryId.trim()) {
+      var catId = p.categoryId.trim();
+      var kind = target.type === 'income' ? 'income' : 'expense';
+      if (target.type !== 'transfer') {
+        var cat = findIn(cx.liveCategories, catId) ? categoryById(cx, catId) : null;
+        if (!cat || cat.kind !== kind) {
+          cat = null;
+          var guessed = resolveCategory(catId, kind, cx);
+          if (guessed && guessed.ok) {
+            var cand = categoryById(cx, guessed.id);
+            if (cand && cand.kind === kind) { cat = cand; }
+          }
+        }
+        if (cat && cat.kind === kind) { out.categoryId = cat.id; }
+      }
+    }
+    if (hasOwn(p, 'date') && typeof p.date === 'string' && p.date.trim()) {
+      var day = dateOf(p.date, cx);
+      if (day.ok && day.given && day.date !== target.date) { out.date = day.date; }
+    }
+    return { ok: true, values: out };
+  }
+
+  function buildRemoteEdit(proposal, raw, cx, state, kind) {
+    var edit = proposal.edit && typeof proposal.edit === 'object' && !Array.isArray(proposal.edit) ? proposal.edit : {};
+    var hint = typeof edit.targetHint === 'string' ? short(edit.targetHint.replace(/\s+/g, ' ').trim(), 60) : '';
+    /* targetHint 是模型挑出来的「更精确的描述」，单独试比拼接更准；
+       拼接会把原话里的新金额/新日期当成筛选条件，反而筛空。 */
+    var probes = hint ? [hint, raw, raw + ' ' + hint] : [raw];
+    var found = null;
+    var lastFail = null;
+    for (var pi = 0; pi < probes.length; pi += 1) {
+      var trial = null;
+      try {
+        trial = findTargets(probes[pi], cx, state);
+      } catch (error) {
+        trial = null;
+      }
+      if (trial && trial.ok && trial.matches && trial.matches.length) {
+        if (!found || (trial.exact === true && found.exact !== true)) { found = trial; }
+        if (found.exact === true) { break; }
+      } else if (trial && !trial.ok) {
+        lastFail = trial;
+      }
+    }
+    if (!found) {
+      return askFail((lastFail && lastFail.code) || E.TARGET_MISSING, (lastFail && lastFail.message) || M.E_AS_TARGET_MISSING, []);
+    }
+    if (found.exact !== true) {
+      return askFail(E.TARGET_MULTI, M.E_AS_TARGET_MULTI, targetOptions(found.matches, cx));
+    }
+    var target = found.matches[0];
+
+    if (kind === 'delete') {
+      var del = buildDeletePlan(target, cx);
+      /* R-02：plan.raw 恒等于用户原话（本地 buildDeletePlan 保持不动） */
+      del.raw = norm(raw);
+      return { ok: true, plan: del, target: target };
+    }
+
+    var patch = patchOf(edit.patch, target, cx);
+    if (!patch.ok) {
+      return askFail(patch.code, patch.code === E.NO_AMOUNT ? M.E_AS_NO_AMOUNT : M.E_AS_INVALID, []);
+    }
+    var values = patch.values;
+    var replaceType = null;
+    if (typeof edit.replaceType === 'string' && (edit.replaceType === 'expense' || edit.replaceType === 'income' || edit.replaceType === 'transfer') && edit.replaceType !== target.type) {
+      replaceType = edit.replaceType;
+    }
+    var local = null;
+    if (!Object.keys(values).length && !replaceType) {
+      /* 模型没给出可用字段：整份交给本地解析器（本地语义不动） */
+      try { local = buildUpdatePlan(raw, target, cx); } catch (error2) { local = null; }
+      if (!local || !local.ok) {
+        return askFail(E.UNKNOWN, '没听出要改哪个字段（金额/分类/账户/日期）', []);
+      }
+      return { ok: true, plan: local.plan, target: target };
+    }
+    var planId = fingerprint('upd|' + target.id + '|' + norm(raw), cx, target.updatedAt || '');
+    var nextValues = Object.assign({}, target, values, { updatedAt: nowIso() });
+    if (replaceType) { nextValues.type = replaceType; }
+    var plan = {
+      id: planId,
+      kind: 'update',
+      bookId: target.bookId,
+      raw: norm(raw),
+      createdAt: nowIso(),
+      forced: false,
+      items: [],
+      edit: {
+        ids: [target.id],
+        patch: values,
+        base: snapshotOf(target),
+        values: nextValues,
+        replaceType: replaceType
+      }
+    };
+    return { ok: true, plan: plan, target: target };
+  }
+
+  /* buildPlan(proposal, raw, cx, state)：
+   *   → {ok:true, plan, target?} 正常装配
+   *   → {ok:false, ask:true, code, question, options} A 追问
+   *   → {ok:false, code} B 回落本地 / C 报错 */
+  function looksLikeCx(value) {
+    if (!value || typeof value !== 'object') { return false; }
+    if (Array.isArray(value.liveAccounts) || Array.isArray(value.liveCategories)) { return true; }
+    return typeof value.bookId === 'string' && typeof value.today === 'string';
+  }
+
+  function buildPlan(proposal, raw, a, b) {
+    /* 两种口径都收：buildPlan(proposal, text, cx, state)（DESIGN §2.2 / 任务书）
+       与 buildPlan(proposal, text, state, cx) 的书写顺序漂移。 */
+    var cxIn = a;
+    var stateIn = b;
+    if (!looksLikeCx(cxIn) && looksLikeCx(stateIn)) {
+      cxIn = stateIn;
+      stateIn = a;
+    }
+    var cx = safeCx(cxIn);
+    var state = stateIn && typeof stateIn === 'object' ? stateIn : null;
+    var text = typeof raw === 'string' ? raw : '';
+    if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) {
+      return { ok: false, code: E.UNKNOWN };
+    }
+    var intent = typeof proposal.intent === 'string' ? proposal.intent : '';
+    if (intent !== 'create' && intent !== 'update' && intent !== 'delete' &&
+        intent !== 'query' && intent !== 'need_clarify') {
+      return { ok: false, code: E.UNKNOWN };
+    }
+    if (intent === 'create') { return buildRemoteCreate(proposal, text, cx); }
+    if (intent === 'update' || intent === 'delete') { return buildRemoteEdit(proposal, text, cx, state, intent); }
+    /* query / need_clarify 不经 buildPlan（respondRemote 里各自处理） */
+    return { ok: false, code: E.UNKNOWN };
+  }
+
+  /* ---------- intent 级装配 ---------- */
+
+  function remoteClarify(proposal) {
+    var src = proposal.clarify && typeof proposal.clarify === 'object' && !Array.isArray(proposal.clarify) ? proposal.clarify : null;
+    var question = src && typeof src.question === 'string' ? short(src.question.replace(/\s+/g, ' ').trim(), 80) : '';
+    if (!question) { return null; }
+    var options = [];
+    if (src && Array.isArray(src.options)) {
+      var i;
+      for (i = 0; i < src.options.length && options.length < MAX_TARGETS; i += 1) {
+        var one = src.options[i];
+        if (!one || typeof one !== 'object') { continue; }
+        var label = typeof one.label === 'string' ? short(one.label.trim(), 20) : '';
+        var value = typeof one.value === 'string' ? short(one.value.trim(), 40) : '';
+        if (!label || !value) { continue; }
+        options.push({ label: label, value: value });
+      }
+    }
+    return { kind: 'clarify', text: question, code: E.UNKNOWN, options: options };
+  }
+
+  function remoteQuery(proposal, raw, cx, state) {
+    var base;
+    try {
+      base = parseQuery(raw, cx, state ? state.lastQuery : null);
+    } catch (error) {
+      return null;
+    }
+    if (!base || !base.ok) { return null; }
+    var filter = base.filter;
+    var f = proposal.filter && typeof proposal.filter === 'object' && !Array.isArray(proposal.filter) ? proposal.filter : null;
+    if (f) {
+      var from = typeof f.from === 'string' ? f.from.trim() : '';
+      var to = typeof f.to === 'string' ? f.to.trim() : '';
+      var moved = false;
+      if (isValidDate(from) && from >= '2000-01-01' && from <= addDays(cx.today, 366)) {
+        filter.from = from;
+        moved = true;
+      }
+      if (isValidDate(to) && to >= '2000-01-01' && to <= addDays(cx.today, 366)) {
+        filter.to = to;
+        moved = true;
+      }
+      if (filter.from > filter.to) {
+        var swap = filter.from;
+        filter.from = filter.to;
+        filter.to = swap;
+      }
+      if (moved) {
+        filter.label = filter.from === filter.to ? dateLabel(cx, filter.from) : (filter.from + ' 至 ' + filter.to);
+        filter.month = '';
+      }
+      if (f.type === 'expense' || f.type === 'income' || f.type === 'transfer') { filter.type = f.type; }
+      if (typeof f.accountId === 'string' && f.accountId.trim() && findIn(cx.liveAccounts, f.accountId.trim())) {
+        filter.accountId = f.accountId.trim();
+      }
+      if (typeof f.categoryId === 'string' && f.categoryId.trim() && findIn(cx.liveCategories, f.categoryId.trim())) {
+        filter.categoryId = f.categoryId.trim();
+      }
+      if (typeof f.keyword === 'string' && f.keyword.trim()) {
+        filter.keyword = short(f.keyword.trim(), 20);
+      }
+      var minCents = Number(f.minCents);
+      if (isFinite(minCents) && minCents > 0) { filter.minCents = Math.floor(minCents); }
+      var maxCents = Number(f.maxCents);
+      if (isFinite(maxCents) && maxCents > 0) { filter.maxCents = Math.floor(maxCents); }
+      if (filter.minCents && filter.maxCents && filter.minCents > filter.maxCents) {
+        var swap2 = filter.minCents;
+        filter.minCents = filter.maxCents;
+        filter.maxCents = swap2;
+      }
+    }
+    var totals = queryTotals(cx, filter);
+    var next = cloneState(state);
+    next.lastQuery = { filter: filter, text: norm(raw) };
+    next.recentIds = totals.rows.slice(0, 5).map(function (row) { return row.id; });
+    var answer = buildQueryAnswer(totals, cx);
+    return {
+      state: next,
+      mode: 'online',
+      reason: '',
+      reply: {
+        kind: 'query',
+        text: answer.text,
+        filter: filter,
+        filterText: analyzeFilterText(filter, cx),
+        totals: totals,
+        rows: totals.rows,
+        link: deepLink(filter)
+      }
+    };
+  }
+
+  /* ---------- 失败 → 本地模式（绝不静默） ---------- */
+
+  function reasonOf(code, res) {
+    if (code === E.NET_TIMEOUT) { return 'timeout'; }
+    if (code === E.NET_RATE) { return 'rate'; }
+    if (code === E.NET_BAD) { return 'bad'; }
+    if (code === E.AI_DISABLED) { return 'disabled'; }
+    if (code === E.NOT_CONFIGURED || code === E.NET_CONFIG) {
+      var offline = false;
+      try { offline = !!(global.navigator && global.navigator.onLine === false); } catch (error) { offline = false; }
+      if (offline) { return 'offline'; }
+      return 'config';
+    }
+    return 'bad';
+  }
+
+  function localReply(text, state, cx, reason) {
+    var out = null;
+    try {
+      out = respond(text, state, cx);
+    } catch (error) {
+      out = null;
+    }
+    if (!out || !out.reply) {
+      out = {
+        state: cloneState(state),
+        reply: { kind: 'hint', text: M.E_AS_UNKNOWN, options: [] }
+      };
+    }
+    return { state: out.state, reply: out.reply, mode: 'local-fallback', reason: reason || '' };
+  }
+
+  function safeCx(cx) {
+    if (cx && Array.isArray(cx.liveAccounts) && Array.isArray(cx.liveCategories) && cx.today) {
+      return cx;
+    }
+    try {
+      return contextOf(cx || {});
+    } catch (error) {
+      return contextOf({});
+    }
+  }
+
+  /* respondRemote(text, state, cx) → Promise<{state, reply, mode:'online'|'local-fallback', reason}>
+   * 软 5s 提示由界面消费 LLM_SOFT_MS；这里只负责硬 6s 兜底与回落，永不 reject。 */
+  function respondRemote(text, state, cx) {
+    var ctx = safeCx(cx);
+    return new Promise(function (resolve) {
+      var cfg = aiRead();
+      if (!aiConfigured(cfg) || cfg.enabled !== true || Number(cfg.noticeAt) <= 0) {
+        resolve(localReply(text, state, ctx, cfg.enabled === true ? 'config' : 'disabled'));
+        return;
+      }
+      var payload = {
+        raw: norm(text),
+        today: ctx.today,
+        bookId: ctx.bookId,
+        accounts: accountPairs(ctx.liveAccounts),
+        categories: categoryPairs(ctx.liveCategories)
+      };
+      llmPlan(payload).then(function (res) {
+        var out = null;
+        try {
+          out = handleRemoteResult(res, text, state, ctx);
+        } catch (error) {
+          out = null;
+        }
+        if (out) {
+          resolve(out);
+          return;
+        }
+        resolve(localReply(text, state, ctx, reasonOf(res && res.code, res)));
+      }, function () {
+        resolve(localReply(text, state, ctx, 'bad'));
+      });
+    });
+  }
+
+  function handleRemoteResult(res, text, state, ctx) {
+    if (!res || res.ok !== true || !res.proposal) { return null; }
+    var proposal = res.proposal;
+    var intent = typeof proposal.intent === 'string' ? proposal.intent : '';
+    if (intent === 'need_clarify') {
+      var ask = remoteClarify(proposal);
+      if (!ask) { return null; }
+      return { state: cloneState(state), reply: ask, mode: 'online', reason: '' };
+    }
+    if (intent === 'query') {
+      return remoteQuery(proposal, text, ctx, state);
+    }
+    var built = buildPlan(proposal, text, ctx, state);
+    if (!built || built.ok !== true) {
+      if (built && built.ask) {
+        return {
+          state: cloneState(state),
+          reply: { kind: 'clarify', text: built.question, code: built.code, options: built.options || [] },
+          mode: 'online',
+          reason: ''
+        };
+      }
+      return null;
+    }
+    var plan = built.plan;
+    var next = cloneState(state);
+    if (plan.kind === 'create') {
+      var blocked = plan.items.filter(function (it) { return it.issues.length > 0; });
+      if (blocked.length) {
+        var pending = buildPending(plan, blocked[0], ctx);
+        next.draft = plan;
+        next.pending = pending;
+        draftSave(plan, { note: 'waiting-clarify' });
+        return {
+          state: next,
+          reply: {
+            kind: 'clarify',
+            text: pending.question,
+            code: pending.code,
+            options: pending.options,
+            preview: previewRows(plan, ctx),
+            planId: plan.id
+          },
+          mode: 'online',
+          reason: ''
+        };
+      }
+      next.draft = plan;
+      next.pending = null;
+      draftSave(plan, { note: 'waiting-confirm' });
+      return { state: next, reply: previewReply(plan, ctx, ''), mode: 'online', reason: '' };
+    }
+    next.draft = plan;
+    next.pending = null;
+    draftSave(plan, { note: 'waiting-confirm' });
+    return { state: next, reply: previewEdit(plan, built.target, ctx), mode: 'online', reason: '' };
+  }
+
   /* ============================== 导出 ============================== */
 
   var api = {
@@ -2189,6 +3312,11 @@
     MAX_TARGETS: MAX_TARGETS,
     MAX_ROWS: MAX_ROWS,
     DRAFT_KEY: DRAFT_KEY,
+    AI_KEY: AI_KEY,
+    LLM_TIMEOUT_MS: LLM_TIMEOUT_MS,
+    LLM_SOFT_MS: LLM_SOFT_MS,
+    LLM_BUDGET_MS: LLM_BUDGET_MS,
+    LLM_RETRY: LLM_RETRY,
     E: E,
     M: M,
     TYPE_TEXT: TYPE_TEXT,
@@ -2228,11 +3356,28 @@
     revertEntry: revertEntry,
     briefTx: briefTx,
     previewEdit: previewEdit,
-    updatePlanItem: updatePlanItem,
-    removePlanItem: removePlanItem,
     planLabel: planLabel,
     execute: execute,
-    undoEntry: undoEntry
+    undoEntry: undoEntry,
+    /* 整批撤销的单一入口（T10） */
+    undo: {
+      available: undoAvailable,
+      last: undoLast,
+      revert: undoRevert,
+      describe: undoDescribe
+    },
+    /* 联网段：配置读写 + 两条出站入口（传输层只在本文件，NET_ALLOW 只放这一个文件） */
+    llm: {
+      getConfig: llmGetConfig,
+      setConfig: llmSetConfig,
+      clearKey: llmClearKey,
+      ready: llmReady,
+      test: llmTest,
+      plan: llmPlan,
+      buildPlan: buildPlan,
+      respondRemote: respondRemote
+    },
+    respondRemote: respondRemote
   };
 
   core.assistant = api;

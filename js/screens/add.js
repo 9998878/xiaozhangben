@@ -50,16 +50,7 @@
     ca_kids: 'baby', ca_elder: 'elder', ca_socialize: 'chat', ca_travel: 'plane',
     ca_smoke: 'glass', ca_digital: 'plug', ca_auto: 'car', ca_pet: 'pet',
     ca_office: 'briefcase', ca_repair: 'hammer', ca_donate: 'heart', ca_lottery: 'ticket',
-    ca_game: 'gamepad', ca_tools: 'wrench', ca_appliance: 'washer', ca_family: 'family',
-    /* 2.22 转正的 24 个高频分类（与 schema 种子一一对应；旧库分类 icon 字段优先于此表） */
-    ca_takeout: 'takeout', ca_breakfast: 'breakfast', ca_supermarket: 'supermarket',
-    ca_online_shopping: 'online-shopping', ca_secondhand: 'secondhand', ca_rent: 'rent',
-    ca_utility: 'utility-bill', ca_broadband: 'broadband', ca_ev_charge: 'ev-charge',
-    ca_car_service: 'car-service', ca_car_wash: 'car-wash', ca_medicine: 'medicine',
-    ca_clinic: 'clinic', ca_dentist: 'dentist', ca_checkup: 'checkup', ca_tuition: 'tuition',
-    ca_stationery: 'stationery', ca_subscription: 'subscription', ca_insurance: 'insurance',
-    ca_loan: 'loan', ca_topup: 'topup', ca_software: 'software',
-    ca_interest: 'interest', ca_dividend: 'dividend'
+    ca_game: 'gamepad', ca_tools: 'wrench', ca_appliance: 'washer', ca_family: 'family'
   };
   var HOLD_MS = 500;
 
@@ -2868,10 +2859,7 @@
             goBack();
             return;
           }
-          /* 俏皮点评：成功文案后追加一条 ≤40 字的场景调侃；取不到就退回原文案，主流程零影响 */
-          var quip = XZB.core && XZB.core.quips ? XZB.core.quips.for(entity) : '';
-          showToast(quip ? '已记一笔 · ' + quip : '已记一笔',
-            quip ? { type: 'success', duration: 3600 } : { type: 'success' });
+          showToast('已记一笔', { type: 'success' });
           goBack();
         }, function () {
           /* 门面自身不 reject（app.js 的 callPhotoStore 已兜底），这里是最后一道兜底：

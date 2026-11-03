@@ -2,6 +2,10 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
+  <!-- CSP（R-08 三处同源之一：本行 meta 与 tools/serve.cjs 的 CSP_POLICY 常量、tools/smoke.cjs A3-5 断言逐段相等）
+       script-src 的 'unsafe-inline' 是对 R-08 的必要偏离：build.mjs 把 25 段壳层 JS 内联进产物，'self' 会白屏（T06 实测）
+       刻意不含 frame-ancestors：经 meta 投递该指令被浏览器忽略并报一条 Log 错误，而三处字符串必须逐段相等 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <meta name="format-detection" content="telephone=no">
@@ -2933,12 +2937,10 @@ textarea::selection {
     color var(--dur-1) var(--ease-out);
 }
 
-/* 2.7：42px → 44px，与 ledger.js「44px 分类色圆底」注释和底座规格表（list_large 44/r14）统一口径。
-   2.22.1：圆角按规格收敛为 14px（--r-xl 的 16px 属 52px 主宫格档）。 */
 .c-tile--lg {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-xl);
 }
 
 .c-tile--tint { color: var(--c-tint-soft-text); background-color: var(--c-tint-soft); }
@@ -2967,7 +2969,7 @@ textarea::selection {
 .c-tile--acc-savings { color: var(--acc-savings); background: var(--acc-savings-soft); }
 
 /* ---------- 19.3b 分类图标选择器（2.6 · js/ui/icon-picker.js） ----------
- * 120 枚图标不能一整片铺开，所以做成「搜索 + 分组标签 + 6 列网格」。
+ * 96 枚图标不能一整片铺开，所以做成「搜索 + 分组标签 + 6 列网格」。
  * 网格只渲染当前分组，手机上滚一屏就够。 */
 .c-icon-picker {
   /* JS 可经 opt.columns 覆写；此处只是 CSS 兜底默认值 */
@@ -3300,7 +3302,7 @@ textarea::selection {
 }
 
 .c-row--with-tile.c-tile--lg + .c-row::before {
-  left: calc(var(--page-x) + 44px + var(--sp-4));
+  left: calc(var(--page-x) + 42px + var(--sp-4));
 }
 
 .c-row__tile-space {
@@ -3899,6 +3901,31 @@ textarea::selection {
    本层先于屏层加载，屏级规则写在这里必然被屏层覆盖，
    等于埋一条看不见的重复声明，所以这里连白名单外的 s-* 一个都不留。
    ============================================================ */
+
+/* ============================================================
+   确认浮层正文（XZB.ui.sheet.confirm，DECISIONS R-05）
+   ============================================================ */
+.c-sheet__confirm .c-sheet__body { padding-bottom: 0; }
+.c-sheet__confirm--danger .c-sheet__title { color: var(--c-danger); }
+.c-sheet__confirm-body { display: flex; flex-direction: column; gap: var(--sp-3); padding-top: var(--sp-1); }
+.c-sheet__confirm-text {
+  margin: 0; color: var(--c-text-2); font-size: var(--fs-body);
+  line-height: var(--lh-body); white-space: pre-line;
+}
+.c-sheet__confirm-field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.c-sheet__confirm-label {
+  color: var(--c-text-3); font-size: var(--fs-caption-1); line-height: var(--lh-caption-1);
+}
+.c-sheet__confirm-input {
+  min-height: var(--tap); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md);
+  background: var(--c-fill); color: var(--c-text); font-size: var(--fs-body);
+}
+.c-sheet__confirm-hint {
+  margin: 0; min-height: var(--lh-caption-1); color: var(--c-text-3);
+  font-size: var(--fs-caption-1); line-height: var(--lh-caption-1);
+}
+.c-sheet__confirm-hint.is-error,
+.c-sheet__confirm-error { color: var(--c-danger); }
 
 </style>
   <style>
@@ -7452,12 +7479,6 @@ textarea::selection {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   text-align: left;
-}
-
-/* P0-1 情境入口：详情面板底部「问问小助手这笔账」 */
-.s-ledger-detail__ask {
-  width: 100%;
-  margin-top: var(--sp-3);
 }
 
 /* ---------------- 详情面板照片区（D1；紧邻 __detail 家族，UI.md §2.5.1 / §2.10） ---------------- */
@@ -11239,10 +11260,9 @@ textarea::selection {
   <style>
 /* ============================================================
    小账本 2.0 — 屏幕样式：设置（settings）
-   owner: 前端#1（T13）
-   规则：只用 tokens.css 变量；类名一律 s-settings-*；
-        不写死色值；触控命中区 ≥ 44px；输入框字号 ≥ 16px；
-        深色模式由变量自动切换，不写第二套选择器。
+   T02 视觉重做：分组卡片化 / 行内层级 / 胶囊分段 / 吸顶索引 / 危险区隔离
+   规则：只用 tokens.css 变量；类名一律 s-settings-*；不写死色值；
+        触控命中区 ≥ 44px；输入框字号 ≥ 16px；深色由变量自动切换。
    ============================================================ */
 
 .s-settings {
@@ -11250,69 +11270,194 @@ textarea::selection {
   padding-bottom: var(--sp-8);
 }
 
-/* ---------------- 分组 ---------------- */
+/* ---------------- 索引胶囊（吸顶，DOM 由 T03 建立） ----------------
+   滚动容器是 SECTION.app-screen，不是 window，故用 position:sticky
+   而非 JS 监听滚动；横向滚动自带 touch 惯性。 */
 
-.s-settings-group {
-  margin-bottom: var(--sp-8);
+.s-settings-toc {
+  position: sticky;
+  /* 壳层 .app-nav 与索引条在同一条滚动链上：靠在这条 44px 顶栏下面吸住 */
+  top: calc(var(--h-nav) + var(--safe-top));
+  z-index: var(--z-sticky);
+  display: flex;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-2) var(--page-x);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  background: var(--c-bg);
+}
+.s-settings-toc::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.s-settings-toc__item {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 var(--sp-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: var(--c-bg-elev);
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.s-settings-toc__item.is-active {
+  border-color: var(--c-tint);
+  background: var(--c-tint-soft);
+  color: var(--c-text);
+  font-weight: var(--fw-semibold);
 }
 
+/* ---------------- 分组卡片 ---------------- */
+
+.s-settings-group {
+  margin: 0 var(--page-x) var(--sp-6);
+  overflow: hidden;
+  border: var(--hairline) solid var(--c-stroke);
+  border-radius: var(--r-card);
+  background: var(--c-bg-elev);
+  box-shadow: var(--shadow-card);
+  /* T03 的锚点跳转要落在吸顶索引条下面，别被顶栏+索引条盖住 */
+  scroll-margin-top: calc(var(--h-nav) + var(--safe-top) + var(--tap) + var(--sp-5));
+}
 .s-settings-group:first-child {
   margin-top: var(--sp-1);
 }
-
 .s-settings-group:last-child {
   margin-bottom: var(--sp-5);
 }
-
 .s-settings-group__head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: var(--sp-4);
-  padding: 0 calc(var(--page-x) + var(--sp-5)) var(--sp-2);
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5) var(--sp-2);
 }
 
+/* 组标题降为小号次级文字：不跟行标题抢权重 */
 .s-settings-group__title {
   margin: 0;
-  color: var(--c-text-2);
-  font-size: var(--fs-footnote);
-  line-height: var(--lh-footnote);
-  font-weight: var(--fw-regular);
-  letter-spacing: 0.04em;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.06em;
 }
-
 .s-settings-group__note {
   margin: 0;
-  padding: var(--sp-2) calc(var(--page-x) + var(--sp-5)) 0;
+  padding: var(--sp-2) var(--sp-5) var(--sp-4);
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
+}
+
+/* 外壳已由 .s-settings-group 承担，组内列表只保留行本身 */
+.s-settings-list {
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ---------------- 列表行：层级与尺寸 ---------------- */
+
+/* nav 行：56px + 8px 纵向内边距 */
+.s-settings-row,
+.s-settings-list .c-row {
+  min-height: var(--h-list);
+  padding: var(--sp-2) var(--sp-5);
+}
+
+/* switch 行矮一档：48px + 2px 纵向内边距 */
+.s-settings-row--switch,
+.s-settings-switch-row,
+.s-settings-list .c-row.s-settings-switch-row {
+  min-height: calc(var(--tap) + var(--sp-2));
+  padding: var(--sp-1) var(--sp-5);
+}
+
+/* 行内主文由行自身的内边距控制，避免两套纵向留白叠加 */
+.s-settings .c-row__main {
+  min-width: 0;
+  padding: 0;
+}
+
+/* 主标题 16 / 500；副标题 13 / 次级灰；右侧值 13 右对齐降权 */
+.s-settings-row__title,
+.s-settings .c-row__title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-callout);
+  line-height: var(--lh-callout);
+  font-weight: var(--fw-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.s-settings-row__sub,
+.s-settings .c-row__sub {
+  margin-top: var(--sp-1);
   color: var(--c-text-3);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
 }
-
-.s-settings-list {
-  border-radius: var(--r-lg);
-}
-
-.s-settings-row__icon {
-  color: var(--c-tint-soft-text);
-}
-
-.s-settings-row__title {
+.s-settings .c-row__trail {
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 58%;
+}
+.s-settings-row__value,
+.s-settings .c-row__value {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.s-settings-row__value.s-settings-row__value--muted {
+  color: var(--c-text-4);
 }
 
-/* 危险行：红色文字，无 chevron */
+/* 记账金额语义色优先于上面这条降权色（同特异度，靠顺序取胜） */
+.s-settings .c-row__value--expense {
+  color: var(--c-expense);
+}
+
+/* 卡片内行与行之间改用 1px 分隔线（组件层默认 0.5px hairline） */
+.s-settings-list .c-row + .c-row::before {
+  height: 1px;
+  background: var(--c-separator);
+}
+
+/* ---------------- 危险 / 警示语义 ---------------- */
+
 .s-settings-row--danger .c-row__title,
 .s-settings-row--danger .s-settings-row__icon {
   color: var(--c-danger);
 }
-
 .s-settings-row--danger.c-row--tappable:active {
   background: var(--c-danger-soft);
 }
+.s-settings-row--warn .c-row__title,
+.s-settings-row--warn .s-settings-row__icon {
+  color: var(--c-warn);
+}
 
-/* 危险列表（历史缺类：JS 已在用）：整列表的行文字走危险色，
-   与上方 .s-settings-row--danger 同口径；行自身没带 --danger 变体时也仍然成立 */
+/* 整列表危险口径（行自身没带 --danger 变体时仍成立） */
 .s-settings-list--danger .c-row__title,
 .s-settings-list--danger .c-row__sub,
 .s-settings-list--danger .c-row__value,
@@ -11320,51 +11465,74 @@ textarea::selection {
   color: var(--c-danger);
 }
 
-/* M12：危险区独立分组——红色描边卡片，与普通数据管理拉开视觉隔离 */
-.s-settings-group--danger .s-settings-list {
-  border: var(--hairline) solid var(--c-danger);
-  background: var(--c-danger-soft);
+/* 危险区：更大上间距 + 危险色细边，与前一组彻底断开 */
+.s-settings-group--danger {
+  margin-top: var(--sp-9);
+  border-color: var(--c-danger);
+  box-shadow: none;
 }
-
 .s-settings-group--danger .s-settings-group__title {
   color: var(--c-danger);
 }
 
-/* 行内布局：标题可收缩，右值给足宽度（c-row__value 的 56% 会相对 trail 计算而挤爆） */
-.s-settings .c-row__main {
-  min-width: 0;
-}
+/* ---------------- 行图标 / 图标底座 ---------------- */
 
-.s-settings .c-row__title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.s-settings-row__icon {
+  color: var(--c-tint-soft-text);
 }
-
-.s-settings .c-row__trail {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 58%;
-}
-
-.s-settings .c-row__value {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 图标容器：iconEl 用 HTML 解析的常量 SVG（正确命名空间） */
 .s-settings-glyph__holder {
   display: grid;
   place-items: center;
   flex: none;
 }
-
 .s-settings-glyph__holder svg {
   display: block;
+}
+.s-settings-glyph {
+  display: grid;
+  place-items: center;
+}
+.s-settings-glyph--btn {
+  flex: none;
+  color: var(--c-tint-soft-text);
+}
+.s-settings .c-row--tappable {
+  cursor: pointer;
+}
+
+/* ---------------- 分段控件：胶囊化 ---------------- */
+
+.s-settings-segmented,
+.s-settings .c-segmented {
+  gap: var(--sp-1);
+  min-height: var(--tap);
+  padding: var(--sp-1);
+  border-radius: var(--r-pill);
+  background: var(--c-fill);
+}
+.s-settings-segmented__item,
+.s-settings .c-segmented__item {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 0 var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+  font-weight: var(--fw-medium);
+}
+
+/* 选中 = 中性强调底 + 主色描边，不再整块高饱和黄 */
+.s-settings-segmented__item.is-active,
+.s-settings .c-segmented__item.is-active,
+.s-settings .c-segmented__item[aria-selected="true"] {
+  border-color: var(--c-tint);
+  background: var(--c-segment-selected);
+  color: var(--c-text);
+  font-weight: var(--fw-semibold);
+  box-shadow: var(--shadow-card);
 }
 
 /* ---------------- 外观 ---------------- */
@@ -11372,43 +11540,29 @@ textarea::selection {
 .s-settings-theme {
   gap: var(--sp-4);
 }
-
 .s-settings-theme__label {
   flex: 1 1 auto;
 }
-
 .s-settings-theme__seg {
   flex: none;
   width: 168px;
 }
-
-/* c-segmented 组件默认 28px 高（紧凑型，用于筛选条），
-   本屏这三处是主要操作，命中区抬到 --tap（44px），符合 iOS 触控规范。 */
-.s-settings-theme__seg .c-segmented__item,
-.s-settings-cats__seg .c-segmented__item,
-.s-settings-import__seg .c-segmented__item {
-  min-height: var(--tap);
-}
-
-.s-settings-switch-row {
-  gap: var(--sp-4);
-}
-
 .s-settings-version .c-row__value {
   color: var(--c-text-2);
-  font-size: var(--fs-subhead);
+}
+.s-settings-import__seg {
+  width: 100%;
 }
 
 /* ---------------- 说明文字 ---------------- */
 
 .s-settings-note {
   margin: 0;
-  padding: var(--sp-3) calc(var(--page-x) + var(--sp-5)) 0;
+  padding: var(--sp-2) 0 0;
   color: var(--c-text-2);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
 }
-
 .s-settings-note--danger {
   color: var(--c-danger);
 }
@@ -11417,14 +11571,11 @@ textarea::selection {
 
 .s-settings-page {
   padding-top: var(--sp-3);
-  /* 全局 .app-screen__body 已含 --safe-bottom；这里再取 max 兜底，
-     iPhone Home 指示条特别高时也不会压住「新增分类」按钮和脚注。 */
+  /* 全局 .app-screen__body 已含 --safe-bottom；这里再取 max 兜底 */
   padding-bottom: max(var(--sp-8), env(safe-area-inset-bottom, 0px));
 }
-
 .s-settings-page__lead {
-  margin: 0;
-  padding: 0 calc(var(--page-x) + var(--sp-5)) var(--sp-4);
+  margin: 0 var(--page-x) var(--sp-4);
   color: var(--c-text-2);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
@@ -11438,47 +11589,39 @@ textarea::selection {
   gap: var(--sp-4);
   padding-top: var(--sp-1);
 }
-
 .s-settings-sheet .c-list {
   margin: 0;
   border-radius: var(--r-md);
 }
-
 .s-settings-sheet__list {
   margin: 0;
 }
-
 .s-settings-sheet .c-row {
   padding-left: var(--sp-5);
   padding-right: var(--sp-5);
 }
-
 .s-settings-sheet .c-row__title {
   font-size: var(--fs-body);
+  font-weight: var(--fw-regular);
 }
-
 .s-settings-sheet__lead {
   margin: 0;
   color: var(--c-text-2);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
 }
-
-/* 清空撤销历史 / 其它二次确认浮层的正文（2.17.0） */
 .s-settings-confirm {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   padding-top: var(--sp-1);
 }
-
 .s-settings-confirm__text {
   margin: 0;
   color: var(--c-text-2);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
 }
-
 .s-settings-sheet__file {
   margin: 0;
   overflow: hidden;
@@ -11488,30 +11631,48 @@ textarea::selection {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .s-settings-sheet__label {
   margin: var(--sp-1) 0 calc(var(--sp-2) * -1);
   color: var(--c-text-2);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
 }
-
 .s-settings-sheet__note {
   margin: 0;
   color: var(--c-text-3);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
 }
+.s-settings-sheet__hint {
+  margin: 0;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+  line-height: 1.45;
+}
+.s-settings-sheet__field {
+  border-radius: var(--r-md);
+  padding: 0 var(--sp-5);
+}
+.s-settings-sheet__field.is-disabled {
+  opacity: 0.6;
+}
+.s-settings-sheet__input {
+  font-size: var(--fs-body);
+  min-height: var(--tap);
+}
+.s-settings-sheet__error {
+  margin: 0;
+  min-height: var(--sp-5);
+  color: var(--c-danger);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
 
 /* 照片占用浮层（UI.md §2.6）：大字 + 说明 + 列表 + 动作行 + 底注。
-   全屏查看/删除由 components.css 的 .c-photoviewer 负责，这里只管浮层自身内容。
-   根类 s-settings-photos 由浮层容器的 className 选项挂在 .c-sheet 上，
    下方负边距都以 .s-settings-sheet 的 gap(--sp-4) 为基准，故在此显式钉住它 */
 .s-settings-photos .s-settings-sheet {
   gap: var(--sp-4);
 }
-
-/* 大字：28px，逐字按 UI.md §2.6（u-tabular 已在 JS 侧挂上） */
 .s-settings-photos__big {
   margin: 0;
   color: var(--c-text);
@@ -11519,7 +11680,6 @@ textarea::selection {
   line-height: var(--lh-title-1);
   font-weight: var(--fw-bold);
 }
-
 .s-settings-photos__hint {
   margin: calc(var(--sp-2) * -1) 0 0;   /* 与上方大字贴成一组（同 __label 口径） */
   color: var(--c-text-2);
@@ -11527,7 +11687,7 @@ textarea::selection {
   line-height: 1.5;
 }
 
-/* 动作行：整行可点，命中区 ≥ --tap；与 .c-row 同口径（底色/字号/按压过渡） */
+/* 动作行：整行可点，命中区 ≥ --tap；与 .c-row 同口径 */
 .s-settings-photos__row {
   display: flex;
   align-items: center;
@@ -11547,15 +11707,12 @@ textarea::selection {
   -webkit-tap-highlight-color: transparent;
   transition: background-color var(--dur-1) var(--ease-out);
 }
-
 .s-settings-photos__row:active {
   background: var(--c-pressed);
 }
-
 .s-settings-photos__row--danger {
   color: var(--c-danger);
 }
-
 .s-settings-photos__row--danger:active {
   background: var(--c-danger-soft);
 }
@@ -11566,7 +11723,6 @@ textarea::selection {
   opacity: 0.4;
   cursor: default;
 }
-
 .s-settings-photos__foot {
   margin: 0;
   color: var(--c-text-3);
@@ -11579,40 +11735,13 @@ textarea::selection {
   margin-top: calc(var(--sp-2) - var(--sp-4));
 }
 
-.s-settings-sheet__field {
-  border-radius: var(--r-md);
-  padding: 0 var(--sp-5);
-}
-
-.s-settings-sheet__field.is-disabled {
-  opacity: 0.6;
-}
-
-.s-settings-sheet__input {
-  font-size: var(--fs-body);
-  min-height: var(--tap);
-}
-
-.s-settings-sheet__error {
-  margin: 0;
-  min-height: var(--sp-5);
-  color: var(--c-danger);
-  font-size: var(--fs-footnote);
-  line-height: var(--lh-footnote);
-}
-
-.s-settings-import__seg {
-  width: 100%;
-}
-
-/* ---------------- 危险操作 ---------------- */
+/* ---------------- 危险操作面板 ---------------- */
 
 .s-settings-danger {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
 }
-
 .s-settings-danger__title {
   margin: 0;
   color: var(--c-text);
@@ -11620,31 +11749,26 @@ textarea::selection {
   line-height: var(--lh-body);
   font-weight: var(--fw-semibold);
 }
-
 .s-settings-danger__text {
   margin: 0;
   color: var(--c-text-2);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
 }
-
 .s-settings-danger__hint {
   margin: 0;
   color: var(--c-text-3);
   font-size: var(--fs-caption-1);
   line-height: var(--lh-caption-1);
 }
-
 .s-settings-danger__hint.is-error {
   color: var(--c-danger);
 }
-
 .s-settings-clear__field {
   margin-top: var(--sp-1);
   border-radius: var(--r-md);
   padding: 0 var(--sp-5);
 }
-
 .s-settings-clear__input {
   min-height: var(--tap);
   font-size: var(--fs-body);
@@ -11655,26 +11779,28 @@ textarea::selection {
 .s-settings-snaps {
   margin-top: var(--sp-2);
 }
-
 .s-settings-snap-list {
   margin: 0 var(--page-x);
 }
-
 .s-settings-actions {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
   padding: var(--sp-5) var(--page-x) 0;
 }
-
+.s-settings-actions--top {
+  margin: 0 var(--page-x) var(--sp-2);
+}
 .s-settings-empty {
   min-height: 0;
   margin: 0 var(--page-x);
   padding: var(--sp-9) var(--sp-5) 0;
 }
-
 .s-settings-empty__icon {
   color: var(--c-text-4);
+}
+.s-settings-empty .c-empty__title {
+  font-size: var(--fs-body);
 }
 
 /* ---------------- 分类管理 ---------------- */
@@ -11683,12 +11809,9 @@ textarea::selection {
   width: auto;
   margin: 0 var(--page-x) var(--sp-4);
 }
-
-/* M9：搜索框 */
 .s-settings-cats__search {
   margin: 0 var(--page-x) var(--sp-2);
 }
-
 .s-settings-cats__search-input {
   width: 100%;
   box-sizing: border-box;
@@ -11705,28 +11828,18 @@ textarea::selection {
   -webkit-appearance: none;
   appearance: none;
 }
-
 .s-settings-cats__search-input:focus-visible {
   outline: none;
   border-color: var(--c-tint-soft-text);
 }
-
-/* M9：新增按钮固定在列表上方 */
-.s-settings-actions--top {
-  margin: 0 var(--page-x) var(--sp-2);
-}
-
-/* M9：全部 / 常用 / 已隐藏 筛选行 */
 .s-settings-cats__filters {
   display: flex;
   gap: var(--sp-2);
   margin: 0 var(--page-x) var(--sp-2);
 }
-
 .s-settings-cats__listbox {
   min-height: 200px;
 }
-
 .s-settings-cats__count {
   margin: var(--sp-3) var(--page-x) 0;
   color: var(--c-text-4);
@@ -11734,7 +11847,7 @@ textarea::selection {
   text-align: center;
 }
 
-/* M9：常用星标（32px 视觉 × 44px 命中，向外扩） */
+/* 常用星标（32px 视觉 × 44px 命中，向外扩） */
 .s-settings-cat-star {
   position: relative;
   display: inline-flex;
@@ -11748,35 +11861,28 @@ textarea::selection {
   color: var(--c-text-4);
   -webkit-tap-highlight-color: transparent;
 }
-
 .s-settings-cat-star::after {
   content: '';
   position: absolute;
   inset: -6px;
   border-radius: var(--r-full);
 }
-
 .s-settings-cat-star:active {
   background: var(--c-pressed);
 }
-
 .s-settings-cat-star.is-active {
   color: var(--c-warn);
 }
-
 .s-settings-cat-star svg {
   width: 20px;
   height: 20px;
 }
-
 .s-settings-cats {
   margin: 0 var(--page-x);
 }
-
 .s-settings-cat-row {
   gap: var(--sp-4);
 }
-
 .s-settings-cat-icon {
   border-radius: var(--r-md);
 }
@@ -11794,7 +11900,6 @@ textarea::selection {
 .s-settings-tone-10 { background-color: var(--cat-10-soft); color: var(--cat-10); --ico-a: var(--cat-10-accent); --ico-a-o: 1; }
 .s-settings-tone-11 { background-color: var(--cat-11-soft); color: var(--cat-11); --ico-a: var(--cat-11-accent); --ico-a-o: 1; }
 .s-settings-tone-12 { background-color: var(--cat-12-soft); color: var(--cat-12); --ico-a: var(--cat-12-accent); --ico-a-o: 1; }
-
 .s-settings-tone-none {
   background-color: var(--c-fill);
   color: var(--c-text-2);
@@ -11805,14 +11910,13 @@ textarea::selection {
 .s-settings-edit {
   gap: var(--sp-4);
 }
-
 .s-settings-icon-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--sp-2) 6px;
 }
 
-/* 系统分类的图标候选：中性底 + 品牌黄做局部填充，和记账宫格里的贴纸感一致 */
+/* 系统分类的图标候选：中性底 + 品牌黄做局部填充 */
 .s-settings-icon-btn {
   display: grid;
   place-items: center;
@@ -11836,12 +11940,10 @@ textarea::selection {
     transform var(--dur-press-out) var(--ease-spring),
     color var(--dur-1) var(--ease-out);
 }
-
 .s-settings-icon-btn:active {
   background-color: var(--c-fill-press);
   transform: scale(0.94);
 }
-
 .s-settings-icon-btn.is-active {
   background-color: var(--c-tint-soft);
   box-shadow: inset 0 1px 0 var(--tile-inner-hi),
@@ -11850,26 +11952,15 @@ textarea::selection {
   --ico-a: var(--c-tint);
   --ico-a-o: 1;
 }
-
-/* 说明文字：图标候选换了、来源不同的时候说清楚，别让用户以为是缺陷 */
-.s-settings-sheet__hint {
-  margin: 0;
-  font-size: var(--fs-caption);
-  line-height: 1.45;
-  color: var(--c-text-3);
-}
-
 .s-settings-picker {
   margin-top: 2px;
 }
-
 .s-settings-swatches {
   display: grid;
   grid-template-columns: repeat(6, var(--tap));
   justify-content: space-between;
   gap: var(--sp-3);
 }
-
 .s-settings-swatch {
   position: relative;
   width: var(--tap);
@@ -11881,11 +11972,9 @@ textarea::selection {
   cursor: pointer;
   box-shadow: inset 0 0 0 var(--hairline) var(--c-separator);
 }
-
 .s-settings-swatch.is-active {
   box-shadow: 0 0 0 2px var(--c-bg-elev), 0 0 0 4px var(--c-text);
 }
-
 .s-settings-swatch-1 { background: var(--cat-1); }
 .s-settings-swatch-2 { background: var(--cat-2); }
 .s-settings-swatch-3 { background: var(--cat-3); }
@@ -11904,7 +11993,6 @@ textarea::selection {
 .s-settings-about__hero {
   margin-bottom: var(--sp-4);
 }
-
 .s-settings-about__mark {
   display: grid;
   place-items: center;
@@ -11915,7 +12003,6 @@ textarea::selection {
   background: var(--c-tint);
   color: var(--c-on-tint);
 }
-
 .s-settings-about__title {
   margin: 0;
   color: var(--c-text);
@@ -11923,30 +12010,25 @@ textarea::selection {
   line-height: var(--lh-title-3);
   font-weight: var(--fw-semibold);
 }
-
 .s-settings-about__version {
   margin: var(--sp-1) 0 0;
   color: var(--c-text-2);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
 }
-
 .s-settings-about__p {
   margin: var(--sp-3) 0 0;
   color: var(--c-text-2);
   font-size: var(--fs-subhead);
   line-height: var(--lh-subhead);
 }
-
 .s-settings-about__p--strong {
   color: var(--c-text);
   font-weight: var(--fw-medium);
 }
-
 .s-settings-about__privacy {
   margin-bottom: var(--sp-4);
 }
-
 .s-settings-about__list {
   display: flex;
   flex-direction: column;
@@ -11955,7 +12037,6 @@ textarea::selection {
   padding: 0;
   list-style: none;
 }
-
 .s-settings-about__item {
   display: flex;
   align-items: flex-start;
@@ -11964,7 +12045,6 @@ textarea::selection {
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
 }
-
 .s-settings-about__check {
   flex: none;
   display: grid;
@@ -11974,10 +12054,11 @@ textarea::selection {
   color: var(--c-success);
 }
 
+/* ---------------- 统计卡 ---------------- */
+
 .s-settings-stats {
   margin-bottom: var(--sp-7);
 }
-
 .s-settings-stats > .c-card__title,
 .s-settings-stats .c-card__title {
   margin: 0 0 var(--sp-4);
@@ -11986,13 +12067,11 @@ textarea::selection {
   line-height: var(--lh-footnote);
   font-weight: var(--fw-regular);
 }
-
 .s-settings-stats__grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-4) var(--sp-5);
 }
-
 .s-settings-stat {
   display: flex;
   flex-direction: column;
@@ -12002,19 +12081,19 @@ textarea::selection {
   background: var(--c-fill);
   text-align: center;
 }
-
 .s-settings-stat__value {
   color: var(--c-text);
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   font-weight: var(--fw-semibold);
 }
-
 .s-settings-stat__label {
   color: var(--c-text-3);
   font-size: var(--fs-caption-1);
   line-height: var(--lh-caption-1);
 }
+
+/* ---------------- 页脚 / 加入主屏幕步骤 ---------------- */
 
 .s-settings-foot {
   display: flex;
@@ -12023,21 +12102,16 @@ textarea::selection {
   padding: var(--sp-4) var(--sp-8);
   text-align: center;
 }
-
 .s-settings-foot__line {
   margin: 0;
   color: var(--c-text-3);
   font-size: var(--fs-caption-1);
   line-height: var(--lh-caption-1);
 }
-
 .s-settings-foot__line--quiet {
   /* 页脚这层浅灰底不是纯白：--c-text-4 在灰上只有 4.20:1，达不到 4.5:1，这里升一档 */
   color: var(--c-text-3);
 }
-
-/* ---------------- 加入主屏幕步骤 ---------------- */
-
 .s-settings-steps {
   display: flex;
   flex-direction: column;
@@ -12047,14 +12121,12 @@ textarea::selection {
   counter-reset: settings-step;
   list-style: none;
 }
-
 .s-settings-steps__item {
   position: relative;
   color: var(--c-text);
   font-size: var(--fs-subhead);
   line-height: var(--lh-subhead);
 }
-
 .s-settings-steps__item::before {
   content: counter(settings-step);
   counter-increment: settings-step;
@@ -12072,17 +12144,6 @@ textarea::selection {
   line-height: 1;
 }
 
-/* 图标在按钮里的尺寸修正 */
-.s-settings-glyph {
-  display: grid;
-  place-items: center;
-}
-
-.s-settings-glyph--btn {
-  flex: none;
-  color: var(--c-tint-soft-text);
-}
-
 /* ---------------- 隐藏的文件选择器 ---------------- */
 
 .s-settings-fileinput {
@@ -12098,25 +12159,18 @@ textarea::selection {
   white-space: nowrap;
 }
 
-/* ---------------- 可点击状态 ---------------- */
-
-.s-settings .c-row--tappable {
-  cursor: pointer;
-}
-
-.s-settings-empty .c-empty__title {
-  font-size: var(--fs-body);
-}
+/* ---------------- 减弱动态 ---------------- */
 
 @media (prefers-reduced-motion: reduce) {
   .s-settings-icon-btn,
   .s-settings-swatch,
   .s-settings-sheet,
-  .s-settings-group {
+  .s-settings-group,
+  .s-settings-toc,
+  .s-settings-photos__row {
     transition: none;
   }
 }
-
 </style>
   <style>
 /* 小账本 2.0 · css/screens/assistant.css
@@ -12226,11 +12280,6 @@ textarea::selection {
 
 .s-assistant__icon-btn:active {
   background: var(--c-fill-press);
-}
-
-.s-assistant__icon-btn:focus-visible {
-  outline: var(--focus-width) solid var(--c-focus);
-  outline-offset: var(--focus-offset);
 }
 
 .s-assistant__back {
@@ -12423,6 +12472,18 @@ textarea::selection {
   color: var(--c-warn);
 }
 
+/* 模式胶囊（A27）：本地 / 在线 / 本地（已回落），不许静默切换。
+ * 底色/字号复用 .s-assistant__flag，这里只补两档状态色。 */
+.s-assistant__capsule--remote {
+  background: var(--c-tint-soft);
+  color: var(--c-tint-soft-text);
+}
+
+.s-assistant__capsule--fallback {
+  background: var(--c-warn-soft);
+  color: var(--c-warn);
+}
+
 .s-assistant__tr--sum {
   padding-top: var(--sp-2);
   color: var(--c-text-2);
@@ -12485,16 +12546,26 @@ textarea::selection {
   background: var(--c-fill-press);
 }
 
+/* 几个小按钮共用的按下底色 */
+.s-assistant__opt:active,
+.s-assistant__chip:active,
+.s-assistant__target:active,
+.s-assistant__hcard-btn:active {
+  background: var(--c-fill-press);
+}
+
 .s-assistant__primary:focus-visible,
 .s-assistant__ghost:focus-visible,
 .s-assistant__opt:focus-visible,
 .s-assistant__chip:focus-visible,
-.s-assistant__ctxchip-close:focus-visible,
-.s-assistant__task:focus-visible,
 .s-assistant__target:focus-visible,
 .s-assistant__filter:focus-visible,
 .s-assistant__hcard-btn:focus-visible,
-.s-assistant__banner-btn:focus-visible {
+.s-assistant__banner-btn:focus-visible,
+.s-assistant__undo-bar-btn:focus-visible,
+.s-assistant__icon-btn:focus-visible,
+.s-assistant__send:focus-visible,
+.s-assistant__mic:focus-visible {
   outline: var(--focus-width) solid var(--c-focus);
   outline-offset: var(--focus-offset);
 }
@@ -12508,7 +12579,7 @@ textarea::selection {
 
 .s-assistant__opt {
   box-sizing: border-box;
-  min-height: var(--h-btn-sm);
+  min-height: var(--h-tap-min);
   padding: 0 12px;
   border: var(--hairline) solid var(--c-stroke);
   border-radius: var(--r-pill);
@@ -12519,10 +12590,6 @@ textarea::selection {
   font-weight: var(--fw-medium);
   cursor: pointer;
   touch-action: manipulation;
-}
-
-.s-assistant__opt:active {
-  background: var(--c-fill-press);
 }
 
 /* ---------------- 查询结果 ---------------- */
@@ -12634,10 +12701,6 @@ textarea::selection {
   touch-action: manipulation;
 }
 
-.s-assistant__target:active {
-  background: var(--c-fill-press);
-}
-
 .s-assistant__target-idx {
   display: grid;
   place-items: center;
@@ -12711,7 +12774,8 @@ textarea::selection {
   background: var(--c-bg);
 }
 
-.s-assistant__banner {
+.s-assistant__banner,
+.s-assistant__undo-bar {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -12724,8 +12788,14 @@ textarea::selection {
   line-height: var(--lh-footnote);
 }
 
-.s-assistant__banner[hidden] {
+.s-assistant__banner[hidden],
+.s-assistant__undo-bar[hidden] {
   display: none;
+}
+
+/* 撤销条（C3=A）：写入成功后常驻 8s，放在输入框上方，不遮输入区 */
+.s-assistant__undo-bar {
+  background: var(--c-success-soft);
 }
 
 .s-assistant__banner svg {
@@ -12742,9 +12812,10 @@ textarea::selection {
   min-width: 0;
 }
 
-.s-assistant__banner-btn {
+.s-assistant__banner-btn,
+.s-assistant__undo-bar-btn {
   flex: none;
-  min-height: var(--h-btn-sm);
+  min-height: var(--h-tap-min);
   padding: 0 10px;
   border: var(--hairline) solid var(--c-stroke-strong);
   border-radius: var(--r-pill);
@@ -12756,239 +12827,6 @@ textarea::selection {
   cursor: pointer;
 }
 
-/* ---------------- 情境上下文 Chip（解读/预算/流水带参进入） ---------------- */
-
-.s-assistant__ctxrow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  padding-bottom: var(--sp-2);
-}
-
-.s-assistant__ctxrow[hidden] {
-  display: none;
-}
-
-/* 空会话任务入口：4 等分，触区 ≥44px */
-.s-assistant__tasks {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--sp-2);
-  padding-bottom: var(--sp-2);
-}
-
-.s-assistant__tasks[hidden] {
-  display: none;
-}
-
-.s-assistant__task {
-  min-height: var(--h-tap-min, 44px);
-  padding: 0 4px;
-  border: var(--hairline) solid var(--c-stroke);
-  border-radius: var(--r-md);
-  background: var(--c-fill);
-  color: var(--c-text-2);
-  font-family: inherit;
-  font-size: var(--fs-footnote);
-  font-weight: var(--fw-medium);
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.s-assistant__task:active {
-  background: var(--c-fill-press);
-}
-
-.s-assistant__ctxchip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-1);
-  max-width: 100%;
-  min-height: 28px;
-  padding: 0 4px 0 10px;
-  border: var(--hairline) solid var(--c-stroke);
-  border-radius: var(--r-pill);
-  background: var(--c-fill);
-  color: var(--c-text-2);
-  font-size: var(--fs-caption-1);
-}
-
-.s-assistant__ctxchip-text {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.s-assistant__ctxchip-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: var(--c-text-3);
-  font-family: inherit;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.s-assistant__ctxchip-close:active {
-  background: var(--c-fill-press);
-}
-
-/* 「问这笔账」单条流水卡 */
-.s-assistant__txcard {
-  margin-top: var(--sp-2);
-  padding-top: var(--sp-2);
-  border-top: var(--hairline) solid var(--c-hairline);
-}
-
-/* ---------------- 洞察答案卡（本地计算结果只渲染不计算） ---------------- */
-
-.s-assistant__insight {
-  margin-top: var(--sp-2);
-}
-
-.s-assistant__insight-scope {
-  margin: 0 0 var(--sp-1);
-  color: var(--c-text-3);
-  font-size: var(--fs-caption-1);
-}
-
-.s-assistant__metric-sub {
-  grid-column: 1 / -1;
-  margin-top: -2px;
-  color: var(--c-text-3);
-  font-size: var(--fs-caption-1);
-}
-
-.s-assistant__causes {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
-  padding-top: var(--sp-2);
-  border-top: var(--hairline) solid var(--c-hairline);
-}
-
-.s-assistant__cause-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  min-width: 0;
-}
-
-.s-assistant__cause-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  font-weight: var(--fw-semibold);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.s-assistant__cause-delta {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--fw-semibold);
-}
-
-.s-assistant__cause-delta.is-expense {
-  color: var(--c-expense);
-}
-
-.s-assistant__cause-delta.is-income {
-  color: var(--c-income);
-}
-
-.s-assistant__cause-count {
-  flex: none;
-  color: var(--c-text-3);
-  font-size: var(--fs-caption-1);
-}
-
-.s-assistant__assumption {
-  margin: var(--sp-2) 0 0;
-  color: var(--c-text-3);
-  font-size: var(--fs-caption-1);
-  line-height: var(--lh-caption-1);
-}
-
-/* ---------------- 草稿行内编辑（P0-4） ---------------- */
-
-.s-assistant__tr-edit {
-  flex: none;
-  min-height: 24px;
-  padding: 0 8px;
-  border: var(--hairline) solid var(--c-stroke);
-  border-radius: var(--r-pill);
-  background: var(--c-bg);
-  color: var(--c-text-3);
-  font-family: inherit;
-  font-size: var(--fs-caption-1);
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.s-assistant__tr-edit:active {
-  background: var(--c-fill-press);
-}
-
-.s-assistant__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-
-.s-assistant__form-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.s-assistant__form-label {
-  color: var(--c-text-3);
-  font-size: var(--fs-caption-1);
-}
-
-.s-assistant__form-input {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: var(--hairline) solid var(--c-stroke-strong);
-  border-radius: var(--r-md);
-  background: var(--c-bg);
-  color: var(--c-text);
-  font-family: inherit;
-  font-size: var(--fs-body);
-}
-
-.s-assistant__form-input:focus-visible {
-  outline: var(--focus-width) solid var(--c-focus);
-  outline-offset: var(--focus-offset);
-}
-
-.s-assistant__optwrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  max-height: 180px;
-  overflow-y: auto;
-}
-
-.s-assistant__opt.is-active {
-  border-color: var(--c-tint);
-  background: var(--c-tint-soft, var(--c-fill));
-  color: var(--c-text);
-  font-weight: var(--fw-semibold);
-}
-
 .s-assistant__chips {
   display: flex;
   gap: var(--sp-2);
@@ -12998,17 +12836,14 @@ textarea::selection {
   -webkit-overflow-scrolling: touch;
 }
 
-.s-assistant__chips::-webkit-scrollbar {
-  display: none;
-}
-
+.s-assistant__chips::-webkit-scrollbar,
 .s-assistant__chips:empty {
   display: none;
 }
 
 .s-assistant__chip {
   flex: none;
-  min-height: var(--h-btn-sm);
+  min-height: var(--h-tap-min);
   padding: 0 12px;
   border: var(--hairline) solid var(--c-stroke);
   border-radius: var(--r-pill);
@@ -13019,10 +12854,6 @@ textarea::selection {
   white-space: nowrap;
   cursor: pointer;
   touch-action: manipulation;
-}
-
-.s-assistant__chip:active {
-  background: var(--c-fill-press);
 }
 
 .s-assistant__composer {
@@ -13072,8 +12903,8 @@ textarea::selection {
   display: grid;
   place-items: center;
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: var(--h-tap-min);
+  height: var(--h-tap-min);
   padding: 0;
   border: 0;
   border-radius: var(--r-full);
@@ -13113,83 +12944,12 @@ textarea::selection {
   height: 20px;
 }
 
-.s-assistant__send:focus-visible,
-.s-assistant__mic:focus-visible {
-  outline: var(--focus-width) solid var(--c-focus);
-  outline-offset: var(--focus-offset);
-}
-
+/* 命中区补偿（A16/09）：40px 与 34px 的控件补到 ≥44×44，不改版式 */
 .s-assistant__privacy {
   margin: 6px 0 0;
   color: var(--c-text-4);
   font-size: var(--fs-micro);
   text-align: center;
-}
-
-/* ---------------- 智能增强（云端辅助） ----------------
-   停止键与发送键同尺寸（≥44px）；理解中占位与降级行使用既有 CSS 变量，深色模式自动跟随。 */
-
-.s-assistant__stop {
-  background: var(--c-fill-2);
-  color: var(--c-text-2);
-}
-
-.s-assistant__stop:active {
-  background: var(--c-fill-3);
-}
-
-.s-assistant__aithink {
-  color: var(--c-text-3);
-}
-
-.s-assistant__text.is-streaming::after {
-  content: '▍';
-  color: var(--c-text-4);
-}
-
-.s-assistant__degrade {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 7px 10px;
-  border-radius: var(--r-md);
-  background: var(--c-fill-2);
-  color: var(--c-text-3);
-  font-size: var(--fs-micro);
-  word-break: break-word;
-}
-
-.s-assistant__degrade-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.s-assistant__degrade-btn,
-.s-assistant__explain {
-  flex: none;
-  min-width: 44px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: none;
-  border-radius: var(--r-full);
-  background: var(--c-tint);
-  color: var(--c-on-tint);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-}
-
-.s-assistant__explainrow {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 6px;
-}
-
-.s-assistant__srcnote {
-  margin: 6px 0 0;
-  color: var(--c-text-4);
-  font-size: var(--fs-micro);
-  text-align: right;
 }
 
 /* ---------------- 撤销历史 ---------------- */
@@ -13228,7 +12988,7 @@ textarea::selection {
 
 .s-assistant__filter {
   flex: none;
-  min-height: 30px;
+  min-height: var(--h-tap-min);
   padding: 0 10px;
   border: var(--hairline) solid var(--c-stroke);
   border-radius: var(--r-pill);
@@ -13293,7 +13053,7 @@ textarea::selection {
 }
 
 .s-assistant__hcard-btn {
-  min-height: var(--h-btn-sm);
+  min-height: var(--h-tap-min);
   padding: 0 12px;
   border: var(--hairline) solid var(--c-stroke);
   border-radius: var(--r-pill);
@@ -13303,10 +13063,6 @@ textarea::selection {
   font-size: var(--fs-footnote);
   font-weight: var(--fw-semibold);
   cursor: pointer;
-}
-
-.s-assistant__hcard-btn:active {
-  background: var(--c-fill-press);
 }
 
 .s-assistant__empty {
@@ -13338,20 +13094,6 @@ textarea::selection {
   color: var(--c-text-3);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
-}
-
-/* ---------------- 确认浮层 ---------------- */
-
-.s-assistant__confirm {
-  padding: 0 var(--sp-page) var(--sp-2);
-}
-
-.s-assistant__confirm-text {
-  margin: 0;
-  color: var(--c-text-2);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  white-space: pre-line;
 }
 
 /* ---------------- 适配 ---------------- */
@@ -14068,7 +13810,7 @@ textarea::selection {
     <p style="padding: 24px; font-size: 16px; line-height: 24px;">小账本需要启用 JavaScript 才能使用。</p>
   </noscript>
 
-  <!-- 加载顺序冻结：core → ui → 壳层 → router → app；壳层 25 条内联 + 16 个 lazy chunk 由 load-screen.js 加载 -->
+  <!-- 加载顺序冻结：core → ui → 壳层 → router → app；壳层 25 条内联 + 15 个 lazy chunk 由 load-screen.js 加载 -->
   <script>
 /* 小账本 2.0 · js/core/money.js · owner: dba（T01）
  * 契约锚点：CONTRACT §2.1（Cents）、§6.1、§8（金额错误码）。
@@ -15952,43 +15694,14 @@ textarea::selection {
       createCategory({ id: 'ca_tools', kind: 'expense', name: '工具', icon: 'wrench', color: '#8E8E93', sort: 320, hidden: false, system: true, aliases: ['五金', '工具', '螺丝'] }, at),
       createCategory({ id: 'ca_appliance', kind: 'expense', name: '电器', icon: 'washer', color: '#007AFF', sort: 330, hidden: false, system: true, aliases: ['家电', '冰箱', '洗衣机', '空调'] }, at),
       createCategory({ id: 'ca_family', kind: 'expense', name: '亲友', icon: 'family', color: '#34C759', sort: 340, hidden: false, system: true, aliases: ['走亲戚', '亲戚', '看望'] }, at),
-      /* 2.22 高频分类转正（规格 §8.3 预留阶段）：24 枚候选图标升级为系统默认分类。
-         老账本由 backfillSeedCategories 在加载路径按 id 幂等补种，无需迁移。 */
-      createCategory({ id: 'ca_takeout', kind: 'expense', name: '外卖', icon: 'takeout', color: '#FF9500', sort: 350, hidden: false, system: true, aliases: ['外卖', '点外卖', '外送', '美团', '饿了么', '送餐'] }, at),
-      createCategory({ id: 'ca_breakfast', kind: 'expense', name: '早餐', icon: 'breakfast', color: '#FF9500', sort: 360, hidden: false, system: true, aliases: ['早餐', '早饭', '早点', '买早餐', '早午餐'] }, at),
-      createCategory({ id: 'ca_supermarket', kind: 'expense', name: '超市', icon: 'supermarket', color: '#FF2D55', sort: 370, hidden: false, system: true, aliases: ['超市', '商超', '便利店', '日用采购'] }, at),
-      createCategory({ id: 'ca_online_shopping', kind: 'expense', name: '网购', icon: 'online-shopping', color: '#FF2D55', sort: 380, hidden: false, system: true, aliases: ['网购', '电商', '淘宝', '拼多多', '京东', '快递', '包裹'] }, at),
-      createCategory({ id: 'ca_secondhand', kind: 'expense', name: '二手交易', icon: 'secondhand', color: '#8E8E93', sort: 390, hidden: false, system: true, aliases: ['二手', '闲置', '转卖', '闲鱼', '回收', '出二手'] }, at),
-      createCategory({ id: 'ca_rent', kind: 'expense', name: '房租', icon: 'rent', color: '#8E8E93', sort: 400, hidden: false, system: true, aliases: ['房租', '租金', '月租', '租房', '押金'] }, at),
-      createCategory({ id: 'ca_utility', kind: 'expense', name: '水电燃', icon: 'utility-bill', color: '#8E8E93', sort: 410, hidden: false, system: true, aliases: ['水电燃', '水电', '水电费', '水费', '电费', '燃气', '燃气费'] }, at),
-      createCategory({ id: 'ca_broadband', kind: 'expense', name: '宽带', icon: 'broadband', color: '#34C759', sort: 420, hidden: false, system: true, aliases: ['宽带', '网费', '网络费', 'WiFi', 'wifi', '宽带续费'] }, at),
-      createCategory({ id: 'ca_ev_charge', kind: 'expense', name: '汽车充电', icon: 'ev-charge', color: '#007AFF', sort: 430, hidden: false, system: true, aliases: ['汽车充电', '充电', '充电桩', '电车充电', '新能源'] }, at),
-      createCategory({ id: 'ca_car_service', kind: 'expense', name: '汽车保养', icon: 'car-service', color: '#007AFF', sort: 440, hidden: false, system: true, aliases: ['汽车保养', '保养', '换机油', '四轮定位', '维修保养'] }, at),
-      createCategory({ id: 'ca_car_wash', kind: 'expense', name: '洗车', icon: 'car-wash', color: '#007AFF', sort: 450, hidden: false, system: true, aliases: ['洗车', '打蜡', '车辆美容'] }, at),
-      createCategory({ id: 'ca_medicine', kind: 'expense', name: '药品', icon: 'medicine', color: '#FF3B30', sort: 460, hidden: false, system: true, aliases: ['药品', '药店', '感冒药', '处方药', '消炎药', '退烧药'] }, at),
-      createCategory({ id: 'ca_clinic', kind: 'expense', name: '门诊', icon: 'clinic', color: '#FF3B30', sort: 470, hidden: false, system: true, aliases: ['门诊', '挂号', '门诊费', '打针', '输液'] }, at),
-      createCategory({ id: 'ca_dentist', kind: 'expense', name: '牙科', icon: 'dentist', color: '#FF3B30', sort: 480, hidden: false, system: true, aliases: ['牙科', '看牙', '洗牙', '补牙', '拔牙', '口腔'] }, at),
-      createCategory({ id: 'ca_checkup', kind: 'expense', name: '体检', icon: 'checkup', color: '#FF3B30', sort: 490, hidden: false, system: true, aliases: ['体检', '体检报告', '复查', '筛查', '疫苗'] }, at),
-      createCategory({ id: 'ca_tuition', kind: 'expense', name: '学费课程', icon: 'tuition', color: '#5856D6', sort: 500, hidden: false, system: true, aliases: ['学费课程', '培训班', '辅导班', '网课', '报名费', '兴趣班', '考级'] }, at),
-      createCategory({ id: 'ca_stationery', kind: 'expense', name: '文具', icon: 'stationery', color: '#5856D6', sort: 510, hidden: false, system: true, aliases: ['文具', '铅笔', '笔记本', '学习用品', '教辅'] }, at),
-      createCategory({ id: 'ca_subscription', kind: 'expense', name: '会员订阅', icon: 'subscription', color: '#AF52DE', sort: 520, hidden: false, system: true, aliases: ['会员订阅', '会员', '订阅', '自动续费', '包月', '视频会员'] }, at),
-      createCategory({ id: 'ca_insurance', kind: 'expense', name: '保险', icon: 'insurance', color: '#34C759', sort: 530, hidden: false, system: true, aliases: ['保险', '保费', '投保', '保单', '车险', '寿险'] }, at),
-      createCategory({ id: 'ca_loan', kind: 'expense', name: '贷款还贷', icon: 'loan', color: '#8E8E93', sort: 540, hidden: false, system: true, aliases: ['贷款还贷', '贷款', '还贷', '借款', '月供', '房贷', '花呗还款'] }, at),
-      createCategory({ id: 'ca_topup', kind: 'expense', name: '话费充值', icon: 'topup', color: '#34C759', sort: 550, hidden: false, system: true, aliases: ['话费充值', '话费', '充话费', '流量', '流量包', '手机费'] }, at),
-      createCategory({ id: 'ca_software', kind: 'expense', name: '云服务', icon: 'software', color: '#5856D6', sort: 560, hidden: false, system: true, aliases: ['云服务', '软件服务', '网盘会员', 'AI工具', 'AI 工具'] }, at),
       createCategory({ id: 'ca_salary', kind: 'income', name: '工资', icon: 'salary', color: '#34C759', sort: 10, hidden: false, system: true, aliases: ['工资', '发薪', '月薪', '薪水'] }, at),
       createCategory({ id: 'ca_bonus', kind: 'income', name: '奖金', icon: 'bonus', color: '#FF9500', sort: 20, hidden: false, system: true, aliases: ['奖金', '年终奖', '提成'] }, at),
       createCategory({ id: 'ca_invest', kind: 'income', name: '理财', icon: 'invest', color: '#007AFF', sort: 30, hidden: false, system: true, aliases: ['利息', '基金', '股票', '分红'] }, at),
       createCategory({ id: 'ca_parttime', kind: 'income', name: '兼职', icon: 'parttime', color: '#5856D6', sort: 40, hidden: false, system: true, aliases: ['兼职', '外快', '稿费'] }, at),
       createCategory({ id: 'ca_redpacket', kind: 'income', name: '红包', icon: 'redpacket', color: '#FF2D55', sort: 50, hidden: false, system: true, aliases: ['红包', '收红包', '压岁钱'] }, at),
-      createCategory({ id: 'ca_other_income', kind: 'income', name: '其他', icon: 'coins', color: '#8E8E93', sort: 60, hidden: false, system: true, aliases: ['其他', '退款', '报销'] }, at),
-      createCategory({ id: 'ca_interest', kind: 'income', name: '利息', icon: 'interest', color: '#007AFF', sort: 70, hidden: false, system: true, aliases: ['利息', '存款利息', '利息收入', '活期利息'] }, at),
-      createCategory({ id: 'ca_dividend', kind: 'income', name: '分红', icon: 'dividend', color: '#007AFF', sort: 80, hidden: false, system: true, aliases: ['分红', '股息', '红利'] }, at)
+      createCategory({ id: 'ca_other_income', kind: 'income', name: '其他', icon: 'coins', color: '#8E8E93', sort: 60, hidden: false, system: true, aliases: ['其他', '退款', '报销'] }, at)
     ];
 
-    /* 2.22.1：种子出口即做图标/别名升级（幂等）——新建账本与老账本补种共用同一规则，
-       不再依赖首次加载的 backfill 才修剪别名。 */
-    upgradeSeedCategoryIcons(categories);
     return { books: books, accounts: accounts, categories: categories };
   }
 
@@ -16070,24 +15783,6 @@ textarea::selection {
     ca_other_income: { from: 'ellipsis', to: 'coins' }
   };
 
-  /* 2.22 别名让位：新转正的 24 个高频分类接管了更精确的词，旧 catch-all 分类里
-   * 的同名词按「仍是出厂默认别名」原则移除，自然语言记账才能路由到新分类。
-   * 只动 system === true 且别名仍是种子值的条目；用户数据不受影响。 */
-  var SEED_ALIAS_REMOVALS = {
-    ca_food: ['早饭', '外卖', '零食'],
-    ca_home: ['房租', '水电', '宽带', '燃气'],
-    ca_shopping: ['网购'],
-    ca_daily: ['超市'],
-    ca_comm: ['话费', '流量', '手机费'],
-    ca_invest: ['利息', '分红'],
-    ca_health: ['买药', '体检', '牙医'],
-    ca_study: ['学费'],
-    ca_auto: ['保养', '洗车'],
-    ca_fun: ['会员'],
-    ca_subscription: ['视频会员'],
-    ca_office: ['文具', '打印'],
-  };
-
   function upgradeSeedCategoryIcons(list) {
     if (!Array.isArray(list)) { return list; }
     for (var i = 0; i < list.length; i++) {
@@ -16095,25 +15790,8 @@ textarea::selection {
       if (!category || category.system !== true) { continue; }
       var rule = SEED_ICON_UPGRADES[category.id];
       if (rule && category.icon === rule.from) { category.icon = rule.to; }
-      var removals = SEED_ALIAS_REMOVALS[category.id];
-      if (removals && Array.isArray(category.aliases)) {
-        for (var r = 0; r < removals.length; r++) {
-          var at2 = category.aliases.indexOf(removals[r]);
-          if (at2 >= 0) { category.aliases.splice(at2, 1); }
-        }
-      }
     }
     return list;
-  }
-
-  /* 2.22 系统分类补种：常规启动对同版本库也按 id 幂等追加缺失的系统分类。
-   * mergeSeedById 只增不改，用户隐藏/改名的同名分类不会被覆盖；
-   * 新建账本走 seedData 本身，无需此步。 */
-  function backfillSeedCategories(db) {
-    if (!isObj(db) || !Array.isArray(db.categories)) { return db; }
-    mergeSeedById(db.categories, seedData(dates.nowIso()).categories);
-    upgradeSeedCategoryIcons(db.categories);
-    return db;
   }
 
   function dbFailure(path) {
@@ -16442,7 +16120,6 @@ textarea::selection {
 
     ensureShape: ensureShape,
     applyCategoryDelete: applyCategoryDelete,
-    backfillSeedCategories: backfillSeedCategories,
 
     seedData: seedData,
     defaultSettings: defaultSettings,
@@ -17207,38 +16884,12 @@ textarea::selection {
           });
         }
 
-        /* 2.22：同版本库也补种新增系统分类（幂等、只增不改）——种子演进不再依赖
-           schemaVersion 升级。有新增时立刻写回一次，后续启动即不再重补。 */
-        var catsBefore = Array.isArray(value.categories) ? value.categories.length : 0;
-        schema.backfillSeedCategories(value);
-        var catsGrew = Array.isArray(value.categories) && value.categories.length > catsBefore;
         var validated = schema.validateDb(value);
         if (!validated.ok) {
           return readSnapshotRecords().then(function (records) {
             return corruptFailure(latestSnapshotId(records));
           }, function () {
             return corruptFailure(null);
-          });
-        }
-        if (catsGrew) {
-          var isoBackfill = nowIso();
-          value.updatedAt = isoBackfill;
-          return writeStateRecord({ key: STATE_KEY, value: clone(value), savedAt: isoBackfill }).then(function () {
-            installCache(value, isoBackfill);
-            persistStorageOnce();
-            return {
-              ok: true,
-              data: clone(cache),
-              meta: { source: 'backfill', degraded: false, savedAt: isoBackfill }
-            };
-          }, function () {
-            /* 写回失败不阻断启动：内存里已带新分类，下次启动再补 */
-            installCache(value, recordSavedAt);
-            return {
-              ok: true,
-              data: clone(cache),
-              meta: { source: 'idb', degraded: false, savedAt: recordSavedAt }
-            };
           });
         }
         installCache(value, recordSavedAt);
@@ -20028,8 +19679,6 @@ textarea::selection {
       return fail('E_STORAGE_VERSION', 'schemaVersion');
     }
     if (db.schemaVersion === SCHEMA_VERSION) {
-      /* 2.22：同版本库也补种新增系统分类（幂等、只增不改），再做常规校验 */
-      schema.backfillSeedCategories(db);
       var same = schema.validateDb(db);
       if (!same.ok) { return fail(same.code || 'E_SCHEMA_INVALID', same.path); }
       return { ok: true, db: clone(db), warnings: [], from: SCHEMA_VERSION };
@@ -23358,7 +23007,8 @@ textarea::selection {
     E_HISTORY_UNAVAILABLE: '撤销历史暂不可用',
     E_HISTORY_MISSING: '这条记录已经撤销过了',
     E_HISTORY_STALE: '账目已变化，无法自动撤销',
-    E_HISTORY_APPLY: '撤销失败，请重试'
+    E_HISTORY_APPLY: '撤销失败，请重试',
+    E_HISTORY_PARTIAL: '部分账目已被删除，撤销没有全部生效'
   };
 
   var RANGE_LABEL = { today: '今天', week: '近 7 天', all: '全部' };
@@ -23660,6 +23310,10 @@ textarea::selection {
       }
     }
 
+    /* 有目标账目已被硬删除 ⇒ 撤销不可能全部生效，不得谎报成功（DECISIONS R-06） */
+    if (skipped > 0) {
+      return { ok: false, code: 'E_HISTORY_PARTIAL', message: MESSAGES.E_HISTORY_PARTIAL, restored: restored, removed: removed, skipped: skipped };
+    }
     return { ok: true, restored: restored, removed: removed, skipped: skipped };
   }
 
@@ -26210,76 +25864,20 @@ textarea::selection {
     'logout': '<path d="m16 17l5-5l-5-5m5 5H9m0 9H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
     'grid': '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
     'alarm': '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M5 3L2 6m20 0l-3-3M6.38 18.7L4 21m13.64-2.33L20 21"/>',
-    /* ----- 分类补充（2.7 重绘：Morphicons 旧线性 → 双色轻填充，key 与别名不变、老数据免迁移） ----- */
-    'store': A('M6 9.5h12v8.5a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9.5Z')
-      + S('M4.2 9.5 5.8 4.7a1.7 1.7 0 0 1 1.6-1.2h9.2a1.7 1.7 0 0 1 1.6 1.2l1.6 4.8Z')
-      + S('M6 20V9.5') + S('M18 20V9.5')
-      + S('M12 13.2v3.6'),
-
-    'coffee': A('M5.6 12.4h8.8v3.4a2.6 2.6 0 0 1-2.6 2.6H8.2a2.6 2.6 0 0 1-2.6-2.6V12.4Z')
-      + S('M5.6 9.4h8.8v6.4a2.6 2.6 0 0 1-2.6 2.6H8.2a2.6 2.6 0 0 1-2.6-2.6V9.4Z')
-      + S('M5.6 12.4h8.8')
-      + S('M14.4 11.2h1.6a2.3 2.3 0 0 1 0 4.6h-1.6')
-      + S('M10 3.7c-.8.9-.8 1.8 0 2.7'),
-
-    'pizza': A('M12 20.4 4.6 7.2A18.9 18.9 0 0 1 19.4 7.2Z')
-      + S('M12 20.4 4.6 7.2A18.9 18.9 0 0 1 19.4 7.2Z')
-      + S('M7 10.1a10.8 10.8 0 0 1 10 0')
-      + S('M10.7 13.4h.01') + S('M13.7 12.2h.01') + S('M11.9 16.4h.01'),
-
-    'truck': A('M3 14.7V6.5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v8.2Z')
-      + S('M3 14.7V6.5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v8.2Z')
-      + S('M13 7.7h3.6l3.4 4v2a1 1 0 0 1-1 1h-6')
-      + S('M6.6 16.7a1.9 1.9 0 1 1 0 3.8a1.9 1.9 0 1 1 0-3.8')
-      + S('M17.2 16.7a1.9 1.9 0 1 1 0 3.8a1.9 1.9 0 1 1 0-3.8')
-      + S('M8.5 18.6h6.8'),
-
-    'package': A('M5 19.5V8.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v11Z')
-      + S('M5 19.5V8.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v11Z')
-      + S('M12 6.5v13')
-      + S('M14 15.4h3.6') + S('M14 17.4h2.2'),
-
-    'droplet': A('M12 21.5a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 10.6 5 12.5 5 14.5a7 7 0 0 0 7 7Z')
-      + S('M12 21.5a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 10.6 5 12.5 5 14.5a7 7 0 0 0 7 7Z')
-      + S('M8 14.5a4 4 0 0 0 4 4'),
-
-    'building': A('M5.5 20.5V7h10.2v13.5Z')
-      + S('M4.1 7h13')
-      + S('M5.5 20.5V7h10.2v13.5')
-      + S('M8 10.4h2.2M12 10.4h2.2M8 13.8h2.2M12 13.8h2.2')
-      + S('M15.7 11h2.8a1.5 1.5 0 0 1 1.5 1.5v8')
-      + S('M17.2 14.2h1.3M9.4 20.5v-2.4a1.5 1.5 0 0 1 3 0v2.4'),
-
-    'headphones': A('M16.2 16.4a1.6 1.6 0 0 1 1.6-1.6h1.2a1.6 1.6 0 0 1 1.6 1.6v2a1.6 1.6 0 0 1-1.6 1.6h-1.2a1.6 1.6 0 0 1-1.6-1.6Z')
-      + S('M5.6 15.2v-2.4a6.4 6.4 0 0 1 12.8 0v2.4')
-      + S('M3.4 16.4a1.6 1.6 0 0 1 1.6-1.6h1.2a1.6 1.6 0 0 1 1.6 1.6v2a1.6 1.6 0 0 1-1.6 1.6H5a1.6 1.6 0 0 1-1.6-1.6Z')
-      + S('M16.2 16.4a1.6 1.6 0 0 1 1.6-1.6h1.2a1.6 1.6 0 0 1 1.6 1.6v2a1.6 1.6 0 0 1-1.6 1.6h-1.2a1.6 1.6 0 0 1-1.6-1.6Z'),
-
-    'film': A('M9.1 6h5.8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H9.1a1.5 1.5 0 0 1-1.5-1.5v-9a1.5 1.5 0 0 1 1.5-1.5Z')
-      + S('M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z')
-      + S('M9.1 6h5.8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H9.1a1.5 1.5 0 0 1-1.5-1.5v-9a1.5 1.5 0 0 1 1.5-1.5Z')
-      + S('M5 7v1.6M5 11.2v1.6M5 15.4v1.6')
-      + S('M19 7v1.6M19 11.2v1.6M19 15.4v1.6'),
-
-    'graduation': A('M12 5 3 10.5l9 5.5 9-5.5Z')
-      + S('M12 5 3 10.5l9 5.5 9-5.5Z')
-      + S('M6.6 13.3v2.6a5.4 2.4 0 0 0 10.8 0v-2.6')
-      + S('M21 10.5v4.6'),
-
-    'crown': A('M6 7l3 4.2 3-6.7 3 6.7 3-4.2 1 5.9H5L6 7Z')
-      + S('M4.5 15.5 6 7l3 4.2 3-6.7 3 6.7 3-4.2 1.5 8.5Z')
-      + S('M5.8 18.6h12.4a1 1 0 0 1 1 1v.2a1 1 0 0 1-1 1H5.8a1 1 0 0 1-1-1v-.2a1 1 0 0 1 1-1Z'),
-
-    'diamond': A('M3 10h18l-9 10.5Z')
-      + S('M7 4.5h10l4 5.5-9 10.5-9-10.5Z')
-      + S('M3 10h18')
-      + S('M8.2 10l3.8 10.5') + S('M15.8 10l-3.8 10.5'),
-
-    'scissors': A('M6.5 4.4a2.6 2.6 0 1 1 0 5.2a2.6 2.6 0 1 1 0-5.2')
-      + S('M6.5 4.4a2.6 2.6 0 1 1 0 5.2a2.6 2.6 0 1 1 0-5.2')
-      + S('M6.5 14.4a2.6 2.6 0 1 1 0 5.2a2.6 2.6 0 1 1 0-5.2')
-      + S('M8.4 8.6l12 7.2')
-      + S('M8.4 15.4l12-7.2'),
+    /* ----- 分类补充（Morphicons 图标包） ----- */
+    'store': '<path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5m8.774-10.69a1.12 1.12 0 0 0-1.549 0a2.5 2.5 0 0 1-3.451 0a1.12 1.12 0 0 0-1.548 0a2.5 2.5 0 0 1-3.452 0a1.12 1.12 0 0 0-1.549 0a2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244"/><path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05"/>',
+    'coffee': '<path d="M10 2v2m4-2v2m2 4a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1M6 2v2"/>',
+    'pizza': '<path d="m12 14l-1 1m2.75 3.25l-1.25 1.42m5.275-14.016a15.68 15.68 0 0 0-12.121 12.12M18.8 9.3a1 1 0 0 0 2.1 7.7"/><path d="M21.964 20.732a1 1 0 0 1-1.232 1.232l-18-5a1 1 0 0 1-.695-1.232A19.68 19.68 0 0 1 15.732 2.037a1 1 0 0 1 1.232.695z"/>',
+    'truck': '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2m10 0H9m10 0h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+    'package': '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73zm1 .27V12"/><path d="M3.29 7L12 12l8.71-5M7.5 4.27l9 5.15"/>',
+    'droplet': '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7"/>',
+    'building': '<path d="M12 10h.01M12 14h.01M12 6h.01M16 10h.01M16 14h.01M16 6h.01M8 10h.01M8 14h.01M8 6h.01M9 22v-3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/><rect width="16" height="20" x="4" y="2" rx="2"/>',
+    'headphones': '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+    'film': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18M3 7.5h4M3 12h18M3 16.5h4M17 3v18m0-13.5h4m-4 9h4"/>',
+    'graduation': '<path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0zM22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/>',
+    'crown': '<path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294zM5 21h14"/>',
+    'diamond': '<path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41L13.7 2.71a2.41 2.41 0 0 0-3.41 0Z"/>',
+    'scissors': '<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12L12 12m8-8L8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8L20 20"/>',
   };
 
 
@@ -26296,374 +25894,255 @@ textarea::selection {
     {
       key: 'food', label: '饮食', hint: '吃饭、外卖、下馆子',
       items: [
-        ['hotpot', '火锅', '涮锅 麻辣烫 火锅店 打边炉 huoguo',
+        ['hotpot', '火锅', '涮锅 麻辣烫 火锅店 打边炉',
           A('M4.6 11.6h14.8v3.2a4.4 4.4 0 0 1-4.4 4.4H9a4.4 4.4 0 0 1-4.4-4.4v-3.2Z')
           + S('M3.4 11.6h17.2')
           + S('M4.6 11.6v3.2a4.4 4.4 0 0 0 4.4 4.4h6a4.4 4.4 0 0 0 4.4-4.4v-3.2')
           + S('M9.4 8.4c-.8 1-.8 1.9 0 2.8') + S('M14.6 8.4c-.8 1-.8 1.9 0 2.8')],
-        ['grill', '烧烤', '撸串 烤串 烤肉 大排档 shaokao',
+        ['grill', '烧烤', '撸串 烤串 烤肉 大排档',
           A('M7 9.6h3.8v4.8H7zM12.6 9.6h3.8v4.8h-3.8z')
           + S('M2.8 12h18.4')
           + S('M7 9.6h3.8v4.8H7z') + S('M12.6 9.6h3.8v4.8h-3.8z')
           + S('M5.6 17.4c0 1.4 1.8 1.4 1.8 0s1.8-1.4 1.8 0')],
-        ['latte', '咖啡', '拿铁 美式 瑞幸 星巴克 咖啡豆 kafei',
+        ['latte', '咖啡', '拿铁 美式 瑞幸 星巴克 咖啡豆',
           A('M6.4 9.4h9.2v4.6a4.6 4.6 0 0 1-9.2 0V9.4Z')
           + S('M6.4 9.4h9.2v4.6a4.6 4.6 0 0 1-9.2 0V9.4Z')
           + S('M15.6 10.4h1.4a2.2 2.2 0 0 1 0 4.4h-1.4')
           + S('M4.6 19.6h12.8')
           + S('M8.2 6.6c-.7.8-.7 1.5 0 2.2') + S('M11.4 6.6c-.7.8-.7 1.5 0 2.2')],
-        ['milktea', '奶茶', '珍珠奶茶 喜茶 奶茶店 果茶 naicha',
+        ['milktea', '奶茶', '珍珠奶茶 喜茶 奶茶店 果茶',
           A('M6.6 9.6h10.8l-1.2 9.2a2 2 0 0 1-2 1.8H9.8a2 2 0 0 1-2-1.8L6.6 9.6Z')
           + S('M6.6 9.6h10.8l-1.2 9.2a2 2 0 0 1-2 1.8H9.8a2 2 0 0 1-2-1.8L6.6 9.6Z')
           + S('M5.8 9.6h12.4') + S('M15.2 3.4 12.6 9.6')
           + S('M10 14.4h.01') + S('M13 15h.01') + S('M11.6 17.2h.01')],
-        ['cake', '蛋糕', '甜品 生日蛋糕 烘焙 下午茶 dangao',
+        ['cake', '蛋糕', '甜品 生日蛋糕 烘焙 下午茶',
           A('M5.4 14.4h13.2v5.2H5.4z')
           + S('M4.4 14.4c1.6-2.4 3.4-2.4 5 0s3.4 2.4 5 0 3.4-2.4 5 0')
           + S('M5.4 14.4h13.2v3.4a1.8 1.8 0 0 1-1.8 1.8H7.2a1.8 1.8 0 0 1-1.8-1.8v-3.4Z')
           + S('M12 8.4v3') + S('M12 4.6c1 1 .9 1.9 0 2.4-.9-.5-1-1.4 0-2.4Z')],
-        ['burger', '汉堡', '快餐 麦当劳 肯德基 堡 hanbao',
+        ['burger', '汉堡', '快餐 麦当劳 肯德基 堡',
           A('M4.4 12.2h15.2v2.4H4.4z')
           + S('M4 10.8c0-3.3 3.6-5.4 8-5.4s8 2.1 8 5.4H4Z')
           + S('M3.4 12.2h17.2') + S('M4.2 14.6h15.6')
           + S('M4.6 14.6h14.8a3 3 0 0 1-3 3.4H7.6a3 3 0 0 1-3-3.4Z')
           + S('M8.4 7.8h.01') + S('M12 6.8h.01') + S('M15.6 7.8h.01')],
-        ['noodles', '面条', '拉面 米线 面馆 牛肉面 miantiao',
+        ['noodles', '面条', '拉面 米线 面馆 牛肉面',
           A('M6.2 11.6h11.6c0 3.6-2.6 6.3-5.8 6.3s-5.8-2.7-5.8-6.3Z')
           + S('M4.2 11.6h15.6') + S('M9.4 20.4h5.2')
           + S('M8.6 10.4c0-2 .8-3 1.6-4.2') + S('M12 10.4c0-2 .8-3 1.6-4.2')
           + S('M15.4 10.4c0-2 .8-3 1.6-4.2')],
-        ['icecream', '冰淇淋', '冰棍 雪糕 棒冰 甜品 bingqilin',
+        ['icecream', '冰淇淋', '冰棍 雪糕 棒冰 甜品',
           A('M8.8 4.2h6.4a1 1 0 0 1 1 1v7.4a1 1 0 0 1-1 1H8.8a1 1 0 0 1-1-1V5.2a1 1 0 0 1 1-1Z')
           + S('M8.8 4.2h6.4a1 1 0 0 1 1 1v7.4a1 1 0 0 1-1 1H8.8a1 1 0 0 1-1-1V5.2a1 1 0 0 1 1-1Z')
           + S('M7.8 8.6h8.4') + S('M12 13.6v6.2')],
-        ['sushi', '寿司', '日料 刺身 三文鱼 料理 shousi',
+        ['sushi', '寿司', '日料 刺身 三文鱼 料理',
           A('M4.6 11.4h14.8v2.6a2 2 0 0 1-2 2H6.6a2 2 0 0 1-2-2v-2.6Z')
           + S('M4.6 11.4h14.8v3.4a2.6 2.6 0 0 1-2.6 2.6H7.2a2.6 2.6 0 0 1-2.6-2.6v-3.4Z')
           + S('M5.6 11.4c1.4-2.6 3.6-3.8 6.4-3.8s5 1.2 6.4 3.8')
           + S('M9.4 13.6h5.2')],
-        ['dumpling', '饺子', '水饺 馄饨 包子 云吞 jiaozi',
+        ['dumpling', '饺子', '水饺 馄饨 包子 云吞',
           A('M5.6 13.8a6.4 6.4 0 0 1 12.8 0H5.6Z')
           + S('M5.2 14.2a6.8 6.8 0 0 1 13.6 0c0 1.6-3 2.6-6.8 2.6s-6.8-1-6.8-2.6Z')
           + S('M8.4 11.6v-1.4') + S('M12 10.6V9') + S('M15.6 11.6v-1.4')],
-        ['bread', '面包', '吐司 烘焙 早餐 面包店 mianbao',
+        ['bread', '面包', '吐司 烘焙 早餐 面包店',
           A('M4.4 11.4h15.2v7.6H4.4z')
           + S('M6.2 5.4h11.6a3 3 0 0 1 3 3v10.8H3.2V8.4a3 3 0 0 1 3-3Z')
           + S('M8.2 8.8 9.6 12.4M12 8.8l1.4 3.6M15.8 8.8l1.4 3.6')],
-        ['juice', '果汁', '饮料 鲜榨 汽水 可乐 guozhi',
+        ['juice', '果汁', '饮料 鲜榨 汽水 可乐',
           A('M7.6 9.6h8.8l-1 9a1.8 1.8 0 0 1-1.8 1.6H10.4a1.8 1.8 0 0 1-1.8-1.6l-1-9Z')
           + S('M7.6 9.6h8.8l-1 9a1.8 1.8 0 0 1-1.8 1.6H10.4a1.8 1.8 0 0 1-1.8-1.6l-1-9Z')
-          + S('M6.8 9.6h10.4') + S('M15.4 3.4 13 9.6') + S('M8.6 12.8h6.8')],
-        ['takeout', '外卖', '外卖 点外送 外送 美团 饿了么 配送 waimai',
-          A('M6.4 8.8h11.2l-.9 9.2a2 2 0 0 1-2 1.8H9.3a2 2 0 0 1-2-1.8l-.9-9.2Z')
-          + S('M6.4 8.8h11.2l-.9 9.2a2 2 0 0 1-2 1.8H9.3a2 2 0 0 1-2-1.8l-.9-9.2Z')
-          + S('M9.4 8.8V7.2a2.6 2.6 0 0 1 5.2 0v1.6')
-          + S('M6.9 12h10.2')],
-        ['breakfast', '早餐', '早餐 早饭 早点 早午餐 zaocan',
-          A('M10.8 5.6a5.1 5.1 0 1 1 0 10.2 5.1 5.1 0 0 1 0-10.2ZM15.9 8.4a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Z')
-          + S('M3.8 13.6a9 9 0 0 0 16.4 0')
-          + D(11.2, 10.4, 1.6)]
-      ]
-    },
-    {
-      key: 'retail', label: '零售', hint: '超市、网购、二手',
-      items: [
-        ['supermarket', '超市', '超市 商超 便利店 卖场 日常采购 chaoshi',
-          A('M4.8 9.4h14.4l-1.5 8.2a2.2 2.2 0 0 1-2.2 1.8H8.5a2.2 2.2 0 0 1-2.2-1.8L4.8 9.4Z')
-          + S('M4.8 9.4h14.4l-1.5 8.2a2.2 2.2 0 0 1-2.2 1.8H8.5a2.2 2.2 0 0 1-2.2-1.8L4.8 9.4Z')
-          + S('M9.2 9.4V7.6a2.8 2.8 0 0 1 5.6 0v1.8')
-          + S('M8.4 12.4h7.2M9 15h6')],
-        ['online-shopping', '网购', '网购 电商 快递 包裹 下单 淘宝 京东 wanggou',
-          A('M6.2 9h11.6l-.8 9a2 2 0 0 1-2 1.8H9a2 2 0 0 1-2-1.8l-.8-9Z')
-          + S('M6.2 9h11.6l-.8 9a2 2 0 0 1-2 1.8H9a2 2 0 0 1-2-1.8l-.8-9Z')
-          + S('M9.2 9V7.4a2.8 2.8 0 0 1 5.6 0V9')
-          + S('M12 12.2v3.6M10.3 14.2l1.7 1.7 1.7-1.7')],
-        ['secondhand', '二手交易', '二手 闲置 转卖 闲鱼 出二手 回收 ershou',
-          A('M9.6 4.4h6.2a1.8 1.8 0 0 1 1.8 1.8v6.2l-7.6 7.6a1.8 1.8 0 0 1-2.5 0L3 15.5a1.8 1.8 0 0 1 0-2.5l6.6-6.6V4.4Z')
-          + S('M9.6 4.4h6.2a1.8 1.8 0 0 1 1.8 1.8v6.2l-7.6 7.6a1.8 1.8 0 0 1-2.5 0L3 15.5a1.8 1.8 0 0 1 0-2.5l6.6-6.6V4.4Z')
-          + S('M14.4 7.6h.01')
-          + S('M13.8 18.9a7.4 7.4 0 0 0 5.5-6.3')
-          + S('M19.7 15.7l-.4-3.1-3 .7')]
+          + S('M6.8 9.6h10.4') + S('M15.4 3.4 13 9.6') + S('M8.6 12.8h6.8')]
       ]
     },
     {
       key: 'travel', label: '出行', hint: '通勤、打车、旅行',
       items: [
-        ['subway', '地铁', '轨交 地铁站 通勤 地下铁 ditie',
+        ['subway', '地铁', '轨交 地铁站 通勤 地下铁',
           A('M6 8.4h12v4.4H6z')
           + S('M7.4 3.8h9.2a2.6 2.6 0 0 1 2.6 2.6v8.4a2.6 2.6 0 0 1-2.6 2.6H7.4a2.6 2.6 0 0 1-2.6-2.6V6.4a2.6 2.6 0 0 1 2.6-2.6Z')
           + S('M4.8 8.4h14.4')
           + S('M8 17.4 6 21M16 17.4 18 21')],
-        ['bike', '单车', '自行车 骑行 共享单车 脚踏车 danche',
+        ['bike', '单车', '自行车 骑行 共享单车 脚踏车',
           A('M9.6 8.4h6.4l2.4 7.2H5.6L9.6 8.4Z')
           + S('M5.6 12.2a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
           + S('M18.4 12.2a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
           + S('M9.6 8.4h6.4l2.4 7.2H5.6L9.6 8.4Z')
           + S('M12.6 8.4 10.6 15') + S('M9.6 8.4 8.2 6')],
-        ['moto', '摩托', '摩托车 机车 电瓶车 电动车 motuo',
+        ['moto', '摩托', '摩托车 机车 电瓶车 电动车',
           A('M6.4 12.6h7.4l2.6 3.8H6.4z')
           + S('M5.6 14.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z')
           + S('M18.4 14.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z')
           + S('M5.6 17 9 11.4h4.6l3 5.6') + S('M13.6 11.4h3.4')],
-        ['taxi', '出租车', '打车 网约车 滴滴 的士 chuzuche',
+        ['taxi', '出租车', '打车 网约车 滴滴 的士',
           A('M4.6 14.4 6.2 9.4a2 2 0 0 1 1.9-1.4h8.2a2 2 0 0 1 1.9 1.4l1.6 5H4.6Z')
           + S('M4.6 14.4 6.2 9.4a2 2 0 0 1 1.9-1.4h8.2a2 2 0 0 1 1.9 1.4l1.6 5')
           + S('M4.6 14.4h15.2v2.8H4.6z')
           + S('M9.4 5.4h5.2v2.4H9.4z')
           + S('M7.6 17.2v1.6M16.8 17.2v1.6')],
-        ['train', '高铁', '火车 动车 铁路 出差 gaotie',
+        ['train', '高铁', '火车 动车 铁路 出差',
           A('M6.6 9.4h10.8v3.2H6.6z')
           + S('M7.2 3.6h6.4c3.6 0 6.8 3.2 6.8 8v8.2H7.2a2.8 2.8 0 0 1-2.8-2.8V6.4a2.8 2.8 0 0 1 2.8-2.8Z')
           + S('M4.4 9.4h14.8') + S('M4.4 14.8h14.8')
           + S('M4 20.8h16')],
-        ['ship', '轮船', '邮轮 坐船 渡轮 出海 lunchuan',
+        ['ship', '轮船', '邮轮 坐船 渡轮 出海',
           A('M4.2 13.6h15.6l-1.8 4.2a2 2 0 0 1-1.8 1.2H7.8a2 2 0 0 1-1.8-1.2l-1.8-4.2Z')
           + S('M4.2 13.6h15.6l-1.8 4.2a2 2 0 0 1-1.8 1.2H7.8a2 2 0 0 1-1.8-1.2l-1.8-4.2Z')
           + S('M8.4 13.6V8.4h7.2v5.2') + S('M12 3.6v4.8')
           + S('M3 20.6c1.5-.9 3-.9 4.5 0s3 .9 4.5 0 3-.9 4.5 0 3 .9 4.5 0')],
-        ['luggage', '行李箱', '旅行箱 拉杆箱 出差 箱子 xinglixiang',
+        ['luggage', '行李箱', '旅行箱 拉杆箱 出差 箱子',
           A('M7.4 7.6h9.2v10.8H7.4z')
           + S('M8.8 7.6h6.4a1.4 1.4 0 0 1 1.4 1.4v9.4a1.4 1.4 0 0 1-1.4 1.4H8.8a1.4 1.4 0 0 1-1.4-1.4V9a1.4 1.4 0 0 1 1.4-1.4Z')
           + S('M10.2 7.6V5.4h3.6v2.2')
           + S('M10.6 11.4v4.6M13.4 11.4v4.6')],
-        ['passport', '护照', '签证 出境 证件 旅行证 huzhao',
+        ['passport', '护照', '签证 出境 证件 旅行证',
           A('M12 9a3.2 3.2 0 1 1 0 6.4A3.2 3.2 0 0 1 12 9Z')
           + S('M6 4.4h12a1.6 1.6 0 0 1 1.6 1.6v12a1.6 1.6 0 0 1-1.6 1.6H6a1.6 1.6 0 0 1-1.6-1.6V6A1.6 1.6 0 0 1 6 4.4Z')
           + S('M4.4 17.4h15.2')
           + S('M12 9a3.2 3.2 0 1 1 0 6.4A3.2 3.2 0 0 1 12 9Z')
           + S('M8.8 12.2h6.4')],
-        ['gas', '加油', '油费 汽油 加油站 92 95 jiayou',
+        ['gas', '加油', '油费 汽油 加油站 92 95',
           A('M6.8 8.4h6v10.4h-6z')
           + S('M5.4 20.4V6.6a2 2 0 0 1 2-2h4.8a2 2 0 0 1 2 2v13.8')
           + S('M6.8 8.4h6v4.4h-6z')
           + S('M4 20.4h8')
           + S('M14.2 8.6h1.2a1.8 1.8 0 0 1 1.8 1.8v6a1.8 1.8 0 0 0 3.6 0v-2.2')],
-        ['parking', '停车', '车位 停车费 停车场 泊车 tingche',
+        ['parking', '停车', '车位 停车费 停车场 泊车',
           A('M12 3.4a8.6 8.6 0 1 1 0 17.2 8.6 8.6 0 0 1 0-17.2Z')
           + S('M12 3.4a8.6 8.6 0 1 1 0 17.2 8.6 8.6 0 0 1 0-17.2Z')
           + S('M10 17.4V6.8h3.2a3.2 3.2 0 0 1 0 6.4H10')],
-        ['toll', '高速', '过路费 ETC 收费 关口 gaosu',
+        ['toll', '高速', '过路费 ETC 收费 关口',
           A('M4.2 12.4h15.6v3.2H4.2z')
           + S('M4.2 12.4 7.4 6.4h9.2l3.2 6')
           + S('M4.2 12.4h15.6v3.2H4.2z')
           + S('M5.6 15.6v4.8M18.4 15.6v4.8')
           + S('M9.6 12.4 8 9.4M14.4 12.4 16 9.4')],
-        ['nav', '导航', '指路 地图 定位 路线 daohang',
+        ['nav', '导航', '指路 地图 定位 路线',
           A('M12 4.6 18.6 19.4 12 16.2 5.4 19.4 12 4.6Z')
-          + S('M12 4.6 18.6 19.4 12 16.2 5.4 19.4 12 4.6Z')],
-        ['ev-charge', '汽车充电', '汽车充电 充电 充电桩 电车 新能源 补能 chongdian',
-          A('M6.8 4.4h6a1.8 1.8 0 0 1 1.8 1.8v12.8a1.8 1.8 0 0 1-1.8 1.8H6.8a1.8 1.8 0 0 1-1.8-1.8V6.2a1.8 1.8 0 0 1 1.8-1.8Z')
-          + S('M6.8 4.4h6a1.8 1.8 0 0 1 1.8 1.8v12.8a1.8 1.8 0 0 1-1.8 1.8H6.8a1.8 1.8 0 0 1-1.8-1.8V6.2a1.8 1.8 0 0 1 1.8-1.8Z')
-          + S('M11.4 8 9.2 11.6h2.2l-1.4 3.4')
-          + S('M14.6 12h1.4a1.8 1.8 0 0 1 1.8 1.8v1')
-          + S('M17.8 13.4h2.6a1.2 1.2 0 0 1 1.2 1.2v1.6a1.2 1.2 0 0 1-1.2 1.2h-2.6v-4Z')],
-        ['car-service', '汽车保养', '汽车保养 保养 维修 换机油 四轮定位 4s店 baoyang',
-          A('M4 15.4v-1.8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1.8a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 15.4Z')
-          + S('M4 15.4v-1.8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1.8a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 15.4Z')
-          + S('M6.9 17.5a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Z')
-          + S('M14.1 17.5a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Z')
-          + S('M12.6 9.6 17.2 5')
-          + S('M15.9 3.3a3.1 3.1 0 0 1 4.3 4.3l-1.7-.5-2.1-2.1-.5-1.7Z')],
-        ['car-wash', '洗车', '洗车 美容 打蜡 车辆清洗 高压水枪 xiche',
-          A('M4.2 14.6 5.6 10.9a1.9 1.9 0 0 1 1.8-1.2h4.9a1.9 1.9 0 0 1 1.7 1.1l1.4 3.8v2.2a1.6 1.6 0 0 1-1.6 1.6H5.8a1.6 1.6 0 0 1-1.6-1.6v-2.2Z')
-          + S('M4.2 14.6 5.6 10.9a1.9 1.9 0 0 1 1.8-1.2h4.9a1.9 1.9 0 0 1 1.7 1.1l1.4 3.8v2.2a1.6 1.6 0 0 1-1.6 1.6H5.8a1.6 1.6 0 0 1-1.6-1.6v-2.2Z')
-          + S('M6.9 18.9a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Z')
-          + S('M12.7 18.9a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Z')
-          + S('M8.2 3.4c-.7 1.1-.7 2 0 3.1M15.8 3.4c-.7 1.1-.7 2 0 3.1')
-          + D(12, 4.8, 1.3)]
+          + S('M12 4.6 18.6 19.4 12 16.2 5.4 19.4 12 4.6Z')]
       ]
     },
     {
       key: 'home', label: '居家', hint: '水电、家居、日用',
       items: [
-        ['key', '钥匙', '房租 换锁 门禁 配钥匙 yaoshi',
+        ['key', '钥匙', '房租 换锁 门禁 配钥匙',
           A('M8.4 6.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
           + S('M8.4 6.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
           + S('M11 11 19.4 19.4')
           + S('M16.6 16.6 18.4 14.8') + S('M18.6 18.6 20.4 16.8')],
-        ['bed', '床', '床垫 卧室 家具 床品 chuang',
+        ['bed', '床', '床垫 卧室 家具 床品',
           A('M4 12.8h16v3.2H4z')
           + S('M3.4 18.6v-9a2.4 2.4 0 0 1 2.4-2.4h13.4a1.4 1.4 0 0 1 1.4 1.4v10')
           + S('M3.4 16.4h17.2')
           + S('M6.6 12.8V9.8h4v3')],
-        ['lamp', '台灯', '灯 照明 灯具 落地灯 taideng',
+        ['lamp', '台灯', '灯 照明 灯具 落地灯',
           A('M8.6 5.4h6.8L17.4 11H6.6l2-5.6Z')
           + S('M8.6 5.4h6.8L17.4 11H6.6l2-5.6Z')
           + S('M12 11v7.4') + S('M8.4 20.4h7.2') + S('M9.6 18.4h4.8')],
-        ['fridge', '冰箱', '冰柜 家电 冷藏 保鲜 bingxiang',
+        ['fridge', '冰箱', '冰柜 家电 冷藏 保鲜',
           A('M6.6 4.4h10.8a1.4 1.4 0 0 1 1.4 1.4v4.2H5.2V5.8a1.4 1.4 0 0 1 1.4-1.4Z')
           + S('M6.6 3.6h10.8a1.6 1.6 0 0 1 1.6 1.6v13.4a1.6 1.6 0 0 1-1.6 1.6H6.6A1.6 1.6 0 0 1 5 18.6V5.2a1.6 1.6 0 0 1 1.6-1.6Z')
           + S('M5 10.2h14')
           + S('M8 6.6v2M8 12.4v3')],
-        ['aircon', '空调', '冷气 电费 制冷 家电 kongtiao',
+        ['aircon', '空调', '冷气 电费 制冷 家电',
           A('M4.4 8.6h15.2v5.8H4.4z')
           + S('M5.6 5.4h12.8a2.2 2.2 0 0 1 2.2 2.2v8.6a2.2 2.2 0 0 1-2.2 2.2H5.6a2.2 2.2 0 0 1-2.2-2.2V7.6a2.2 2.2 0 0 1 2.2-2.2Z')
           + S('M3.4 10.4h17.2') + S('M7 13.4h10')
           + S('M8 18.6c0 1.4 1 1.4 1 2.8') + S('M12 18.6c0 1.4 1 1.4 1 2.8') + S('M16 18.6c0 1.4 1 1.4 1 2.8')],
-        ['detergent', '洗衣液', '洗洁精 清洁剂 日化 柔顺剂 xiyiye',
+        ['detergent', '洗衣液', '洗洁精 清洁剂 日化 柔顺剂',
           A('M7.4 10.4h9.2v8.2a2 2 0 0 1-2 2H9.4a2 2 0 0 1-2-2v-8.2Z')
           + S('M7.4 10.4h9.2v8.2a2 2 0 0 1-2 2H9.4a2 2 0 0 1-2-2v-8.2Z')
           + S('M10.4 10.4V7.6h3.2v2.8') + S('M13.6 7.6V5.4')
           + S('M7.4 14.4h9.2')],
-        ['broom', '扫帚', '拖把 打扫 清洁 家政 saozhou',
+        ['broom', '扫帚', '拖把 打扫 清洁 家政',
           A('M6.6 13.6h6.8l-1.6 6.8H8.2l-1.6-6.8Z')
           + S('M6.6 13.6h6.8l-1.6 6.8H8.2l-1.6-6.8Z')
           + S('M11.4 13.6 19.6 4.4')
           + S('M8.6 16.6h5') + S('M9.2 19h3.6')],
-        ['bin', '垃圾桶', '垃圾袋 丢垃圾 卫生 回收 lajitong',
+        ['bin', '垃圾桶', '垃圾袋 丢垃圾 卫生 回收',
           A('M6.6 9.4h10.8l-.8 9.4a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8L6.6 9.4Z')
           + S('M6.6 9.4h10.8l-.8 9.4a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8L6.6 9.4Z')
           + S('M4.8 6.6h14.4') + S('M9.6 6.6V4.4h4.8v2.2')
           + S('M10.4 12.4v4.4M13.6 12.4v4.4')],
-        ['curtain', '窗帘', '布艺 遮光 窗 软装 chuanglian',
+        ['curtain', '窗帘', '布艺 遮光 窗 软装',
           A('M8.4 4.4h7.2v11.8H8.4z')
           + S('M3.4 4.4h17.2')
           + S('M8.4 4.4c-1 4-1 8 0 12') + S('M12 4.4c-1 4-1 8 0 12') + S('M15.6 4.4c-1 4-1 8 0 12')
           + S('M7.6 16.4h8.8')],
-        ['bathtub', '浴缸', '洗澡 泡澡 卫浴 水费 yugang',
+        ['bathtub', '浴缸', '洗澡 泡澡 卫浴 水费',
           A('M6.4 11.4h11.2v2.8H6.4z')
           + S('M4 11.4h16a0 0 0 0 1 0 0v3.2a4.4 4.4 0 0 1-4.4 4.4H8.4A4.4 4.4 0 0 1 4 14.6v-3.2Z')
           + S('M8 11.4V6.6h3.4')
           + S('M7.4 19 6.6 20.8M16.6 19l.8 1.8')],
-        ['door', '门', '房门 防盗门 入户 门锁 men',
+        ['door', '门', '房门 防盗门 入户 门锁',
           A('M6.6 3.6h10.8v16.8H6.6z')
           + S('M6.6 3.6h10.8v16.8H6.6z')
           + S('M4 20.4h16')
           + S('M13.8 12.4h.01')],
-        ['kettle', '水壶', '电水壶 烧水 饮水 水费 shuihu',
+        ['kettle', '水壶', '电水壶 烧水 饮水 水费',
           A('M7.4 10.4h9.2v6.8a2.4 2.4 0 0 1-2.4 2.4H9.8a2.4 2.4 0 0 1-2.4-2.4v-6.8Z')
           + S('M7.4 10.4h9.2v6.8a2.4 2.4 0 0 1-2.4 2.4H9.8a2.4 2.4 0 0 1-2.4-2.4v-6.8Z')
           + S('M9.4 10.4V8.6h5.2v1.8')
           + S('M7.4 12.6H5.6a2 2 0 0 0 0 4h1.8')
-          + S('M16.6 11.4l2.6-1.4v4l-2.6-1.4')],
-        ['rent', '房租', '房租 租房 月租 租金 合租 fangzu',
-          A('M5.8 10.6 12 5.6l6.2 5v7.6a1.6 1.6 0 0 1-1.6 1.6H7.4a1.6 1.6 0 0 1-1.6-1.6v-7.6Z')
-          + S('M5.8 10.6 12 5.6l6.2 5v7.6a1.6 1.6 0 0 1-1.6 1.6H7.4a1.6 1.6 0 0 1-1.6-1.6v-7.6Z')
-          + S('M10.6 19.4v-3a1.4 1.4 0 0 1 2.8 0v3')
-          + S('M20.6 18.4a2.2 2.2 0 1 1-4.4 0 2.2 2.2 0 0 1 4.4 0Z')],
-        ['utility-bill', '水电燃', '水电 水电费 水费 电费 燃气费 煤气 shuidianran',
-          A('M8 4.4h6.2l2.8 2.8v12.4H8V4.4Z')
-          + S('M8 4.4h6.2l2.8 2.8v12.4H8V4.4Z')
-          + S('M13.3 8.2 10.8 12h2.4l-1.7 3.6')
-          + S('M10 6.6h3.6')],
-        ['broadband', '宽带', '宽带 网络 网费 WiFi 路由器 上网 kuandai',
-          A('M4.6 10.8h14.8v6a1.8 1.8 0 0 1-1.8 1.8H6.4a1.8 1.8 0 0 1-1.8-1.8v-6Z')
-          + S('M4.6 10.8h14.8v6a1.8 1.8 0 0 1-1.8 1.8H6.4a1.8 1.8 0 0 1-1.8-1.8v-6Z')
-          + S('M7.4 10.8V5.6M16.6 10.8V5.6')
-          + S('M10.3 8.6a3.4 3.4 0 0 1 3.4 0')
-          + S('M8.4 14.7h.01M15.6 14.7h.01')]
-      ]
-    },
-    {
-      key: 'health', label: '健康', hint: '看病、买药、体检',
-      items: [
-        ['clinic', '门诊', '门诊 挂号 看病 医院 门诊部 menzhen',
-          A('M7.4 6.4h9.2a2 2 0 0 1 2 2v8.2a2 2 0 0 1-2 2H7.4a2 2 0 0 1-2-2V8.4a2 2 0 0 1 2-2Z')
-          + S('M7.4 6.4h9.2a2 2 0 0 1 2 2v8.2a2 2 0 0 1-2 2H7.4a2 2 0 0 1-2-2V8.4a2 2 0 0 1 2-2Z')
-          + S('M12 8.8v4M10 10.8h4')
-          + S('M10.3 18.6v-1.8a1.7 1.7 0 0 1 3.4 0v1.8')],
-        ['dentist', '牙科', '牙科 洗牙 补牙 口腔 拔牙 yake',
-          A('M6 10.4c0-3 2.1-5 4.7-5 1.3 0 1.3 1.1 1.3 1.1s0-1.1 1.3-1.1c2.6 0 4.7 2 4.7 5 0 2-.5 3.5-.9 4.8H6.9c-.4-1.3-.9-2.8-.9-4.8Z')
-          + S('M6 10.4c0-3 2.1-5 4.7-5 1.3 0 1.3 1.1 1.3 1.1s0-1.1 1.3-1.1c2.6 0 4.7 2 4.7 5 0 2.6-.8 3.9-1.1 6-.2 1.7-1 2.9-2.1 2.9-1.4 0-1-2.2-2.3-2.2h-1.2c-1.3 0-.9 2.2-2.3 2.2-1.1 0-1.9-1.2-2.1-2.9-.3-2.1-1.1-3.4-1.1-6Z')],
-        ['checkup', '体检', '体检 体检报告 检查 复查 tijian',
-          A('M8.2 6.2h7.6a1.6 1.6 0 0 1 1.6 1.6v9.4a1.6 1.6 0 0 1-1.6 1.6H8.2a1.6 1.6 0 0 1-1.6-1.6V7.8a1.6 1.6 0 0 1 1.6-1.6Z')
-          + S('M8.2 6.2h7.6a1.6 1.6 0 0 1 1.6 1.6v9.4a1.6 1.6 0 0 1-1.6 1.6H8.2a1.6 1.6 0 0 1-1.6-1.6V7.8a1.6 1.6 0 0 1 1.6-1.6Z')
-          + S('M9.6 6.2V5.1a1.1 1.1 0 0 1 1.1-1.1h2.6a1.1 1.1 0 0 1 1.1 1.1V6.2')
-          + S('M8.7 12.4h1.9l1.2-2.9 1.7 5 1.3-3.2.5 1.1')],
-        ['medicine', '药品', '药品 买药 药店 吃药 处方 感冒药 yaopin',
-          A('M8 7h8v10.9a1.9 1.9 0 0 1-1.9 1.9H9.9A1.9 1.9 0 0 1 8 17.9V7Z')
-          + S('M8 7h8v10.9a1.9 1.9 0 0 1-1.9 1.9H9.9A1.9 1.9 0 0 1 8 17.9V7Z')
-          + S('M9.2 4.4h5.6a1 1 0 0 1 1 1V7H8.2V5.4a1 1 0 0 1 1-1Z')
-          + S('M12 11v3.6M10.2 12.8h3.6')]
-      ]
-    },
-    {
-      key: 'learning', label: '学习', hint: '学费、文具、课程',
-      items: [
-        ['tuition', '学费课程', '学费 培训 课程 报名 xuefei',
-          A('M9 4.8h6a2 2 0 0 1 2 2v10.4a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6.8a2 2 0 0 1 2-2Z')
-          + S('M9 4.8h6a2 2 0 0 1 2 2v10.4a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6.8a2 2 0 0 1 2-2Z')
-          + S('M9.9 7.7 12 10 14.1 7.7')
-          + S('M12 10v4.6M10.5 12.5h3')
-          + S('M9.4 16.6h5.2')],
-        ['stationery', '文具', '文具 铅笔 办公 用品 文具店 wenju',
-          A('M10.1 17.7 18.1 9.7 14.3 5.9 6.3 13.9Z')
-          + S('M10.1 17.7 18.1 9.7 14.3 5.9 6.3 13.9Z')
-          + S('M10.1 17.7 5.9 18.1 6.3 13.9')
-          + S('M17 10.8 13.2 7')
-          + S('M9.9 7.1 15.9 13.1 13.7 15.3 7.7 9.3Z')]
-      ]
-    },
-    {
-      key: 'digital', label: '数码通讯', hint: '话费、软件、云服务',
-      items: [
-        ['topup', '话费充值', '话费 充值 流量 手机费 huafei',
-          A('M9.1 6h5.8a1 1 0 0 1 1 1v9.8a1 1 0 0 1-1 1H9.1a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z')
-          + S('M8 4h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z')
-          + S('M12 10.1v3.6M10.3 11.9h3.4')],
-        ['software', '软件服务', '软件 云服务 SaaS 服务费 yunfuwu',
-          A('M6.4 13.6H17A3.55 3.55 0 0 0 17.5 6.6A4.4 4.4 0 0 0 9.6 6.1A4.1 4.1 0 0 0 6.4 13.6Z')
-          + S('M6.4 13.6H17A3.55 3.55 0 0 0 17.5 6.6A4.4 4.4 0 0 0 9.6 6.1A4.1 4.1 0 0 0 6.4 13.6Z')
-          + S('M9.9 15.9 7.9 17.9 9.9 19.9M14.1 15.9 16.1 17.9 14.1 19.9')]
+          + S('M16.6 11.4l2.6-1.4v4l-2.6-1.4')]
       ]
     },
     {
       key: 'fun', label: '娱乐', hint: '玩、看、听、运动',
       items: [
-        ['music', '音乐', '听歌 演唱会 网易云 音乐会员 yinyue',
+        ['music', '音乐', '听歌 演唱会 网易云 音乐会员',
           A('M8.4 16.2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2ZM16 13.8a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z')
           + S('M11 18.8V4.8l7.6-1.8v10.8')
           + S('M11 8.4l7.6-1.8')],
-        ['clapper', '电影', '影院 场记板 观影 电影票 dianying',
+        ['clapper', '电影', '影院 场记板 观影 电影票',
           A('M4.6 9.8h14.8v4H4.6z')
           + S('M4.6 9.8 6.2 4.6h13.2l-1.6 5.2H4.6Z')
           + S('M4.6 9.8h14.8v9a1.4 1.4 0 0 1-1.4 1.4H6a1.4 1.4 0 0 1-1.4-1.4v-9Z')
           + S('M8.8 4.8 7.8 9.6M12.8 4.8 11.8 9.6M16.6 4.8 15.6 9.6')],
-        ['ktv', 'KTV', '唱歌 麦克风 麦霸 量贩 changge',
+        ['ktv', 'KTV', '唱歌 麦克风 麦霸 量贩',
           A('M10.6 4.6a3.2 3.2 0 0 1 3.2 3.2v4.4a3.2 3.2 0 0 1-6.4 0V7.8a3.2 3.2 0 0 1 3.2-3.2Z')
           + S('M10.6 4.6a3.2 3.2 0 0 1 3.2 3.2v4.4a3.2 3.2 0 0 1-6.4 0V7.8a3.2 3.2 0 0 1 3.2-3.2Z')
           + S('M7.4 12.2a3.2 3.2 0 0 0 6.4 0')
           + S('M10.6 15.4v2.2a3 3 0 0 0 6 0v-1.2')
           + S('M17.4 13.8a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z')],
-        ['football', '足球', '球赛 看球 踢球 体育 zuqiu',
+        ['football', '足球', '球赛 看球 踢球 体育',
           A('M12 8.2l3.4 2.5-1.3 4h-4.2l-1.3-4L12 8.2Z')
           + S('M12 3.6a8.4 8.4 0 1 1 0 16.8 8.4 8.4 0 0 1 0-16.8Z')
           + S('M12 8.2v-4.6') + S('M15.4 10.7l4.2-1.4') + S('M13.9 14.7l2.6 3.4')
           + S('M10.1 14.7l-2.6 3.4') + S('M8.6 10.7 4.4 9.3')],
-        ['swim', '游泳', '泳池 游泳馆 泡温泉 水上乐园 youyong',
+        ['swim', '游泳', '泳池 游泳馆 泡温泉 水上乐园',
           A('M6.6 7.4h4.4a1.8 1.8 0 0 1 0 3.6H6.6a1.8 1.8 0 0 1 0-3.6ZM13 7.4h4.4a1.8 1.8 0 0 1 0 3.6H13a1.8 1.8 0 0 1 0-3.6Z')
           + S('M4.4 7.4h15.2')
           + S('M3 14.6c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0 3-1.2 4.5 0 3 1.2 4.5 0')
           + S('M3 18.4c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0 3-1.2 4.5 0 3 1.2 4.5 0')],
-        ['tent', '露营', '帐篷 野营 户外 营地 luying',
+        ['tent', '露营', '帐篷 野营 户外 营地',
           A('M12 6.6 18.4 19.4H5.6L12 6.6Z')
           + S('M12 6.6 18.4 19.4H5.6L12 6.6Z')
           + S('M12 19.4v-4.6l-2.4 4.6')
           + S('M3.4 19.4h17.2')],
-        ['fishing', '钓鱼', '垂钓 鱼竿 水库 海钓 diaoyu',
+        ['fishing', '钓鱼', '垂钓 鱼竿 水库 海钓',
           A('M8.6 11.4c1.4-1.8 3.2-2.6 5.4-2.6 2.4 0 4.4 1.2 5.4 2.6-1 1.4-3 2.6-5.4 2.6-2.2 0-4-.8-5.4-2.6Z')
           + S('M3.4 3.6v9.8a3 3 0 0 0 6 0')
           + S('M8.6 11.4c1.4-1.8 3.2-2.6 5.4-2.6 2.4 0 4.4 1.2 5.4 2.6-1 1.4-3 2.6-5.4 2.6-2.2 0-4-.8-5.4-2.6Z')
           + S('M8.6 11.4 5.6 8.8v5.2l3-2.6Z')
           + S('M15.4 10.4h.01')],
-        ['dslr', '相机', '摄影 拍照 单反 胶片 xiangji',
+        ['dslr', '相机', '摄影 拍照 单反 胶片',
           A('M4.6 9.4h14.8v8.2H4.6z')
           + S('M6 6.4h2.6l1.4-2h4l1.4 2H18a2 2 0 0 1 2 2v9.2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.4a2 2 0 0 1 2-2Z')
           + S('M12 10.4a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z')],
-        ['board', '棋牌', '桌游 围棋 象棋 麻将 qipai',
+        ['board', '棋牌', '桌游 围棋 象棋 麻将',
           A('M6.2 5.4h4.4v4.4H6.2zM14.4 5.4h4.4v4.4h-4.4zM10.2 10.2h4.4v4.4h-4.4zM6.2 14.6h4.4v4.4H6.2z')
           + S('M5 3.6h14a1.4 1.4 0 0 1 1.4 1.4v14a1.4 1.4 0 0 1-1.4 1.4H5A1.4 1.4 0 0 1 3.6 19V5A1.4 1.4 0 0 1 5 3.6Z')],
-        ['bowling', '保龄球', '球道 保龄 击球 娱乐城 baolingqiu',
+        ['bowling', '保龄球', '球道 保龄 击球 娱乐城',
           A('M12 3.4c1.6 0 2.4 1.2 2.4 2.4 0 1-.6 1.6-.6 2.6s1 1.6 1 3c0 2-1.2 3.4-2.8 3.4S9.2 13.4 9.2 11.4c0-1.4 1-2 1-3s-.6-1.6-.6-2.6c0-1.2.8-2.4 2.4-2.4Z')
           + S('M12 3.4c1.6 0 2.4 1.2 2.4 2.4 0 1-.6 1.6-.6 2.6s1 1.6 1 3c0 2-1.2 3.4-2.8 3.4S9.2 13.4 9.2 11.4c0-1.4 1-2 1-3s-.6-1.6-.6-2.6c0-1.2.8-2.4 2.4-2.4Z')
           + S('M11 8.2h.01M13 8.2h.01M12 10.4h.01')
           + S('M18.2 14.8a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8Z')],
-        ['skate', '滑板', '滑板车 街头 极限 板仔 huaban',
+        ['skate', '滑板', '滑板车 街头 极限 板仔',
           A('M4.4 12.6h15.2v2.2H4.4z')
           + S('M3.6 12.6c0 1.6 1.2 2.6 2.8 2.6h11.2c1.6 0 2.8-1 2.8-2.6')
           + S('M7.4 17.4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z')
           + S('M16.6 17.4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z')],
-        ['fireworks', '烟花', '焰火 跨年 节日 爆竹 yanhua',
+        ['fireworks', '烟花', '焰火 跨年 节日 爆竹',
           A('m12 3.2 1.2 3.2 3.2 1.2-3.2 1.2L12 12l-1.2-3.2L7.6 7.6l3.2-1.2L12 3.2Z')
           + S('m12 3.2 1.2 3.2 3.2 1.2-3.2 1.2L12 12l-1.2-3.2L7.6 7.6l3.2-1.2L12 3.2Z')
           + S('M7.4 17.6 9.8 15.2M16.6 17.6 14.2 15.2M12 20.8v-3.2')
@@ -26673,74 +26152,74 @@ textarea::selection {
     {
       key: 'pet', label: '宠物', hint: '猫狗、粮、看病',
       items: [
-        ['cat', '猫', '猫咪 猫粮 喵 布偶 狸花 mao',
+        ['cat', '猫', '猫咪 猫粮 喵 布偶 狸花',
           A('M9.4 13h5.2v3.6a2 2 0 0 1-2 2h-1.2a2 2 0 0 1-2-2V13Z')
           + S('M12 5.8a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
           + S('M9.4 7.4 8.6 4.2l2.8 1.4M14.6 7.4l.8-3.2-2.8 1.4')
           + S('M10.8 8.4h.01M13.2 8.4h.01')
           + S('M9.4 13h5.2v3.6a2 2 0 0 1-2 2h-1.2a2 2 0 0 1-2-2V13Z')
           + S('M14.6 16.6c2.4.2 3.6-1.4 3-3.4')],
-        ['dog', '狗', '狗狗 狗粮 汪 柯基 金毛 gou',
+        ['dog', '狗', '狗狗 狗粮 汪 柯基 金毛',
           A('M6.6 11.4a5.4 5.4 0 0 1 10.8 0v2a4 4 0 0 1-4 4h-2.8a4 4 0 0 1-4-4v-2Z')
           + S('M6.6 11.4a5.4 5.4 0 0 1 10.8 0v2a4 4 0 0 1-4 4h-2.8a4 4 0 0 1-4-4v-2Z')
           + S('M6.6 10.2C4.4 9.8 3.4 8.2 4 6.4c1.8.2 3 1.4 3.4 3.2')
           + S('M17.4 10.2c2.2-.4 3.2-2 2.6-3.8-1.8.2-3 1.4-3.4 3.2')
           + S('M9.8 12.2h.01M14.2 12.2h.01') + S('M12 15.4v1M10.8 17.2h2.4')],
-        ['rabbit', '兔子', '兔兔 垂耳兔 兔粮 小白兔 tuzi',
+        ['rabbit', '兔子', '兔兔 垂耳兔 兔粮 小白兔',
           A('M12 9.6a4.6 4.6 0 1 1 0 9.2 4.6 4.6 0 0 1 0-9.2Z')
           + S('M12 9.6a4.6 4.6 0 1 1 0 9.2 4.6 4.6 0 0 1 0-9.2Z')
           + S('M9.8 9.8C8.6 6.2 8.8 4.2 10 4.2s1.6 2.4 1.4 5.4')
           + S('M14.2 9.8c1.2-3.6 1-5.6-.2-5.6s-1.6 2.4-1.4 5.4')
           + S('M10.6 13.6h.01M13.4 13.6h.01') + S('M11.2 16.2h1.6')],
-        ['hamster', '仓鼠', '仓鼠 龙猫 鼠粮 荷兰猪 cangshu',
+        ['hamster', '仓鼠', '仓鼠 龙猫 鼠粮 荷兰猪',
           A('M12 8.6a5.4 5.4 0 1 1 0 10.8 5.4 5.4 0 0 1 0-10.8Z')
           + S('M12 8.6a5.4 5.4 0 1 1 0 10.8 5.4 5.4 0 0 1 0-10.8Z')
           + S('M7.4 9.6a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6Z')
           + S('M16.6 9.6a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6Z')
           + S('M10.4 12.6h.01M13.6 12.6h.01') + S('M12 14.6v1.2')],
-        ['fish', '鱼', '鱼缸 养鱼 观赏鱼 水族 yu',
+        ['fish', '鱼', '鱼缸 养鱼 观赏鱼 水族',
           A('M6.4 12c1.8-2.6 4-3.8 6.6-3.8 2.8 0 5 1.6 6.2 3.8-1.2 2.2-3.4 3.8-6.2 3.8-2.6 0-4.8-1.2-6.6-3.8Z')
           + S('M6.4 12c1.8-2.6 4-3.8 6.6-3.8 2.8 0 5 1.6 6.2 3.8-1.2 2.2-3.4 3.8-6.2 3.8-2.6 0-4.8-1.2-6.6-3.8Z')
           + S('M6.4 12 3.4 9.4v5.2L6.4 12Z')
           + S('M15.6 10.8h.01')],
-        ['bird', '鸟', '鹦鹉 鸟粮 养鸟 鹩哥 niao',
+        ['bird', '鸟', '鹦鹉 鸟粮 养鸟 鹩哥',
           A('M8.4 10.8h6.4a2.8 2.8 0 0 1 0 5.6H9.6a2.4 2.4 0 0 1-2.4-2.4c0-1.2.4-2 1.2-3.2Z')
           + S('M8.4 10.8h6.4a2.8 2.8 0 0 1 0 5.6H9.6a2.4 2.4 0 0 1-2.4-2.4c0-1.2.4-2 1.2-3.2Z')
           + S('M14.8 11l3.2-1.2-1.6 3')
           + S('M6.8 12 4.6 9.2v5.2L6.8 12Z')
           + S('M11.6 12.4h.01')
           + S('M9.6 16.4v2.6M13 16.4v2.6')],
-        ['paw', '爪印', '脚印 宠物店 猫爪 狗爪 zhuayin',
+        ['paw', '爪印', '脚印 宠物店 猫爪 狗爪',
           A('M12 13.6c2 0 3.6 1.2 3.6 2.6 0 1.2-1.4 1.8-3.6 1.8s-3.6-.6-3.6-1.8c0-1.4 1.6-2.6 3.6-2.6Z')
           + S('M7.3 10.1a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z')
           + S('M16.7 10.1a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z')
           + S('M10.6 7.4a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z')
           + S('M13.4 7.4a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4Z')
           + S('M12 13.6c2 0 3.6 1.2 3.6 2.6 0 1.2-1.4 1.8-3.6 1.8s-3.6-.6-3.6-1.8c0-1.4 1.6-2.6 3.6-2.6Z')],
-        ['vet', '宠物医院', '看病 打针 绝育 兽医 chongwuyiyuan',
+        ['vet', '宠物医院', '看病 打针 绝育 兽医',
           A('M9.8 9h2.4v2.2H14v2.4h-1.8v2.2H9.8v-2.2H8V11.2h1.8z')
           + S('M4 11.4 12 4.6l8 6.8v8.4H4v-8.4Z')
           + S('M9.8 9h2.4v2.2H14v2.4h-1.8v2.2H9.8v-2.2H8V11.2h1.8z')],
-        ['litter', '猫砂', '铲屎 猫砂盆 猫厕所 除臭 maosha',
+        ['litter', '猫砂', '铲屎 猫砂盆 猫厕所 除臭',
           A('M4.6 12.4h14.8l-1 5.2a2 2 0 0 1-2 1.6H7.6a2 2 0 0 1-2-1.6l-1-5.2Z')
           + S('M4.6 12.4h14.8l-1 5.2a2 2 0 0 1-2 1.6H7.6a2 2 0 0 1-2-1.6l-1-5.2Z')
           + S('M3.6 12.4h16.8')
           + S('M9 16.2h.01M12 16.8h.01M15 16.2h.01')
           + S('M8.4 9.4 6.6 4.6h10.8l-1.8 4.8')],
-        ['bone', '骨头', '狗咬胶 磨牙棒 零食 骨 gutou',
+        ['bone', '骨头', '狗咬胶 磨牙棒 零食 骨',
           A('M7.6 10.8h8.8v2.6H7.6z')
           + S('M5.6 9.4a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z')
           + S('M5.6 13a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z')
           + S('M18.4 9.4a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z')
           + S('M18.4 13a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z')
           + S('M6 10.8h12v2.6H6z')],
-        ['vaccine', '疫苗', '打针 驱虫 免疫 针剂 yimiao',
+        ['vaccine', '疫苗', '打针 驱虫 免疫 针剂',
           A('M10 12.4h4.4v4.2H10z')
           + S('M14.4 3.6 20.4 9.6')
           + S('M17.4 6.6l-9 9-3.4 1.2 1.2-3.4 9-9')
           + S('M6.4 17.6 4 20')
           + S('M12.2 15.2l3.4-3.4')],
-        ['groom', '美容', '梳毛 剃毛 洗澡 宠物美容 meirong',
+        ['groom', '美容', '梳毛 剃毛 洗澡 宠物美容',
           A('M5.4 8.6h13.2v4H5.4z')
           + S('M5.4 8.6h13.2v3.4H5.4z')
           + S('M7 12v8M10 12v8M13 12v8M16 12v6')
@@ -26750,46 +26229,46 @@ textarea::selection {
     {
       key: 'family', label: '家庭', hint: '孩子、父母、家人',
       items: [
-        ['bottle', '奶瓶', '奶粉 喂奶 奶嘴 婴儿 naiping',
+        ['bottle', '奶瓶', '奶粉 喂奶 奶嘴 婴儿',
           A('M9.4 8.6h5.2v9.6a2 2 0 0 1-2 2h-1.2a2 2 0 0 1-2-2V8.6Z')
           + S('M9.4 8.6h5.2v9.6a2 2 0 0 1-2 2h-1.2a2 2 0 0 1-2-2V8.6Z')
           + S('M10.6 8.6V6.4h2.8v2.2')
           + S('M11 4.4h2v2')
           + S('M9.4 12.4h5.2M9.4 15.4h5.2')],
-        ['toy', '玩具', '积木 儿童玩具 乐高 玩偶 wanju',
+        ['toy', '玩具', '积木 儿童玩具 乐高 玩偶',
           A('M5.4 13.4h6.2v6.2H5.4z')
           + S('M5.4 13.4h6.2v6.2H5.4z')
           + S('M12.4 8.4h6.2v6.2h-6.2z')
           + S('M7.2 13.4v-1.6M9.8 13.4v-1.6')
           + S('M14.2 8.4V6.8M16.8 8.4V6.8')],
-        ['boy', '男孩', '儿子 男孩 小男孩 娃 nanhai',
+        ['boy', '男孩', '儿子 男孩 小男孩 娃',
           A('M12 4.6a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z')
           + S('M12 4.6a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z')
           + S('M8.6 20.4v-3a3.4 3.4 0 0 1 6.8 0v3')
           + S('M8.6 16.6 6.6 18.6M15.4 16.6l2 2')],
-        ['girl', '女孩', '女儿 小女孩 公主 娃 nvhai',
+        ['girl', '女孩', '女儿 小女孩 公主 娃',
           A('M9 12.4h6l2 7.2H7l2-7.2Z')
           + S('M12 5a2.4 2.4 0 1 1 0 4.8A2.4 2.4 0 0 1 12 5Z')
           + S('M9 12.4h6l2 7.2H7l2-7.2Z')
           + S('M10.4 19.6v1.4M13.6 19.6v1.4')],
-        ['mom', '妈妈', '母亲 妈 老妈 母子 mama',
+        ['mom', '妈妈', '母亲 妈 老妈 母子',
           A('M6.6 20.4c.4-3.8 2.4-5.8 5.4-5.8s5 2 5.4 5.8H6.6Z')
           + S('M12 5.8a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z')
           + S('M8.8 12.2c-1 1.6-1 3.6-.6 5.8M15.2 12.2c1 1.6 1 3.6.6 5.8')
           + S('M6.6 20.4c.4-3.8 2.4-5.8 5.4-5.8s5 2 5.4 5.8')],
-        ['dad', '爸爸', '父亲 爸 老爸 父子 baba',
+        ['dad', '爸爸', '父亲 爸 老爸 父子',
           A('M6.2 20.4c.4-3.8 2.6-5.8 5.8-5.8s5.4 2 5.8 5.8H6.2Z')
           + S('M12 5.8a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z')
           + S('M8.8 6.6c.6-1.4 1.8-2.2 3.2-2.2s2.6.8 3.2 2.2')
           + S('M6.2 20.4c.4-3.8 2.6-5.8 5.8-5.8s5.4 2 5.8 5.8')
           + S('M12 13.4v6.4')],
-        ['album', '全家福', '合影 家庭照 照片 相册 quanjiafu',
+        ['album', '全家福', '合影 家庭照 照片 相册',
           A('M4.6 15.4h14.8v3.6H4.6z')
           + S('M3.4 4.4h17.2v15.2H3.4z')
           + S('M8 12.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z')
           + S('M16 12.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z')
           + S('M12 11a1.8 1.8 0 1 1 0 3.6A1.8 1.8 0 0 1 12 11Z')],
-        ['stroller', '婴儿车', '推车 遛娃 童车 母婴 yingliche',
+        ['stroller', '婴儿车', '推车 遛娃 童车 母婴',
           A('M5.4 11.4h8.4l-1.6 4.4H7.4l-2-4.4Z')
           + S('M5.4 11.4a6 6 0 0 1 2.4-4.8')
           + S('M5.4 11.4 4 5.6h1.8')
@@ -26797,24 +26276,24 @@ textarea::selection {
           + S('M8.4 17.4 8.4 18.4M14 15.8 15.4 18.4')
           + S('M7.6 19.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z')
           + S('M15.4 19.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z')],
-        ['crib', '摇篮', '婴儿床 床铃 托儿 婴儿房 yaolan',
+        ['crib', '摇篮', '婴儿床 床铃 托儿 婴儿房',
           A('M5.4 12.4h13.2v2.2H5.4z')
           + S('M4.4 12.4h15.2v3.4a3.6 3.6 0 0 1-3.6 3.6H8a3.6 3.6 0 0 1-3.6-3.6v-3.4Z')
           + S('M8 12.4v7M12 12.4v7M16 12.4v7')
           + S('M4.4 12.4V9a1.6 1.6 0 0 1 1.6-1.6h1.4')
           + S('M4.4 19.4v1.2M19.6 19.4v1.2')],
-        ['diaper', '尿不湿', '纸尿裤 尿布 拉拉裤 婴儿 niaobushi',
+        ['diaper', '尿不湿', '纸尿裤 尿布 拉拉裤 婴儿',
           A('M6.4 9.4h11.2v3.6a5.6 5.6 0 0 1-11.2 0V9.4Z')
           + S('M6.4 9.4h11.2v3.6a5.6 5.6 0 0 1-11.2 0V9.4Z')
           + S('M6.4 9.4 4.4 7.4M17.6 9.4l2-2')
           + S('M9.6 13.6h4.8')],
-        ['school', '学校', '学费 上学 校区 幼儿园 xuexiao',
+        ['school', '学校', '学费 上学 校区 幼儿园',
           A('M9.6 20.4V14h4.8v6.4z')
           + S('M2.6 9.6 12 4.4l9.4 5.2')
           + S('M4.6 9.6v10.8h14.8V9.6')
           + S('M9.6 20.4V14h4.8v6.4')
           + S('M15.6 12h2.2v2.2h-2.2z')],
-        ['birthday', '生日', '过生日 蛋糕 派对 寿星 shengri',
+        ['birthday', '生日', '过生日 蛋糕 派对 寿星',
           A('M5.4 13.8h13.2v5.8H5.4z')
           + S('M5.4 13.8h13.2v5.8H5.4z')
           + S('M4.4 19.6h15.2')
@@ -26825,145 +26304,117 @@ textarea::selection {
     {
       key: 'finance', label: '财务', hint: '存钱、投资、报销',
       items: [
-        ['passbook', '存折', '存款 定期 储蓄 银行 cunzhe',
+        ['passbook', '存折', '存款 定期 储蓄 银行',
           A('M12 10.4a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z')
           + S('M5.4 4.6h13.2v15.4H5.4z')
           + S('M8.4 8h7.2')
           + S('M12 10.4a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z')
           + S('M8.6 17.4h6.8')],
-        ['stock', '股票', '炒股 A股 持仓 证券 gupiao',
+        ['stock', '股票', '炒股 A股 持仓 证券',
           A('M6.8 13.6h2.4v6.4H6.8zM11.4 10.4H14v9.6h-2.6zM16.4 6.4h2.4v13.6h-2.4z')
           + S('M3.6 20.4h16.8') + S('M3.6 20.4V4')
           + S('M6.8 13.6h2.4v6.4H6.8zM11.4 10.4H14v9.6h-2.6zM16.4 6.4h2.4v13.6h-2.4z')],
-        ['fund', '基金', '定投 理财 净值 ETF jijin',
+        ['fund', '基金', '定投 理财 净值 ETF',
           A('M12 3.8a8.2 8.2 0 0 1 8.2 8.2h-4a4.2 4.2 0 1 0-4.2 4.2V20.2A8.2 8.2 0 0 1 12 3.8Z')
           + S('M12 3.8a8.2 8.2 0 1 1 0 16.4 8.2 8.2 0 0 1 0-16.4Z')
           + S('M12 12V3.8M12 12h8.2')
           + S('m15.6 8.4 4.6-4.6M20.2 3.8h-3.4M20.2 3.8v3.4')],
-        ['credit2', '信用卡', '刷卡 额度 还款 借贷 xinyongka',
+        ['credit2', '信用卡', '刷卡 额度 还款 借贷',
           A('M3.4 9.4h17.2v3H3.4z')
           + S('M5.6 5.4h12.8a2.2 2.2 0 0 1 2.2 2.2v8.8a2.2 2.2 0 0 1-2.2 2.2H5.6a2.2 2.2 0 0 1-2.2-2.2V7.6a2.2 2.2 0 0 1 2.2-2.2Z')
           + S('M3.4 9.4h17.2')
           + S('M6 15h3.6')],
-        ['refund', '退款', '退货 返还 退钱 售后 tuikuan',
+        ['refund', '退款', '退货 返还 退钱 售后',
           A('M3.4 8.4h17.2v7.2H3.4z')
           + S('M4.6 6.4h14.8a1.8 1.8 0 0 1 1.8 1.8v7.6a1.8 1.8 0 0 1-1.8 1.8H4.6a1.8 1.8 0 0 1-1.8-1.8V8.2a1.8 1.8 0 0 1 1.8-1.8Z')
           + S('M15.4 9.4a3.2 3.2 0 1 0 1.9 3') + S('M15.2 6.8v2.6h-2.6')],
-        ['reimburse', '报销', '公费 差旅 报销单 发票 baoxiao',
+        ['reimburse', '报销', '公费 差旅 报销单 发票',
           A('M7.4 5.4h9.2v15.2l-2.3-1.6-2.3 1.6-2.3-1.6-2.3 1.6V5.4Z')
           + S('M7.4 5.4h9.2v15.2l-2.3-1.6-2.3 1.6-2.3-1.6-2.3 1.6V5.4Z')
           + S('M9.4 11.4 11.4 13.4 14.6 9.6')],
-        ['cashier', '收银机', '收银 门店 结算 便利店 shouyinji',
+        ['cashier', '收银机', '收银 门店 结算 便利店',
           A('M4.4 15.6h15.2v3.4H4.4z')
           + S('M4.4 15.6h15.2v3.4a1.4 1.4 0 0 1-1.4 1.4H5.8a1.4 1.4 0 0 1-1.4-1.4v-3.4Z')
           + S('M6.6 4.4h6.4a1.4 1.4 0 0 1 1.4 1.4v9.8H5.2V5.8a1.4 1.4 0 0 1 1.4-1.4Z')
           + S('M15.4 8.4h3.2v7.2')
           + S('M8 8.4h3.4')],
-        ['invoice', '发票', '开票 票据 报销凭证 税票 fapiao',
+        ['invoice', '发票', '开票 票据 报销凭证 税票',
           A('M6.4 8.4h11.2v4.2H6.4z')
           + S('M5.4 4.4h13.2v15.2H5.4z')
           + S('M8.4 15.4h7.2M8.4 18h4.4')
           + S('M8.4 8.4h3.2')],
-        ['tax', '税费', '缴税 个税 百分之 手续 shuifei',
+        ['tax', '税费', '缴税 个税 百分之 手续',
           A('M8 16.4a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM16 3.6a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z')
           + S('M6.4 20.4 17.6 3.6')
           + S('M8 16.4a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z')
           + S('M16 3.6a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z')],
-        ['installment', '分期', '花呗 分期付款 月供 借款 fenqi',
+        ['installment', '分期', '花呗 分期付款 月供 借款',
           A('M4.4 9.4h5.2v4.2H4.4zM14.4 9.4h5.2v4.2h-5.2z')
           + S('M3.4 6.4h17.2v11.2H3.4z')
           + S('M12 7.4v9.2')
           + S('M9.6 5.2 12 2.6l2.4 2.6')],
-        ['exchange', '汇率', '换汇 外币 美元 结汇 huilv',
+        ['exchange', '汇率', '换汇 外币 美元 结汇',
           A('M12 3.6a8.4 8.4 0 0 1 8.4 8.4h-3.2A5.2 5.2 0 0 0 12 6.8V3.6Z')
           + S('M12 3.6a8.4 8.4 0 1 0 8.4 8.4')
           + S('M20.4 12h-3.2M17.2 12l2.2-2.2')
           + S('M8.8 9.4 10.6 12l1.8-2.6M10.6 12v4.4M8.8 13.6h3.6')],
-        ['safe', '保险箱', '存钱 保险柜 储蓄 应急金 baoxianxiang',
+        ['safe', '保险箱', '存钱 保险柜 储蓄 应急金',
           A('M12 8.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
           + S('M5.6 4.4h12.8a2.2 2.2 0 0 1 2.2 2.2v11.2a2.2 2.2 0 0 1-2.2 2.2H5.6a2.2 2.2 0 0 1-2.2-2.2V6.6a2.2 2.2 0 0 1 2.2-2.2Z')
           + S('M12 8.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z')
-          + S('M15.4 12h3.8')],
-        ['subscription', '会员订阅', '订阅 会员 自动续费 包月 dingyue',
-          A('M5.9 9.6h8.6a2 2 0 0 1 2 2v5.8a2 2 0 0 1-2 2H5.9a2 2 0 0 1-2-2v-5.8a2 2 0 0 1 2-2Z')
-          + S('M5.9 9.6h8.6a2 2 0 0 1 2 2v5.8a2 2 0 0 1-2 2H5.9a2 2 0 0 1-2-2v-5.8a2 2 0 0 1 2-2Z')
-          + S('M7 13.8h5')
-          + S('M19.8 3.6a2.4 2.4 0 1 0 .1 3.9')
-          + S('M20.3 8.1l-2.3-.3M20.3 8.1l-.4-2.3')],
-        ['insurance', '保险', '保险 保单 投保 保障 baoxian',
-          A('M7.6 4.9h8.8a2 2 0 0 1 2 2v3.8c0 4.6-3 7.4-6.4 8.9-3.4-1.5-6.4-4.3-6.4-8.9V6.9a2 2 0 0 1 2-2Z')
-          + S('M7.6 4.9h8.8a2 2 0 0 1 2 2v3.8c0 4.6-3 7.4-6.4 8.9-3.4-1.5-6.4-4.3-6.4-8.9V6.9a2 2 0 0 1 2-2Z')
-          + S('M9.8 11.2 11.4 12.8 14.4 9.8')],
-        ['loan', '贷款还贷', '贷款 借款 还贷 房贷 daikuan',
-          A('M12 8.4a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z')
-          + S('M12 8.4a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z')
-          + S('M9.4 5.8h5.2')
-          + S('M9.4 5.8 8.8 9.4M14.6 5.8 15.2 9.4')
-          + S('M10.4 5.8 9.9 4.2M13.6 5.8 14.1 4.2')
-          + S('M12 11.6v5M10.3 13.2h3.4')],
-        ['interest', '利息', '利息 收益 理财 存款利息 lixi',
-          A('M9.3 9.5a5.8 5.8 0 1 1 0 11.6 5.8 5.8 0 0 1 0-11.6Z')
-          + S('M9.3 9.5a5.8 5.8 0 1 1 0 11.6 5.8 5.8 0 0 1 0-11.6Z')
-          + S('M9.3 12.2v5M7.7 13.9h3.2')
-          + S('M20.9 4.9 18.3 9.6')
-          + D(16.2, 4.7, 0.9)
-          + D(20.6, 12.3, 0.9)],
-        ['dividend', '分红', '分红 股息 红利 分成 fenhong',
-          A('M10.4 13.6 10.4 6.8A6.8 6.8 0 1 0 17.2 13.6Z')
-          + S('M10.4 13.6 10.4 6.8A6.8 6.8 0 1 0 17.2 13.6Z')
-          + S('M19.4 3.8a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8Z')]
+          + S('M15.4 12h3.8')]
       ]
     },
     {
       key: 'mood', label: '个性', hint: '标签、心愿、自定义',
       items: [
-        ['spark', '星星', '星标 闪耀 愿望 收藏 xingxing',
+        ['spark', '星星', '星标 闪耀 愿望 收藏',
           A('m12 3.4 2.4 5.4 5.4 2.4-5.4 2.4L12 19l-2.4-5.4L4.2 11.2l5.4-2.4L12 3.4Z')
           + S('m12 3.4 2.4 5.4 5.4 2.4-5.4 2.4L12 19l-2.4-5.4L4.2 11.2l5.4-2.4L12 3.4Z')],
-        ['zap', '闪电', '电费 充电 快速 能量 shandian',
+        ['zap', '闪电', '电费 充电 快速 能量',
           A('M13.6 2.6 5.4 13h5.2L10.4 21.4 18.6 11h-5.2l.2-8.4Z')
           + S('M13.6 2.6 5.4 13h5.2L10.4 21.4 18.6 11h-5.2l.2-8.4Z')],
-        ['love', '爱心', '喜欢 心愿 恋爱 表白 aixin',
+        ['love', '爱心', '喜欢 心愿 恋爱 表白',
           A('M12 18.6s-5.8-3.5-5.8-7.4A3.4 3.4 0 0 1 12 8.9a3.4 3.4 0 0 1 5.8 2.3c0 3.9-5.8 7.4-5.8 7.4Z')
           + S('M12 20.4s-7.6-4.6-7.6-9.7A4.5 4.5 0 0 1 12 7.4a4.5 4.5 0 0 1 7.6 3.3c0 5.1-7.6 9.7-7.6 9.7Z')],
-        ['tiara', '皇冠', '会员 VIP 尊享 头衔 huangguan',
+        ['tiara', '皇冠', '会员 VIP 尊享 头衔',
           A('M3.4 8.4 7 13.2 12 6.4l5 6.8 3.6-4.8v9.2H3.4V8.4Z')
           + S('M3.4 8.4 7 13.2 12 6.4l5 6.8 3.6-4.8v9.2H3.4V8.4Z')
           + S('M3.4 17.6h17.2')],
-        ['gem', '钻石', '珠宝 首饰 贵重 奢侈 zuanshi',
+        ['gem', '钻石', '珠宝 首饰 贵重 奢侈',
           A('M7.6 4.4h8.8l4 4.6-8.4 10.6L3.6 9l4-4.6Z')
           + S('M7.6 4.4h8.8l4 4.6-8.4 10.6L3.6 9l4-4.6Z')
           + S('M3.6 9h16.8M7.6 4.4 12 19.6 16.4 4.4')],
-        ['rocket', '火箭', '目标 冲刺 起飞 加速 huojian',
+        ['rocket', '火箭', '目标 冲刺 起飞 加速',
           A('M12 3.4c2.6 2 4 4.8 4 8.2 0 2-.6 3.8-1.8 5.4h-4.4A8.6 8.6 0 0 1 8 11.6c0-3.4 1.4-6.2 4-8.2Z')
           + S('M12 3.4c2.6 2 4 4.8 4 8.2 0 2-.6 3.8-1.8 5.4h-4.4A8.6 8.6 0 0 1 8 11.6c0-3.4 1.4-6.2 4-8.2Z')
           + S('M8.4 13.4 6 17.2l3.4-.8M15.6 13.4l2.4 3.8-3.4-.8')
           + S('M12 17.6v3.4')
           + S('M12 7.6h.01')],
-        ['clover', '四叶草', '幸运 好运 抽奖 祈福 siyecao',
+        ['clover', '四叶草', '幸运 好运 抽奖 祈福',
           A('M12 12c-1.6-1.6-2.4-2.8-2.4-4.2a2.4 2.4 0 0 1 4.8 0c0 1.4-.8 2.6-2.4 4.2ZM12 12c1.6-1.6 2.8-2.4 4.2-2.4a2.4 2.4 0 0 1 0 4.8c-1.4 0-2.6-.8-4.2-2.4ZM12 12c1.6 1.6 2.4 2.8 2.4 4.2a2.4 2.4 0 0 1-4.8 0c0-1.4.8-2.6 2.4-4.2ZM12 12c-1.6 1.6-2.8 2.4-4.2 2.4a2.4 2.4 0 0 1 0-4.8c1.4 0 2.6.8 4.2 2.4Z')
           + S('M12 12c-1.6-1.6-2.4-2.8-2.4-4.2a2.4 2.4 0 0 1 4.8 0c0 1.4-.8 2.6-2.4 4.2ZM12 12c1.6-1.6 2.8-2.4 4.2-2.4a2.4 2.4 0 0 1 0 4.8c-1.4 0-2.6-.8-4.2-2.4ZM12 12c1.6 1.6 2.4 2.8 2.4 4.2a2.4 2.4 0 0 1-4.8 0c0-1.4.8-2.6 2.4-4.2ZM12 12c-1.6 1.6-2.8 2.4-4.2 2.4a2.4 2.4 0 0 1 0-4.8c1.4 0 2.6.8 4.2 2.4Z')],
-        ['smiley', '笑脸', '开心 娱乐 聚会 好心情 xiaolian',
+        ['smiley', '笑脸', '开心 娱乐 聚会 好心情',
           A('M12 3.6a8.4 8.4 0 1 1 0 16.8 8.4 8.4 0 0 1 0-16.8Z')
           + S('M12 3.6a8.4 8.4 0 1 1 0 16.8 8.4 8.4 0 0 1 0-16.8Z')
           + S('M9 10h.01M15 10h.01')
           + S('M8.6 13.6c.9 1.6 2 2.4 3.4 2.4s2.5-.8 3.4-2.4')],
-        ['sunburst', '太阳', '晴天 日出 阳光 日光 taiyang',
+        ['sunburst', '太阳', '晴天 日出 阳光 日光',
           A('M12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z')
           + S('M12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z')
           + S('M12 2.6v2.4M12 19v2.4M2.6 12h2.4M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7')],
-        ['rainbow', '彩虹', '彩色 好运 雨天 童话 caihong',
+        ['rainbow', '彩虹', '彩色 好运 雨天 童话',
           A('M3.4 17.6a8.6 8.6 0 0 1 17.2 0h-3.2a5.4 5.4 0 0 0-10.8 0H3.4Z')
           + S('M3.4 17.6a8.6 8.6 0 0 1 17.2 0')
           + S('M6.6 17.6a5.4 5.4 0 0 1 10.8 0')
           + S('M3.4 20.6h4M16.6 20.6h4')],
-        ['anchor', '锚', '稳定 压舱 出海 港口 mao',
+        ['anchor', '锚', '稳定 压舱 出海 港口',
           A('M12 4.4a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4Z')
           + S('M12 4.4a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4Z')
           + S('M12 8.8v11.6')
           + S('M8.2 11.8h7.6')
           + S('M4.6 14.4a7.4 7.4 0 0 0 14.8 0')],
-        ['compass', '指南针', '方向 旅行 探索 定位 zhinanzhen',
+        ['compass', '指南针', '方向 旅行 探索 定位',
           A('m15.6 8.4-2 5.2-5.2 2 2-5.2 5.2-2Z')
           + S('M12 3.6a8.4 8.4 0 1 1 0 16.8 8.4 8.4 0 0 1 0-16.8Z')
           + S('m15.6 8.4-2 5.2-5.2 2 2-5.2 5.2-2Z')]
@@ -27059,19 +26510,13 @@ textarea::selection {
     }
   }());
 
-  /* 系统分类正在用的图标（分组、标签保持线性风格，不进自定义候选）
-   * 2.22：24 枚高频候选转正为系统分类图标 —— 字形仍由 CUSTOM_ICON_GROUPS 定义
-   * （键与选择器分组共用一份），只是同时具备系统分类身份。 */
+  /* 系统分类正在用的图标（分组、标签保持线性风格，不进自定义候选） */
   var SYSTEM_CATEGORY_KEYS = [
     'food', 'bus', 'bag', 'house', 'fun', 'health', 'book', 'phone', 'gift', 'ellipsis',
     'daily', 'carrot', 'fruit', 'snack', 'sport', 'shirt', 'beauty', 'sofa', 'baby', 'elder',
     'chat', 'plane', 'glass', 'plug', 'car', 'pet', 'briefcase', 'hammer', 'heart', 'ticket',
     'gamepad', 'wrench', 'washer', 'family', 'salary', 'bonus', 'invest', 'parttime',
-    'redpacket', 'coins', 'kit', 'cap', 'box', 'dots',
-    'takeout', 'breakfast', 'supermarket', 'online-shopping', 'secondhand', 'rent',
-    'utility-bill', 'broadband', 'ev-charge', 'car-service', 'car-wash', 'medicine',
-    'clinic', 'dentist', 'checkup', 'tuition', 'stationery', 'subscription', 'insurance',
-    'loan', 'interest', 'dividend', 'topup', 'software'
+    'redpacket', 'coins', 'kit', 'cap', 'box', 'dots'
   ];
 
   /* 系统分类图标的中文名：设置页的 aria-label 和候选格标签都从这里来，
@@ -27085,13 +26530,7 @@ textarea::selection {
     briefcase: '办公', hammer: '维修', heart: '捐赠', ticket: '彩票', gamepad: '游戏',
     wrench: '工具', washer: '电器', family: '亲友', salary: '工资', bonus: '奖金',
     invest: '理财', parttime: '兼职', redpacket: '红包', coins: '硬币', kit: '医疗箱',
-    cap: '学习', box: '其他',
-    takeout: '外卖', breakfast: '早餐', supermarket: '超市', 'online-shopping': '网购',
-    secondhand: '二手', rent: '房租', 'utility-bill': '水电燃', broadband: '宽带',
-    'ev-charge': '充电', 'car-service': '保养', 'car-wash': '洗车', medicine: '药品',
-    clinic: '门诊', dentist: '牙科', checkup: '体检', tuition: '学费', stationery: '文具',
-    subscription: '订阅', insurance: '保险', loan: '还贷', interest: '利息',
-    dividend: '分红', topup: '话费', software: '云服务'
+    cap: '学习', box: '其他'
   };
 
   (function registerSystemMeta() {
@@ -28294,14 +27733,7 @@ textarea::selection {
     ca_pet: 8, ca_office: 11, ca_repair: 8, ca_donate: 6, ca_lottery: 3,
     ca_game: 5, ca_tools: 12, ca_appliance: 2, ca_family: 10,
     ca_salary: 10, ca_bonus: 8, ca_invest: 2, ca_parttime: 11,
-    ca_redpacket: 6, ca_other_income: 4,
-    /* 2.22 转正的 24 个高频分类 */
-    ca_takeout: 1, ca_breakfast: 1, ca_supermarket: 3, ca_online_shopping: 3,
-    ca_secondhand: 12, ca_rent: 4, ca_utility: 4, ca_broadband: 10, ca_topup: 10,
-    ca_ev_charge: 7, ca_car_service: 7, ca_car_wash: 7,
-    ca_medicine: 6, ca_clinic: 6, ca_dentist: 6, ca_checkup: 6,
-    ca_tuition: 11, ca_stationery: 11, ca_subscription: 5, ca_insurance: 10,
-    ca_loan: 12, ca_software: 5, ca_interest: 2, ca_dividend: 2
+    ca_redpacket: 6, ca_other_income: 4
   };
 
   function parseHexRgb(value) {
@@ -28845,6 +28277,7 @@ textarea::selection {
 /* 小账本 2.0 · js/ui/sheet.js · owner: 前端#1（T04）
  * 底部浮层。公开：XZB.ui.sheet（镜像 XZB.UI.sheet）
  *   open({ title, content, actions, onClose, dismissible, className, ariaLabel })
+ *   confirm({ title, message, confirmLabel, cancelLabel, kind, requireText, inputLabel, onConfirm }) → Promise<bool>
  *   close(reason?) / isOpen()
  * 行为：backdrop 点击、下滑手势（阈值 80px 或速度 0.5px/ms）、Esc 关闭；
  *       打开时锁 body 滚动并记录 scrollY；关闭后焦点回到触发元素；
@@ -29368,12 +28801,106 @@ textarea::selection {
     });
   }
 
+  /* ---------- 确认浮层（全站唯一实现，DECISIONS R-05） ----------
+     confirm(options) 复用 open()，返回 Promise<boolean>；kind:'danger' 走既有
+     c-btn--danger-solid（不新增色值）；requireText 不符 ⇒ 就地提示、不关闭、
+     不调 onConfirm；主按钮不自动聚焦（AS-3），Esc / 返回键 = 取消。 */
+  var MISMATCH_TEXT = '确认文字不一致，操作已取消';
+
+  function confirm(options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var danger = opts.kind === 'danger' || opts.danger === true;
+    var requireText = opts.requireText === null || opts.requireText === undefined ? '' : String(opts.requireText);
+    var mismatchText = opts.mismatchText ? String(opts.mismatchText) : MISMATCH_TEXT;
+    var answered = false;
+    var settle = null;
+    var promise = new Promise(function (resolve) { settle = resolve; });
+    function answer(ok) {
+      if (answered) { return; }
+      answered = true;
+      if (typeof settle === 'function') { settle(!!ok); }
+    }
+    var body = make('div', 'c-sheet__confirm-body');
+    var message = opts.message === null || opts.message === undefined ? '' : String(opts.message);
+    if (message) {
+      var textNode = make('p', 'c-sheet__confirm-text');
+      textNode.textContent = message;
+      body.appendChild(textNode);
+    }
+    var input = null;
+    var hint = null;
+    if (requireText) {
+      var field = make('label', 'c-sheet__confirm-field');
+      var label = make('span', 'c-sheet__confirm-label');
+      label.textContent = String(opts.inputLabel || ('请输入「' + requireText + '」确认'));
+      input = make('input', 'c-sheet__confirm-input');
+      input.type = 'text';
+      input.setAttribute('autocomplete', 'off');
+      input.setAttribute('autocapitalize', 'off');
+      input.setAttribute('spellcheck', 'false');
+      input.setAttribute('aria-label', label.textContent);
+      hint = make('p', 'c-sheet__confirm-hint');
+      field.appendChild(label);
+      field.appendChild(input);
+      body.appendChild(field);
+      body.appendChild(hint);
+      input.addEventListener('input', function () {
+        hint.textContent = '';
+        hint.classList.remove('is-error');
+      });
+    }
+    var handle = open({
+      title: opts.title || '确认',
+      content: body,
+      className: 'c-sheet__confirm' + (danger ? ' c-sheet__confirm--danger' : ''),
+      actions: [
+        { label: String(opts.cancelLabel || '取消'), kind: 'text', onClick: function () { answer(false); } },
+        {
+          label: String(opts.confirmLabel || '确定'),
+          kind: danger ? 'danger' : 'primary',
+          onClick: function () {
+            if (requireText && (!input || String(input.value || '').replace(/\s+/g, '') !== requireText)) {
+              hint.textContent = mismatchText;
+              hint.classList.add('is-error');
+              try { input.focus(); } catch (error) { /* 抢不到焦点也不影响判断 */ }
+              return false;
+            }
+            var closed = false;
+            var done = function () {
+              if (closed) { return; }
+              closed = true;
+              answer(true);
+              close('confirm');
+            };
+            if (typeof opts.onConfirm === 'function') {
+              try { opts.onConfirm(done); } catch (error) { done(); }
+            } else { done(); }
+            return false;
+          }
+        }
+      ],
+      onClose: function () { answer(false); }
+    });
+    if (!handle) { answer(false); return promise; }
+    /* 输入框 Enter = 点主按钮；焦点仍留在容器（主按钮不自动聚焦）。 */
+    if (input) {
+      input.addEventListener('keydown', function (event) {
+        if (!event || event.key !== 'Enter') { return; }
+        event.preventDefault();
+        var buttons = handle.element ? handle.element.querySelectorAll('.c-sheet__actions .c-btn') : [];
+        if (buttons.length) { buttons[buttons.length - 1].click(); }
+      });
+    }
+    return promise;
+  }
+
   function isOpen() {
     return !!state.open;
   }
 
   var api = Object.freeze({
     open: open,
+    confirm: confirm,
     close: close,
     isOpen: isOpen,
     SWIPE_DISTANCE: SWIPE_DISTANCE,
@@ -29519,10 +29046,6 @@ textarea::selection {
     var type = normalizeType(options.type);
     var action = options.action && typeof options.action === 'object' ? options.action : null;
     var actionLabel = action && action.label ? String(action.label) : '撤销';
-    /* 长文案（如记账点评）需要更久停留：调用方可用 opts.duration 覆盖默认时长 */
-    var duration = typeof options.duration === 'number' && options.duration >= 800
-      ? options.duration
-      : (action ? DURATION_ACTION : DURATION_PLAIN);
 
     var host = ensureRoot();
     if (!host) { return null; }
@@ -29588,7 +29111,7 @@ textarea::selection {
     timer = setTimeout(function () {
       timer = 0;
       if (token === current && toastEl === node) { dismiss(); }
-    }, duration);
+    }, action ? DURATION_ACTION : DURATION_PLAIN);
 
     return Object.freeze({
       dismiss: dismiss,
@@ -31777,7 +31300,7 @@ textarea::selection {
 
 </script>
   <script>
-/* 小账本 2.0 · js/chunk-manifest.js · owner: frontend（T-02）：17 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
+/* 小账本 2.0 · js/chunk-manifest.js · owner: frontend（T-02）：15 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
 (function (global) {
   'use strict';
   var XZB = global.XZB || (global.XZB = {});
@@ -31786,15 +31309,10 @@ textarea::selection {
     ['home', 'screens/home', 'screens/home'], ['add', 'screens/add', 'screens/add'], ['ledger', 'screens/ledger', 'screens/ledger'], ['stats', 'screens/stats', 'screens/stats'],
     ['insights', 'screens/insights', 'screens/insights'], ['accounts', 'screens/accounts', 'screens/accounts'], ['books', 'screens/books', 'screens/books'], ['plan', 'screens/plan', 'screens/plan'],
     ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
-    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'], ['insight-qa', 'core/insight-qa', 'modules/insight-qa'], ['quips', 'modules/quips', 'modules/quips'],
-    ['ai-store', 'modules/ai-store', 'modules/ai-store'], ['ai-client', 'modules/ai-client', 'modules/ai-client'], ['ai-enhance', 'modules/ai-enhance', 'modules/ai-enhance']
+    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant']
   ];
   /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
-  var DEPS = { add: ['keypad', 'icon-picker', 'quips'], stats: ['charts'], insights: ['charts'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant', 'insight-qa', 'quips'],
-    /* 三个 AI 模块都不进任何屏幕的 DEPS：由 assistant/settings 按需 ensure()，
-       一个 404 只会让云端分支不可用，不会让整屏打不开（架构 §1.2 K4）。
-       ai-enhance 依赖 store/client；store 与 client 各自为空，显式写出来是为了让键集与 ROWS 相等。 */
-    'ai-store': [], 'ai-client': [], 'ai-enhance': ['ai-store', 'ai-client'] };
+  var DEPS = { add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
@@ -32877,7 +32395,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.24.3';
+  XZB.version = '2.19.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -32913,16 +32431,6 @@ textarea::selection {
   /* ④ 删 prefs（xzb.ui.v2）只能由本文件做（L-o）；闸门要保证「清除本机数据」始终有出口 */
   function clearPrefs() {
     try { global.localStorage.removeItem(PREFS_KEY); } catch (error) { /* 读不到/写不进都不阻断闸门出口 */ }
-    /* 清空所有数据必须带走 AI Key（xzb.ai.v1）；新增持久化键都要在这里登记。
-       用裸 removeItem 而不是 aiStore.clearAll()：ai-store 是懒加载 chunk，
-       用户从没打开过智能增强时 XZB.core.aiStore 就是 undefined，那样写等于什么都没删，
-       而代码看起来完全正确、review 也看不出来。字面量必须与 js/modules/ai-store.js 的 KEY 常量逐字相等。 */
-    try { global.localStorage.removeItem('xzb.ai.v1'); } catch (error) { /* 同上：清不掉也不阻断出口 */ }
-    /* 模块已在内存里缓存过配置的话顺手失效：闸门的可重试分支不一定 reload，别留一份旧 Key 在内存里 */
-    try {
-      var aiStore = global.XZB && global.XZB.core && global.XZB.core.aiStore;
-      if (aiStore && typeof aiStore.invalidate === 'function') { aiStore.invalidate(); }
-    } catch (error) { /* 未加载/失效失败都无妨，落盘删除已经做过 */ }
   }
 
   if (XZB.lock && typeof XZB.lock.configure === 'function') {
@@ -34754,11 +34262,5 @@ textarea::selection {
   <script type="text/xzb-module" data-xzb-chunk="charts" src="js/modules/charts.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="nl" src="js/modules/nl.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="core-assistant" src="js/modules/core-assistant.js"></script>
-  <script type="text/xzb-module" data-xzb-chunk="insight-qa" src="js/modules/insight-qa.js"></script>
-  <script type="text/xzb-module" data-xzb-chunk="quips" src="js/modules/quips.js"></script>
-  <!-- 智能增强三件套：顺序 store → client → enhance（enhance 的 DEPS 依赖前两者） -->
-  <script type="text/xzb-module" data-xzb-chunk="ai-store" src="js/modules/ai-store.js"></script>
-  <script type="text/xzb-module" data-xzb-chunk="ai-client" src="js/modules/ai-client.js"></script>
-  <script type="text/xzb-module" data-xzb-chunk="ai-enhance" src="js/modules/ai-enhance.js"></script>
 </body>
 </html>

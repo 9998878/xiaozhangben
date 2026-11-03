@@ -1231,11 +1231,11 @@
         });
         dom.on(deleteBtn, 'click', function () {
           if (handle && typeof handle.close === 'function') { handle.close(); }
-          confirmSheet(ctx, {
+          XZB.ui.sheet.confirm({
             title: '删除账户',
             message: '「' + account.name + '」还没有任何流水，删除后不可恢复。确定删除？',
             confirmLabel: '删除',
-            danger: true,
+            kind: 'danger',
             onConfirm: function (close) {
               deleteAccount(ctx, account, close);
             }
@@ -1518,11 +1518,11 @@
     var message = count > 0
       ? '「' + account.name + '」有 ' + count + ' 笔流水，归档后历史保留、仍可查看，可随时恢复。'
       : '归档后「' + account.name + '」不会出现在记账选择器里，可随时恢复。';
-    confirmSheet(ctx, {
+    XZB.ui.sheet.confirm({
       title: '归档账户',
       message: message,
       confirmLabel: '归档',
-      danger: true,
+      kind: 'danger',
       onConfirm: function (close) {
         ctx.commit(function (working) {
           var target = findById(working.accounts || [], account.id);
@@ -1619,36 +1619,8 @@
     });
   }
 
-  /* ---------------- 确认浮层 ---------------- */
-
-  function confirmSheet(ctx, options) {
-    var opts = options || {};
-    var body = dom.el('div', { className: 's-accounts-confirm' });
-    body.appendChild(t('p', 's-accounts-confirm__text', opts.message || ''));
-
-    var handle = XZB.ui.sheet.open({
-      title: opts.title || '确认',
-      content: body,
-      actions: [
-        { label: '取消', kind: 'text' },
-        {
-          label: opts.confirmLabel || '确定',
-          kind: opts.danger ? 'danger' : 'primary',
-          onClick: function () {
-            var closed = false;
-            if (typeof opts.onConfirm === 'function') {
-              opts.onConfirm(function () {
-                if (closed) { return; }
-                closed = true;
-                if (handle && typeof handle.close === 'function') { handle.close(); }
-              });
-            }
-            return false;
-          }
-        }
-      ]
-    });
-  }
+  /* 确认浮层统一走 XZB.ui.sheet.confirm ——
+     此处私有的 confirmSheet 实现已按 DECISIONS R-05 删除，勿再复制一份。 */
 
   /* ---------------- 注册 ---------------- */
 

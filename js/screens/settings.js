@@ -1,16 +1,4 @@
-/* ============================================================
-   小账本 2.0 — 屏幕：设置（settings）
-   owner: 前端#1（T13）
-   依赖：XZB.core.{dates,schema,store,migrate,backup,photos} / XZB.dom / XZB.ui.{icons,toast,sheet}
-   读：XZB.app.db()（同时用 ctx.db 快照）；写：XZB.app.commit(mutator,{label})
-   导出 / 导入 / 快照 / 恢复 / 清空 / 迁移：一律走 backup.js 与 store.js 的公开 API，
-   不直接碰 IndexedDB，不读写 localStorage（迁移检测由 migrate.hasV1Data 负责）。
-   照片（F40，契约锚点 PLAN §2 XZB.app.photos.* / §2.4 XZB.Core.photos.fmtBytes）：
-     · 屏幕层**只经** XZB.app.photos.*（put/get/purge/purgeAll/stats/restoreUndo…），
-       不直接调用 XZB.Core.store.photo*（PLAN §2 invariants 冻结）；门面缺席时降级为禁用态。
-     · 体积格式化唯一实现 = `XZB.Core.photos.fmtBytes`（本文件不留第二份，全仓不留第二条体积实现）；
-       导入上限唯一来源 = `XZB.Core.backup.MAX_IMPORT_BYTES`（T12：10MB → 128MB，UI 不写死数值）。
-   ============================================================ */
+/* 小账本 2.0 — 屏幕：设置（settings）。读写只经 XZB.app.* 门面；照片只经 XZB.app.photos.*；体积格式化唯一实现 = XZB.Core.photos.fmtBytes；导入上限唯一来源 = XZB.Core.backup.MAX_IMPORT_BYTES。 */
 (function (global) {
   'use strict';
 
@@ -24,17 +12,12 @@
   var CONFIRM_CLEAR = '清空';
   var SNAP_PAGE = 10;
   var TONE_COUNT = 12;
-  /* 写回数据库的分类色必须落**固定色值**：读 --cat-N 这类会随主题翻转的变量，会在深色模式下
-     把浅色值写成深色值，同一分类在两种主题间反复保存就会慢慢漂色。
-     所以本文件不留第二份色值表，只记「主题恒定 token 名」——真色值只在 tokens.css 的
-     --cat-raw-N 里定义一处（深色块刻意不覆盖），取值统一走 cssVar()。 */
+  /* 分类色写库必须落固定色值（--cat-raw-N 主题恒定），本文件不留第二份色值表。 */
   var CAT_RAW_TOKENS = ['--cat-raw-1', '--cat-raw-2', '--cat-raw-3', '--cat-raw-4',
     '--cat-raw-5', '--cat-raw-6', '--cat-raw-7', '--cat-raw-8', '--cat-raw-9',
     '--cat-raw-10', '--cat-raw-11', '--cat-raw-12'];
 
-  /* 惰性读取：settings.js 先于 app.js 执行，此刻 XZB.version 还没就位，
-     必须等渲染时再取，否则「关于」页会一直读到空版本。
-     版本号只在 app.js 里定义一处，这里不留硬编码兜底。 */
+  /* 版本号只在 app.js 定义一处，渲染时惰性取（settings.js 先于 app.js 执行）。 */
   function appVersion() {
     return XZB.version || '';
   }
@@ -67,9 +50,7 @@
     E_SNAPSHOT_TOO_LARGE: '数据太大，无法创建快照',
     E_EXPORT_FAILED: '导出失败，请重试',
     E_IMPORT_EMPTY: '文件是空的',
-    /* E_IMPORT_TOO_LARGE 不在这张表里：上限的唯一来源是 XZB.Core.backup.MAX_IMPORT_BYTES
-       （T12 把它从 10MB 提到 128MB），文案必须现场用 fmtBytes(上限) 拼出来 —— 写死任何
-       MB 数值都会在下一次调阈值时立刻变成错话。见下面的 importTooLargeText()。 */
+    /* E_IMPORT_TOO_LARGE 的文案现场用 fmtBytes(上限) 拼，不写死 MB 数值。 */
     E_IMPORT_INVALID: '不是小账本备份文件',
     E_IMPORT_FAILED: '导入失败，数据已回滚',
     E_CATEGORY_MISSING: '分类不存在',
@@ -83,11 +64,7 @@
     E_MIGRATE_INVALID: '旧版数据格式不对，无法迁移'
   };
 
-  /* 分类图标候选（2.6）：
-   *   系统分类 → 只能在系统那套双色图标里换（保持全站风格一致）；
-   *   自定义分类 → 走专属图标库（8 组 × 12 枚，与系统 key 零交集）。
-   * 两份清单都从 XZB.ui.icons 的注册表读，本文件不再维护第二份 key 列表；
-   * 中文名统一用 icons.labelOf()，避免 CAT_ICON_LABELS 和实际图标对不上。 */
+  /* 分类图标候选从 XZB.ui.icons 注册表读，本文件不留第二份 key 列表。 */
   function iconRegistry() {
     return XZB.ui && XZB.ui.icons ? XZB.ui.icons : null;
   }
@@ -110,14 +87,10 @@
     return FALLBACK_SYSTEM_ICONS;
   }
 
-  /* 契约名：分类「图标选择器」候选的唯一真源（就是系统分类那套双色图标）。
-     本文件不维护第二份 key 列表，列表来自 XZB.ui.icons 注册表。 */
   function CAT_ICON_CHOICES() {
     return systemIconChoices();
   }
 
-  /* 契约名：分类「颜色选择器」候选的唯一真源（12 色槽的主题恒定 token 名，
-     真色值见 tokens.css 的 --cat-raw-N）。 */
   function CAT_COLOR_CHOICES() {
     return CAT_RAW_TOKENS;
   }
@@ -176,8 +149,7 @@
     var wrap = h('span', { className: className || 's-settings-glyph' });
     var api = XZB.ui && XZB.ui.icons;
     var px = size || 20;
-    /* icons.icon() 返回常量 SVG 字符串，经 dom.el 的 html 通道按 HTML 文档解析，
-       命名空间才是正确的 svg（icons.node 解析出的节点在部分环境里是 0 高度）。 */
+    /* icons.icon() 经 html 通道解析才拿到正确的 svg 命名空间。 */
     if (api && typeof api.icon === 'function') {
       try {
         var svg = api.icon(name, { size: px });
@@ -201,9 +173,7 @@
     if (XZB.ui && XZB.ui.toast) { XZB.ui.toast.show(message, opts); }
   }
 
-  /* 文案优先级：结果自带的 message → 冻结文案真源 store.MESSAGES（PLAN §7：照片类错误码的
-     文案只在 store 里写一遍，调用点不得另写）→ 本文件的兜底表 → 通用失败。
-     E_IMPORT_TOO_LARGE 例外：它随上限变化，必须现场按当前上限拼。 */
+  /* 文案优先级：result.message → store.MESSAGES → 本文件兜底表 → 通用失败。 */
   function frozenMessages() {
     var store = storeApi();
     return (store && store.MESSAGES) || {};
@@ -224,8 +194,6 @@
 
   /* ---------------- 上限与体积（T12 同步点 / F40） ---------------- */
 
-  /* 导入上限的**唯一来源**：XZB.Core.backup.MAX_IMPORT_BYTES。本文件不复制这个数：
-     阈值由 T12 从 10MB 提到 128MB，界面若自带一份副本就会在下一次调阈值时立刻说错话。 */
   function importLimitBytes() {
     var backup = backupApi();
     var limit = backup ? backup.MAX_IMPORT_BYTES : null;
@@ -233,8 +201,6 @@
     return limit;
   }
 
-  /* E_IMPORT_TOO_LARGE 的界面文案：超过 <fmtBytes(当前上限)>。上限读不到时退回不含数值的
-     说法（宁可模糊，也不报一个错数）。 */
   function importTooLargeText() {
     var limit = importLimitBytes();
     if (limit > 0) { return '文件超过 ' + fmtBytes(limit) + '，无法导入'; }
@@ -251,8 +217,7 @@
 
   /* ---------------- 照片门面（PLAN §2 XZB.app.photos，F22 提供） ---------------- */
 
-  /* 能力检测：屏幕层只经门面读写照片（PLAN §2 invariants 冻结，不直连 store.photo*）。
-     门面或某方法缺席 ⇒ 一律降级成「不可用 + 提示」，绝不硬依赖把设置屏整屏打不开。 */
+  /* 门面或方法缺失一律降级「不可用 + 提示」，不把整屏打不开。 */
   function photosApi() {
     return (XZB.app && XZB.app.photos) ? XZB.app.photos : null;
   }
@@ -264,8 +229,6 @@
 
   var PHOTO_OFFLINE_TEXT = '照片功能暂不可用，请更新应用后重试';
 
-  /* stats() 直通（PLAN §2：store.photoStats 的 {ok,count,bytes,thumbBytes,orphanCount,
-     orphanBytes,orphanRefs}）；任何异常一律折成 null，由界面走「—」降级。 */
   function photoStatsOf() {
     var api = photosApi();
     if (!api || typeof api.stats !== 'function') { return Promise.resolve(null); }
@@ -278,8 +241,6 @@
     });
   }
 
-  /* 右值与浮层大字（UI.md §2.6 逐字形态）：'12 张 · 3.4 MB'；0 张 = '暂无照片'。
-     张数用 String，体积一律 fmtBytes（唯一实现 = XZB.Core.photos.fmtBytes）。 */
   function photoCountText(stats) {
     var count = stats ? Math.floor(Number(stats.count) || 0) : 0;
     if (count <= 0) { return '暂无照片'; }
@@ -293,8 +254,6 @@
     return '清理未引用的照片（' + count + ' 张 · ' + fmtBytes(bytes) + '）';
   }
 
-  /* 隐私口径（UI.md §2.6 ②）：照片是敏感数据，必须明说「只存本机」；
-     0 张时换成「怎么加」的说法。文案里不出现上传/云端/同步字样。 */
   function photoHintText(stats) {
     var count = stats ? Math.floor(Number(stats.count) || 0) : 0;
     if (count <= 0) {
@@ -305,18 +264,12 @@
 
   /* ---------------- A31 / A32：本机数据保护与首启说明（PH-PERF-6） ---------------- */
 
-  /* A31 字段名逐字取自 PLAN §392 冻结契约：结果落 settings.storagePersistent。
-     只写 db.settings（走 store 通道、随库与备份走），**不写 localStorage** ——
-     用 localStorage 里的哨兵值冒充持久化结果正是 SPEC A31 明令禁止的。 */
+  /* A31：结果落 settings.storagePersistent，只走 store 通道，不写浏览器键值存储。 */
   var STORAGE_PERSISTENT_KEY = 'storagePersistent';
-  /* A32 一次性标记：同样落 db.settings（走 store），不用 localStorage。 */
+  /* A32 一次性标记：同样落 db.settings（走 store），不用浏览器键值存储。 */
   var FIRST_RUN_BANNER_KEY = 'firstRunBannerDone';
-  /* 本页面会话内是否已经展示过这个库的首启横幅：置位后重渲染不再重新判定，
-     否则标记刚落库的那次重渲染会让横幅立刻消失（闪退）。 */
   var bannerShownThisSession = false;
 
-  /* A31 两态文案（界面串，不属 MESSAGES 错误码范畴）：已持久化 = 已开启；
-     未持久化必须交代「系统可能在空间紧张时清理，建议定期导出备份」。 */
   function storageProtectText(persisted) {
     if (persisted === true) { return '已开启'; }
     return '未开启（系统可能在空间紧张时清理，建议定期导出备份）';
@@ -339,9 +292,7 @@
 
   /* ---------------- 应用锁 ---------------- */
 
-  /* CONTRACT §7.4 / L:7.4：应用锁与「本机数据保护」是两件事。
-     PIN 校验、冷却、抹除全在 lock.js；本文件只负责设置页里的行与四张浮层。
-     PIN 输入用 .lock-dots + .lock-pad（复用 css/lock.css 的非作用域类），不放原生输入框。 */
+  /* 应用锁与「本机数据保护」是两件事：PIN 校验、冷却、抹除全在 lock.js。 */
 
   var LOCK_PIN_LEN = 4;
   var LOCK_PIN_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '删除'];
@@ -427,8 +378,6 @@
     });
   }
 
-  /* PIN 点阵 + 数字键盘。onSubmit(pin, controls) 只在满 4 位时触发；
-     controls.clear() 允许原地重试，controls.fail(message) 清空输入并把唯一一行错误写进 .lock-error。 */
   function buildPinBody(hintText, onSubmit) {
     var state = { pin: '', busy: false };
     var body = h('div', { className: 'lock-gate__body' });
@@ -653,11 +602,7 @@
     });
   }
 
-  /* A32 判定（纯函数，无 DOM / 无 IO；tools/_t21_selfcheck.cjs 经 photosTestKit 直调）。
-     input = { empty: 库是否空（transactions.length===0 && photos.count===0）,
-               done:  该库的一次性标记是否已置位,
-               prior: 本页面会话内是否已经为这个库展示过 }
-     返回 { show, mark, reason }：mark=true 表示这次要把一次性标记写进 db.settings。 */
+  /* A32 判定（纯函数）：返回 {show, mark, reason}；mark=true 表示这次要落一次性标记。 */
   function firstRunBannerStep(input) {
     var source = input || {};
     if (source.empty !== true) { return { show: false, mark: false, reason: 'not-empty' }; }
@@ -666,16 +611,13 @@
     return { show: true, mark: true, reason: 'first' };
   }
 
-  /* 横幅两句逐字取自冻结文档：PLAN §392 的 emptyLibraryBanner 与 SPEC A32。
-     照片类错误码仍只在 store.MESSAGES；这里不新增码、不另写照片类错误文案。 */
   var FIRST_RUN_BANNER_TITLE = '照片与备份';
   var FIRST_RUN_BANNER_LINES = [
     '若你以前用过，本机数据可能已被系统清理，请导入上次备份。',
     '照片随流水保存，导出备份可带走。'
   ];
 
-  /* 横幅只用已存在的类名（c-card / c-card__body / c-card__title / s-settings-note），
-     不新增 s-settings-* 类，所以不需要 ui 补 CSS。 */
+  /* 横幅只用既有类名，不新增 s-settings-* 类。 */
   function firstRunBannerNode() {
     var card = h('section', { className: 'c-card' });
     var body = h('div', { className: 'c-card__body' });
@@ -687,8 +629,6 @@
     return card;
   }
 
-  /* 空库首启横幅：流水同步判（长度为 0 才继续），照片占用异步问（stats() 是 Promise，
-     不能当同步用）；判定在异步回调里重做一次，避免渲染完又变。 */
   function firstRunBannerMaybe(root, ctx, db) {
     if (listOf(db, 'transactions').length > 0) { return; }
     photoStatsOf().then(function (stats) {
@@ -815,11 +755,7 @@
     }
   }
 
-  /* 体积格式化（PLAN §2.4 冻结）：唯一实现 = XZB.Core.photos.fmtBytes，本文件不再自带第二份
-     （全仓也不得再出现第二条体积格式化实现）。输出格式由 photos.js 逐字承接 settings.js:297 的既有实现，
-     既有验收依赖它，这里只做转发。
-     顶层取值对 XZB.Core 做了短路：Node 静态自检的 vm 沙箱里只注入 XZB.core（没有 Core），
-     直接解引用会连累整屏注册失败；运行时的 core → ui → screens 加载序保证它已就位。 */
+  /* 体积格式化唯一实现 = XZB.Core.photos.fmtBytes，本文件只转发。 */
   var coreFmtBytes = (XZB.Core && XZB.Core.photos) ? XZB.Core.photos.fmtBytes : null;
 
   function fmtBytes(bytes) {
@@ -1077,8 +1013,6 @@
     });
 
     var buttons = [];
-    /* 外观是「多选一」的即时偏好，不切换内容面板，所以用 aria-pressed 表达
-       当前选中项，视觉态沿用 .is-active（与分类筛选、图标/颜色选择一致） */
     function paint(activeValue) {
       for (var i = 0; i < buttons.length; i += 1) {
         var on = buttons[i].getAttribute('data-theme') === activeValue;
@@ -1118,10 +1052,7 @@
   }
 
   function sectionAppearance(ctx) {
-    /* 2.1 删过一次「震动」开关，理由是 iOS Safari 没有 navigator.vibrate，
-       留一个永远不震的开关比没有更伤信任——这条继续成立，所以开关**按平台出现**：
-       只有 haptics.supported() 为真（Android 这类真能震的设备）才渲染。
-       2.11.1 起震动本身接到了 ui/press.js：每一次确认点按都会震，不只是这个开关。 */
+    /* 震动开关按平台出现（iOS Safari 无 navigator.vibrate）；2.11.1 起点按即震。 */
     var rows = [themeRow(ctx)];
     var haptics = XZB.ui && XZB.ui.haptics;
     if (haptics && typeof haptics.supported === 'function' && haptics.supported()) {
@@ -1137,7 +1068,17 @@
         }
       }));
     }
-    return group('显示', rows);
+    return group('显示与手感', rows);
+  }
+
+  /* ---------------- B 安全（主屏可见；原在 about 子页「存储」组，IA-3 上移） ---------------- */
+
+  /* 存储/应用锁两行已上移主屏「安全」组（IA-3），about 子页不留重复入口。 */
+  function sectionSecurity(ctx, db) {
+    var storeRows = [];
+    storeRows.push(storageProtectRow(db));
+    storeRows.push(lockRow(db));
+    return group('安全', storeRows, '应用锁只锁界面，不加密本机数据；本机数据保护是浏览器授予的持久化状态。');
   }
 
   /* ---------------- 小助手（2.17.0） ---------------- */
@@ -1153,84 +1094,58 @@
     } catch (error) { return 0; }
   }
 
-  function clearAssistantHistory(ctx) {
-    var api = historyApi();
-    if (!api || typeof api.clear !== 'function') {
-      toast(ctx, MESSAGES.E_INVALID_INPUT || '暂时不能清空', { type: 'danger' });
-      return;
-    }
-    var run = function () {
-      try { api.clear(); } catch (error) { /* 清不掉就保持原样 */ }
-      toast(ctx, '撤销历史已清空', { type: 'success' });
-      if (ctx && typeof ctx.refresh === 'function') { ctx.refresh(); }
-    };
-    var sheet = XZB.ui && XZB.ui.sheet;
-    if (sheet && typeof sheet.open === 'function') {
-      var body = h('div', { className: 's-settings-confirm' });
-      body.appendChild(t('p', 's-settings-confirm__text',
-        '只清除撤销记录，账目本身不受影响。清空后小助手这次的操作就撤不回来了。'));
-      sheet.open({
-        title: '清空撤销历史',
-        content: body,
-        actions: [
-          { label: '取消', kind: 'text' },
-          { label: '清空', kind: 'danger', onClick: run }
-        ]
-      });
-      return;
-    }
-    if (global.confirm && global.confirm('清空撤销历史？只清记录，不影响账目。')) { run(); }
+  /* 配置读写一律经 XZB.core.assistant.llm；本屏 DEPS 只含 icon-picker，先惰性 ensure。 */
+  function llmApi() {
+    var core = coreMod('assistant');
+    if (core && core.llm) { return core.llm; }
+    var top = XZB.assistant;
+    if (top && top.llm) { return top.llm; }
+    return null;
   }
 
-  /* P0-5 本地使用统计：只存 prefs，不上传；行尾展示、点击清零 */
-  function readAssistantMetrics(ctx) {
-    var v = prefsGet(ctx, 'assistant.metrics', null);
-    return v && typeof v === 'object' ? v : {};
+  function ensureAssistantCore() {
+    if (llmApi()) { return Promise.resolve(true); }
+    var chunks = XZB.chunks;
+    if (!chunks || typeof chunks.ensure !== 'function') { return Promise.resolve(false); }
+    var pending = null;
+    try { pending = chunks.ensure('core-assistant'); } catch (error) { pending = null; }
+    if (!pending || typeof pending.then !== 'function') { return Promise.resolve(!!llmApi()); }
+    return pending.then(function () { return !!llmApi(); }, function () { return false; });
   }
 
-  function metricsSummary(m) {
-    var bits = [];
-    if (m.confirm) { bits.push('写入 ' + m.confirm); }
-    if (m.insight) { bits.push('洞察 ' + m.insight); }
-    if (m.query) { bits.push('查账 ' + m.query); }
-    if (m.undo) { bits.push('撤销 ' + m.undo); }
-    return bits.join(' · ');
+  function llmCfg() {
+    var api = llmApi();
+    if (!api || typeof api.getConfig !== 'function') { return null; }
+    try {
+      var res = api.getConfig();
+      if (!res || res.ok !== true || !res.cfg) { return null; }
+      return res.cfg;
+    } catch (error) { return null; }
   }
 
-  function clearAssistantMetrics(ctx) {
-    var run = function () {
-      prefsSet(ctx, 'assistant.metrics', {});
-      toast(ctx, '使用统计已清零', { type: 'success' });
-      if (ctx && typeof ctx.refresh === 'function') { ctx.refresh(); }
-    };
-    var sheet = XZB.ui && XZB.ui.sheet;
-    if (sheet && typeof sheet.open === 'function') {
-      var body = h('div', { className: 's-settings-confirm' });
-      body.appendChild(t('p', 's-settings-confirm__text',
-        '只清零计数（写入/洞察/查账/撤销），账目本身不受影响。'));
-      sheet.open({
-        title: '清零使用统计',
-        content: body,
-        actions: [
-          { label: '取消', kind: 'text' },
-          { label: '清零', kind: 'danger', onClick: run }
-        ]
-      });
-      return;
-    }
-    if (global.confirm && global.confirm('清零本地使用统计？只清计数，不影响账目。')) { run(); }
+  /* 三态右值（设计 §4.5）：未配置 · 纯本地 / 已开启 · {model} / 未就绪 */
+  function llmRowValue() {
+    var cfg = llmCfg();
+    if (!cfg) { return '未配置 · 纯本地'; }
+    if (cfg.enabled !== true || cfg.hasKey !== true || !cfg.baseURL) { return '未配置 · 纯本地'; }
+    return '已开启 · ' + (cfg.model || '默认模型');
   }
 
   function sectionAssistant(ctx) {
     var count = historyCount();
-    var metrics = readAssistantMetrics(ctx);
-    var metricsText = metricsSummary(metrics);
     var rows = [
       row({
         icon: 'sparkles',
         title: '小助手',
-        sub: '说一句「外卖 28 微信」「房租 3000」就记好，也能改、删、查',
+        sub: '说一句「午饭 28 微信」就记好，也能改、删、查',
         onClick: function () { go(ctx, '#/assistant'); }
+      }),
+      row({
+        icon: 'cloud',
+        title: '在线模型',
+        sub: '自己填接口地址与密钥；不填就纯本地解析',
+        value: llmRowValue(),
+        onClick: function () { go(ctx, '#/settings/ai'); }
       }),
       row({
         icon: 'undo',
@@ -1238,620 +1153,11 @@
         sub: count ? '最近 ' + count + ' 次写入可以撤' : '还没有可撤销的记录',
         value: count ? count + ' 条' : '暂无',
         onClick: function () { go(ctx, '#/assistant/history'); }
-      }),
-      switchRow(ctx, {
-        icon: 'sparkles',
-        title: '情境入口',
-        sub: '解读、预算、流水里带上下文问小助手',
-        checked: prefsGet(ctx, 'assistant.contextualEntry', true) !== false,
-        onChange: function (next) { return prefsSet(ctx, 'assistant.contextualEntry', next); }
-      }),
-      switchRow(ctx, {
-        icon: 'chart-line',
-        title: '本地洞察问答',
-        sub: '为什么超支、预算预测、节省模拟，全在本机算',
-        checked: prefsGet(ctx, 'assistant.localInsights', true) !== false,
-        onChange: function (next) { return prefsSet(ctx, 'assistant.localInsights', next); }
       })
     ];
-    if (metricsText) {
-      rows.push(row({
-        icon: 'list',
-        title: '本地使用统计',
-        sub: '只存在本机，点击清零',
-        value: metricsText,
-        onClick: function () { clearAssistantMetrics(ctx); }
-      }));
-    }
-    if (count) {
-      rows.push(row({
-        icon: 'trash',
-        title: '清空撤销历史',
-        value: '不影响账目',
-        onClick: function () { clearAssistantHistory(ctx); }
-      }));
-    }
-    return group('小助手', rows,
-      '小助手默认完全在本机解析与保存；开启下方「智能增强」后，问题与必要的数据摘要会按授权说明发送给所选供应商。语音识别由你的浏览器服务处理。撤销历史只记录小助手与手动记账的差异，最多 30 条。');
-  }
-
-  /* ---------------- 智能增强（BYOK 云端辅助，架构 §10.1） ----------------
-   * 契约锚点：
-   *  - Key 与全部 AI 配置只经 XZB.core.aiStore（懒加载 chunk），本文件不碰 localStorage；
-   *  - 「总开关」= 授权状态（consent）：开启走授权浮层，关闭即 revokeConsent；
-   *  - file:// 下 aiStore.platform().ok === false：开关渲染为不可点静态行（AC19），
-   *    其余配置行整组不渲染——不是 disabled，用户看不到可误触的入口；
-   *  - 连接测试发 1 次真实请求（max_tokens:8），不计入每日额度，但会占用供应商极少量额度。
-   * 本分区不新增 CSS：输入框复用 .c-field__input，按钮复用 .c-btn。 */
-
-  var AI_PROVIDER_TAGS = {
-    modelscope: '每日 2000 次免费 · 国内直连',
-    zhipu: '需 z.ai 国际站账号',
-    siliconflow: '免费模型常变，以控制台为准',
-    openrouter: '需能访问境外网络',
-    dashscope: '新用户 90 天免费 · 阿里云账号，与魔搭同一个',
-    custom1: '地址需自己放行浏览器跨域'
-  };
-
-  /* 连接测试的失败文案：只翻 code，不透传任何响应细节（Key 不进文案） */
-  var AI_TEST_TEXT = {
-    E_AI_NO_KEY: '先填 API Key',
-    E_AI_401: 'Key 不对或已失效',
-    E_AI_403: 'Key 不对或没有该模型权限',
-    E_AI_402: '这家今天额度用完了',
-    E_AI_429: '请求太频繁，稍后再试',
-    E_AI_TIMEOUT_FIRST: '10 秒没回应，已取消',
-    E_AI_NET: '网络不通，检查网络后重试',
-    E_AI_CORS: '这个地址没放行浏览器跨域，或地址填错了',
-    E_AI_BAD_REQUEST: '模型名可能填错了，或该模型没有免费额度',
-    E_AI_NOT_FOUND: '接口地址路径不对，一般填到 /v1 就够',
-    E_AI_5XX: '供应商那边出问题了，稍后重试',
-    E_AI_FILE_PROTOCOL: '本地文件方式不能联网',
-    E_AI_ABORTED: '已取消'
-  };
-
-  var AI = { store: null, ensuring: null, ensuringFailed: false, ensureRequested: false, pollTimer: null, testBusy: false, group: null, testValue: null };
-
-  function aiStoreOf() { return AI.store; }
-
-  /* 诊断埋点：线上排查「占位不重绘」用；带相对时间戳（ms）。生产无副作用 */
-  var AI_DBG_T0 = 0;
-  function aiDbg(ev) {
-    try {
-      var g = global;
-      var now = Date.now();
-      if (!AI_DBG_T0) { AI_DBG_T0 = now; }
-      g.__aiStoreDbg = g.__aiStoreDbg || [];
-      if (g.__aiStoreDbg.length < 60) { g.__aiStoreDbg.push('+' + (now - AI_DBG_T0) + 'ms ' + ev); }
-    } catch (e) { /* 诊断不影响功能 */ }
-  }
-
-  /* 懒加载 ai-store；成功后重绘本分区。失败不影响设置页其他分组（§10.1 懒加载契约） */
-  function ensureAiStore() {
-    if (AI.store) { return Promise.resolve(AI.store); }
-    var chunks = XZB.chunks;
-    if (!chunks || typeof chunks.ensure !== 'function') { return Promise.resolve(null); }
-    if (!AI.ensuring) {
-      AI.ensuringFailed = false;
-      aiDbg('ensure-start');
-      AI.ensuring = chunks.ensure('ai-store').then(function () {
-        AI.store = (XZB.core && XZB.core.aiStore) || null;
-        aiDbg('ensure-ok store=' + !!AI.store);
-        return AI.store;
-      }, function () {
-        AI.ensuring = null;
-        AI.ensuringFailed = true;   /* 让分区显示「没加载成功」而不是永远停在「正在读取」 */
-        aiDbg('ensure-fail');
-        return null;
-      });
-    }
-    return AI.ensuring.then(function (st) {
-      try {
-        rerenderAiGroup();
-        /* 补充重绘由 sectionAiEnhance 的 setInterval 轮询兜底（宏任务，不受
-           then 链与「同 key 并发 ensure 只兑现最后注册者」的 loader 竞态影响） */
-      } catch (error) {
-        /* 重绘失败不得影响其他分组；开发期先可见，稳定后可降为静默 */
-        if (global.console && typeof global.console.warn === 'function') {
-          global.console.warn('[小账本] AI 分区重绘失败', error && error.message ? error.message : String(error));
-        }
-        aiDbg('rerender-err ' + (error && error.message ? error.message : String(error)));
-      }
-      return st;
-    });
-  }
-
-  function rerenderAiGroup() {
-    if (!AI.group || !AI.group.parentNode || !live.ctx) {
-      aiDbg('rerender-guard g=' + !!AI.group + ' parent=' + !!(AI.group && AI.group.parentNode) + ' ctx=' + !!live.ctx);
-      return;
-    }
-    var fresh = buildAiGroup(live.ctx);
-    if (fresh && AI.group.parentNode) {
-      AI.group.parentNode.replaceChild(fresh, AI.group);
-      AI.group = fresh;
-    }
-  }
-
-  /* 轻量节点工厂：settings 的 h() 不支持任意属性/事件，这里只服务本分区 */
-  function str(value) {
-    return value === undefined || value === null ? '' : String(value);
-  }
-
-  function mkEl(tag, attrs, kids) {
-    var node = global.document.createElement(tag);
-    attrs = attrs || {};
-    Object.keys(attrs).forEach(function (key) {
-      var value = attrs[key];
-      if (value === null || value === undefined || value === false) { return; }
-      if (key === 'className') { node.className = String(value); }
-      else if (key === 'text') { node.textContent = String(value); }
-      else if (key === 'value') { node.value = String(value); }
-      else if (key.indexOf('on') === 0 && key.length > 2 && typeof value === 'function') { node.addEventListener(key.slice(2), value); }
-      else { node.setAttribute(key, value === true ? '' : String(value)); }
-    });
-    (kids || []).forEach(function (kid) { if (kid) { node.appendChild(kid); } });
-    return node;
-  }
-
-  function aiConsented(st) { return st.consent().granted === true; }
-
-  function openConsentSheet(st) {
-    var sheet = XZB.ui && XZB.ui.sheet;
-    if (!sheet || typeof sheet.open !== 'function') { return; }
-    var body = mkEl('div', { className: 's-settings-consent' });
-    [
-      ['会发送什么', '你的问题原文、当前账期与分类名、必要的汇总数字；需要举证时最多 8 条流水摘要（日期、金额、分类）。'],
-      ['不会发送什么', '备注默认不发送；账户只用「账户1」这类代号指代；整本账、撤销历史、照片、聊天记录都不会发。'],
-      ['Key 存在哪', '只存这台设备的浏览器里（明文）。小账本没有服务器，备份文件里也不包含它。'],
-      ['随时可以关闭', '关闭即停止发送；「清除 Key 与全部增强数据」不会动你的账目。']
-    ].forEach(function (item) {
-      body.appendChild(t('p', 'c-row__title', item[0]));
-      body.appendChild(t('p', 's-settings-note', item[1]));
-    });
-    sheet.open({
-      title: '开启智能增强前，先看四件事',
-      content: body,
-      actions: [
-        { label: '不同意', kind: 'text' },
-        {
-          label: '同意并开启',
-          kind: 'primary',
-          onClick: function () {
-            var r = st.grantConsent(st.CONSENT_VERSION);
-            toast(ctx0(), r.ok ? '已开启智能增强' : '开启失败，请重试', { type: r.ok ? 'success' : 'danger' });
-            rerenderAiGroup();
-          }
-        }
-      ]
-    });
-  }
-
-  function ctx0() { return live.ctx; }
-
-  function openProviderSheet(st) {
-    var sheet = XZB.ui && XZB.ui.sheet;
-    if (!sheet || typeof sheet.open !== 'function') { return; }
-    var cfg = st.load();
-    var body = mkEl('div', { className: 's-settings-consent' });
-    st.list().forEach(function (item) {
-      var p = cfg.providers[item.id] || {};
-      var isCustom = item.id === 'custom1';
-      var modelText = isCustom ? (str(p.model) || '未填写') : (str(p.model) || item.defaultModel);
-      var keyText = st.hasKey(item.id) ? '已填 Key' : '未填 Key';
-      var row = mkEl('div', {
-        className: 'c-row c-row--two-line c-row--tappable',
-        role: 'button', tabindex: '0',
-        onclick: function () {
-          var r = st.setActive(item.id);
-          if (r && r.ok === false) { toast(ctx0(), '切换失败', { type: 'danger' }); return; }
-          /* 预设被清空过 model/baseUrl 时回填默认，避免切过去是空白 */
-          if (!isCustom) {
-            if (!str(p.model)) { st.setProviderField(item.id, 'model', item.defaultModel); }
-            if (!str(p.baseUrl)) { st.setProviderField(item.id, 'baseUrl', item.defaultBaseUrl); }
-          }
-          if (handle) { handle.close(); }
-          rerenderAiGroup();
-        }
-      });
-      row.appendChild(mkEl('span', { className: 'c-row__main' }, [
-        t('span', 'c-row__title', item.label),
-        t('span', 'c-row__sub', AI_PROVIDER_TAGS[item.id] || '')
-      ]));
-      row.appendChild(mkEl('span', { className: 'c-row__trail' }, [
-        t('span', 'c-row__value', (str(cfg.active) === item.id ? '当前 · ' : '') + modelText + ' · ' + keyText)
-      ]));
-      body.appendChild(row);
-    });
-    var handle = sheet.open({ title: '选择供应商', content: body, actions: [{ label: '取消', kind: 'text' }] });
-  }
-
-  function openKeySheet(st) {
-    var sheet = XZB.ui && XZB.ui.sheet;
-    if (!sheet || typeof sheet.open !== 'function') { return; }
-    var pid = str(st.getActive().id);
-    var shown = false;
-    var body = mkEl('div', { className: 's-settings-consent' });
-    var input = mkEl('input', {
-      className: 'c-field__input',
-      type: 'password', autocomplete: 'new-password', spellcheck: 'false',
-      autocapitalize: 'off', enterkeyhint: 'done',
-      placeholder: '粘贴 API Key',
-      'aria-label': 'API Key'
-    });
-    var eye = mkEl('button', {
-      className: 'c-btn c-btn--text', type: 'button', text: '显示',
-      onclick: function () {
-        shown = !shown;
-        input.type = shown ? 'text' : 'password';
-        input.value = shown ? str(st.revealKey(pid)) : '';
-        eye.textContent = shown ? '隐藏' : '显示';
-      }
-    });
-    input.addEventListener('paste', function () {
-      /* 粘贴后清洗：去首尾空白 / Bearer 前缀 / 引号（统一走 ai-store 的 sanitizeKey） */
-      global.setTimeout(function () {
-        var cleaned = st.sanitizeKey ? st.sanitizeKey(input.value) : str(input.value).trim();
-        if (cleaned !== input.value) { input.value = cleaned; }
-      }, 0);
-    });
-    var wrap = mkEl('div', { className: 'c-field' }, [input]);
-    var tip = t('p', 's-settings-note', 'Key 只存本机浏览器；显示时请注意周围环境。');
-    body.appendChild(wrap);
-    body.appendChild(mkEl('div', { className: 'c-row' }, [eye]));
-    body.appendChild(tip);
-    var handle = sheet.open({
-      title: 'API Key · ' + st.labelOf(pid),
-      content: body,
-      actions: [
-        { label: '取消', kind: 'text' },
-        {
-          label: '保存',
-          kind: 'primary',
-          onClick: function () {
-            var r = st.setKey(pid, input.value);
-            if (!r || r.ok !== true) { toast(ctx0(), '没保存成功，请重试', { type: 'danger' }); return false; }
-            toast(ctx0(), 'Key 已保存（只在本机）', { type: 'success' });
-            rerenderAiGroup();
-          }
-        }
-      ]
-    });
-    global.setTimeout(function () { try { input.focus({ preventScroll: true }); } catch (e) {} }, 60);
-  }
-
-  function openTextSheet(st, title, field, onSaved) {
-    var sheet = XZB.ui && XZB.ui.sheet;
-    if (!sheet || typeof sheet.open !== 'function') { return; }
-    var pid = str(st.getActive().id);
-    var p = st.load().providers[pid] || {};
-    var isBase = field === 'baseUrl';
-    var editable = pid === 'custom1' || !isBase;
-    var preset = st.list().filter(function (x) { return x.id === pid; })[0] || null;
-    var body = mkEl('div', { className: 's-settings-consent' });
-    var input = mkEl('input', {
-      className: 'c-field__input',
-      type: 'text', autocomplete: 'off', spellcheck: 'false',
-      value: str(p[field]) || (field === 'model' && preset ? str(preset.defaultModel) : ''),
-      'aria-label': title
-    });
-    if (!editable) { input.setAttribute('readonly', 'readonly'); }
-    body.appendChild(mkEl('div', { className: 'c-field' }, [input]));
-    if (isBase && pid !== 'custom1') {
-      body.appendChild(t('p', 's-settings-note', '预设供应商的接口地址不建议改；填错会连不上。'));
-    }
-    var actions = [];
-    if (isBase && pid !== 'custom1') {
-      actions.push({
-        label: '恢复默认地址', kind: 'text',
-        onClick: function () {
-          var def = st.list().filter(function (x) { return x.id === pid; })[0];
-          st.setProviderField(pid, 'baseUrl', def ? def.defaultBaseUrl : '');
-          toast(ctx0(), '已恢复默认地址', { type: 'success' });
-          rerenderAiGroup();
-        }
-      });
-    }
-    actions.push({ label: '取消', kind: 'text' });
-    if (editable) {
-      actions.push({
-        label: '保存', kind: 'primary',
-        onClick: function () {
-          var value = str(input.value).trim();
-          if (!value) { toast(ctx0(), '不能为空', { type: 'warning' }); return false; }
-          var r = st.setProviderField(pid, field, value);
-          if (!r || r.ok !== true) { toast(ctx0(), '没保存成功', { type: 'danger' }); return false; }
-          if (typeof onSaved === 'function') { onSaved(); }
-          toast(ctx0(), '已保存', { type: 'success' });
-          rerenderAiGroup();
-        }
-      });
-    }
-    sheet.open({ title: title, content: body, actions: actions });
-  }
-
-  function aiTestText(st) {
-    var pid = str(st.getActive().id);
-    var cfg = st.load().providers[pid] || {};
-    var lt = cfg.lastTest || null;
-    if (AI.testBusy) { return '测试中…'; }
-    if (!lt) { return '未测试'; }
-    if (lt.ok === true) { return '✓ 连接正常 · ' + Math.max(0, Math.round(Number(lt.ms) || 0)) + 'ms'; }
-    return '✗ ' + (AI_TEST_TEXT[str(lt.code)] || '连接失败，请检查网络与配置');
-  }
-
-  function runConnTest(st) {
-    if (AI.testBusy) { return; }
-    var pid = str(st.getActive().id);
-    var cfg = st.load().providers[pid] || {};
-    if (!str(cfg.key)) { toast(ctx0(), '先填 API Key 再测试', { type: 'warning' }); return; }
-    AI.testBusy = true;
-    if (AI.testValue) { AI.testValue.textContent = '测试中…'; }
-    ensureAiStore().then(function () {
-      var chunks = XZB.chunks;
-      var client = (XZB.core && XZB.core.aiClient) || null;
-      var ready = client || (chunks && typeof chunks.ensure === 'function'
-        ? chunks.ensure('ai-client').then(function () { return (XZB.core && XZB.core.aiClient) || null; })
-        : Promise.resolve(null));
-      return Promise.resolve(ready).then(function (cl) {
-        if (!cl || typeof cl.test !== 'function') { throw new Error('E_AI_NET'); }
-        return cl.test({ key: str(cfg.key), baseUrl: str(cfg.baseUrl), model: str(cfg.model) });
-      });
-    }).then(function (r) {
-      AI.testBusy = false;
-      st.setLastTest(pid, { ok: r && r.ok === true, ms: r ? Math.round(Number(r.ms) || 0) : 0, code: r ? str(r.code) : 'E_AI_NET' });
-      if (r && r.ok) { toast(ctx0(), '连接正常', { type: 'success' }); }
-      rerenderAiGroup();
-    }, function () {
-      AI.testBusy = false;
-      st.setLastTest(pid, { ok: false, ms: 0, code: 'E_AI_NET' });
-      rerenderAiGroup();
-    });
-  }
-
-  function openUsageSheet(st) {
-    var sheet = XZB.ui && XZB.ui.sheet;
-    if (!sheet || typeof sheet.open !== 'function') { return; }
-    var u = st.usage();
-    var cfg = st.load();
-    var body = mkEl('div', { className: 's-settings-consent' });
-    var avg = u.firstByteN > 0 ? Math.round((u.firstByteMsSum || 0) / u.firstByteN) : 0;
-    body.appendChild(t('p', 'c-row__title', '今日 ' + (u.count || 0) + ' / ' + (u.limit || 0) + ' 次'));
-    body.appendChild(t('p', 's-settings-note', '成功 ' + (u.ok || 0) + ' · 失败 ' + (u.fail || 0) + ' · 平均首字 ' + (avg ? avg + 'ms' : '—')));
-    st.PROVIDER_ORDER.forEach(function (id) {
-      var pu = (cfg.providers[id] && cfg.providers[id].usage) || {};
-      body.appendChild(t('p', 's-settings-note', st.labelOf(id) + '：今日 ' + (pu.count || 0) + ' 次'));
-    });
-    body.appendChild(t('p', 's-settings-note', '计数只存在本机，跨日 0 点后自动归零。'));
-    sheet.open({
-      title: '智能增强用量',
-      content: body,
-      actions: [
-        { label: '关闭', kind: 'text' },
-        {
-          label: '清零', kind: 'danger',
-          onClick: function () { st.resetUsage(); toast(ctx0(), '已清零', { type: 'success' }); rerenderAiGroup(); }
-        }
-      ]
-    });
-  }
-
-  function openDailyLimitSheet(st) {
-    var sheet = XZB.ui && XZB.ui.sheet;
-    if (!sheet || typeof sheet.open !== 'function') { return; }
-    var cur = st.prefs().dailyLimit;
-    var body = mkEl('div', { className: 's-settings-consent' });
-    var valueEl = t('p', 'c-row__title', '每日上限：' + cur + ' 次');
-    body.appendChild(valueEl);
-    body.appendChild(t('p', 's-settings-note', '范围 20–200，每次 ±20。达到上限后当天不再外发，本机助手照常可用。'));
-    function step(delta) {
-      var next = st.setPref('dailyLimit', st.prefs().dailyLimit + delta);
-      if (next && next.ok !== false) {
-        valueEl.textContent = '每日上限：' + st.prefs().dailyLimit + ' 次';
-        rerenderAiGroup();
-      }
-    }
-    var row = mkEl('div', { className: 'c-row' }, [
-      mkEl('button', { className: 'c-btn c-btn--text', type: 'button', text: '−20', onclick: function () { step(-20); } }),
-      mkEl('button', { className: 'c-btn c-btn--text', type: 'button', text: '+20', onclick: function () { step(20); } })
-    ]);
-    body.appendChild(row);
-    sheet.open({ title: '每日调用上限', content: body, actions: [{ label: '完成', kind: 'primary' }] });
-  }
-
-  function openClearAiSheet(st) {
-    var sheet = XZB.ui && XZB.ui.sheet;
-    if (!sheet || typeof sheet.open !== 'function') { return; }
-    var body = mkEl('div', { className: 's-settings-consent' });
-    body.appendChild(t('p', 's-settings-note', '会删除：全部供应商的 Key、授权记录、用量计数与自定义地址。'));
-    body.appendChild(t('p', 's-settings-note', '不会动：账目、账本、照片与普通设置。'));
-    sheet.open({
-      title: '清除 Key 与全部增强数据',
-      content: body,
-      actions: [
-        { label: '取消', kind: 'text' },
-        {
-          label: '清除', kind: 'danger',
-          onClick: function () {
-            st.clearAll();
-            toast(ctx0(), '已清除，账目不受影响', { type: 'success' });
-            rerenderAiGroup();
-          }
-        }
-      ]
-    });
-  }
-
-  function buildAiGroup(ctx) {
-    var st = aiStoreOf();
-    if (!st) {
-      AI.group = group('智能增强', [row({ title: '智能增强', sub: '正在读取配置…' })]);
-      return AI.group;
-    }
-    if (st.platform && st.platform().ok !== true) {
-      AI.group = group('智能增强', [
-        row({
-          title: '智能增强',
-          value: '不可用',
-          sub: '用本地文件方式打开时不能连网，增强功能已关闭；从网址打开就能用'
-        })
-      ], '本地文件（file://）方式没有网络能力，增强功能保持关闭；账目功能不受影响。');
-      return AI.group;
-    }
-
-    var cfg = st.load();
-    var pid = str(cfg.active);
-    var p = cfg.providers[pid] || {};
-    var consented = aiConsented(st);
-    var rows = [];
-
-    rows.push(switchRow(ctx, {
-      icon: 'sparkles',
-      title: '智能增强',
-      sub: '用你自己的 API Key，让助手更懂复杂问法；关闭后完全在本机',
-      checked: consented,
-      onChange: function (next) {
-        if (next === true) {
-          if (aiConsented(st)) { return true; }
-          openConsentSheet(st);
-          return false; /* 授权浮层里点「同意」后由 rerender 把开关拨回开启 */
-        }
-        st.revokeConsent();
-        return true;
-      }
-    }));
-
-    rows.push(row({
-      icon: 'list', title: '供应商',
-      sub: AI_PROVIDER_TAGS[pid] || '',
-      value: st.labelOf(pid),
-      onClick: function () { openProviderSheet(st); }
-    }));
-
-    rows.push(row({
-      icon: 'key', title: 'API Key',
-      value: st.hasKey(pid) ? str(st.maskedKey(pid)) : '未填写',
-      onClick: function () { openKeySheet(st); }
-    }));
-
-    rows.push(row({
-      icon: 'sparkles', title: '模型名',
-      sub: '可能随供应商政策变化，可手动修改',
-      value: str(p.model) || '未填写',
-      onClick: function () { openTextSheet(st, '模型名', 'model'); }
-    }));
-
-    rows.push(row({
-      icon: 'list', title: '接口地址',
-      sub: pid === 'custom1' ? '自定义地址，需自己放行浏览器跨域' : '预设地址，一般不用改',
-      value: str(p.baseUrl) || '未填写',
-      onClick: function () { openTextSheet(st, '接口地址', 'baseUrl'); }
-    }));
-
-    var testRow = row({
-      icon: 'chart-line', title: '测试连接',
-      sub: '测试会向供应商发一次极小的请求，可能占用极少量额度',
-      value: aiTestText(st),
-      onClick: function () { runConnTest(st); }
-    });
-    AI.testValue = testRow.querySelector ? testRow.querySelector('.c-row__value') : null;
-    if (AI.testValue) { AI.testValue.textContent = aiTestText(st); }
-    rows.push(testRow);
-
-    var u = st.usage();
-    rows.push(row({
-      icon: 'list', title: '今日用量',
-      value: (u.count || 0) + ' / ' + (u.limit || 0),
-      onClick: function () { openUsageSheet(st); }
-    }));
-
-    rows.push(row({
-      icon: 'list', title: '每日上限',
-      sub: '达到上限后当天不再外发，本机助手照常可用',
-      value: (st.prefs().dailyLimit || 100) + ' 次/天',
-      onClick: function () { openDailyLimitSheet(st); }
-    }));
-
-    rows.push(switchRow(ctx, {
-      icon: 'list', title: '发送备注',
-      sub: '默认关闭；开启后只发当前问题相关的 ≤8 条备注',
-      checked: st.prefs().sendNote === true,
-      onChange: function (next) {
-        var r = st.setPref('sendNote', next);
-        return !(r && r.ok === false);
-      }
-    }));
-
-    rows.push(row({
-      icon: 'trash', title: '清除 Key 与全部增强数据',
-      value: '不影响账目',
-      onClick: function () { openClearAiSheet(st); }
-    }));
-
-    AI.group = group('智能增强', rows,
-      'Key 只存这台设备的浏览器（明文），备份文件不含它。开启后，问题与必要的数据摘要会发给所选供应商；备注默认不发送，账户只用「账户1」这类代号。');
-    return AI.group;
-  }
-
-  /* DOM 层自愈轮询：每 500ms 扫一次页面里的占位（data-ai-placeholder）。
-     store 就位 → 就地用 buildAiGroup 重建并替换该节点——不依赖 AI.group 引用、
-     不依赖 ensure 的 then 链、不怕路由重渲与任何实例/时序错乱。
-     占位消失（已换好或切走）或 30s 超时即停。 */
-  function startAiPoll() {
-    if (AI.pollTimer) { return; }
-    var polls = 0;
-    aiDbg('poll-start');
-    AI.pollTimer = global.setInterval(function () {
-      polls += 1;
-      var ph = null;
-      try { ph = global.document.querySelector('[data-ai-placeholder="1"]'); } catch (e) { ph = null; }
-      if (!ph) { aiDbg('poll-stop-clean polls=' + polls); global.clearInterval(AI.pollTimer); AI.pollTimer = null; return; }
-      if (aiStoreOf()) {
-        aiDbg('poll-fire polls=' + polls);
-        global.clearInterval(AI.pollTimer);
-        AI.pollTimer = null;
-        try {
-          var fresh = buildAiGroup(live.ctx);
-          if (ph.parentNode) { ph.parentNode.replaceChild(fresh, ph); }
-          aiDbg('poll-replaced full=' + (global.document.body.textContent.indexOf('测试连接') >= 0));
-          AI.group = fresh;
-        } catch (e) { aiDbg('poll-replace-err ' + (e && e.message || e)); }
-        return;
-      }
-      if (polls >= 60) { aiDbg('poll-timeout'); global.clearInterval(AI.pollTimer); AI.pollTimer = null; }
-    }, 500);
-  }
-
-  function sectionAiEnhance(ctx) {
-    /* ai-store 是懒加载 chunk。render 可能被调用多次（路由重渲等）：
-       - store 已就位 → 直接同步构建完整分组（否则第二次渲染会放回占位行，
-         而 ensureAiStore 见 store 已存在会直接返回，占位就永远留在 DOM 里）；
-       - 未就位 → 占位行 + ensure，成功/失败都会 rerender（失败显示「没加载成功」）。
-       设置页其他分组不受影响（§10.1）。 */
-    var st = aiStoreOf();
-    var node;
-    aiDbg('render st=' + !!st + ' failed=' + !!AI.ensuringFailed);
-    if (st) {
-      node = buildAiGroup(ctx);
-    } else {
-      node = group('智能增强', [row({
-        title: '智能增强',
-        sub: AI.ensuringFailed ? '这个模块没加载成功，下拉刷新或重新打开试试' : '正在读取配置…'
-      })]);
-      /* DOM 层标记：自愈轮询靠它找到「还没换上完整分组」的占位，
-         不依赖 AI.group 引用与任何 then 链时序（引用层修不可靠，线上实测） */
-      node.setAttribute('data-ai-placeholder', '1');
-      node.__aiPlaceholder = true;
-      /* 全生命周期只发起一次 ensure——render 可能跑多次，同 key 并发 ensure
-         会踩 loader 的并发竞态（先注册的 promise 可能永远 pending，线上实测踩过） */
-      if (!AI.ensureRequested && !AI.ensuringFailed) {
-        AI.ensureRequested = true;
-        ensureAiStore();
-      }
-    }
-    AI.group = node;
-    startAiPoll();
-    return node;
+    /* A30 / D-05：清空撤销历史只在 #/assistant/history 子页留一个入口。 */
+    return group('小助手与联网', rows,
+      '默认在本机解析；开启在线模型后，你说的话会与账户名称一起发送给你配置的模型服务。撤销历史只记录小助手与手动记账的差异，最多 30 条。');
   }
 
   /* ---------------- 记账管理（M12：按任务找入口，不按实现方式） ---------------- */
@@ -1860,7 +1166,7 @@
     var settings = settingsOf(db);
     var categories = listOf(db, 'categories').length;
 
-    return group('记账管理', [
+    return group('记账与分类', [
       row({
         icon: 'target',
         title: '预算与存钱目标',
@@ -1952,9 +1258,7 @@
     });
   }
 
-  /* 导出成功提示里的照片附注：'（12 张照片 · 约 3.4 MB）'。
-     result.photos = { mode, count, bytes, included }（backup.js exportJson 的 photoInfo）；
-     不含图片导出（included=false）或没有照片时一个字都不加。 */
+  /* 导出提示的照片附注：included=false 或无照片时一个字都不加。 */
   function photoExportSummary(result) {
     var photos = result ? result.photos : null;
     if (!photos || photos.included !== true) { return ''; }
@@ -1964,11 +1268,7 @@
     return '（' + count + ' 张照片' + (isFinite(bytes) && bytes > 0 ? ' · 约 ' + fmtBytes(bytes) : '') + '）';
   }
 
-  /* A24 导出体积护栏浮层：硬守卫与软警戒共用一套结构。
-     · 硬守卫（result.ok=false, code='E_PHOTO_EXPORT_TOO_LARGE'）：backup.js 在**写出文件之前**就
-       拒绝，带 count/photoBytes；这里只能给出「不含图片导出」这一条路。
-     · 软警戒（result.softWarning）：文件已生成、不阻断，但要明说并同样给出这条出路。
-     文案逐字取自 MESSAGES（store 是唯一真源，本文件不另写一句），数值一律现场 fmtBytes。 */
+  /* A24 导出体积护栏：硬守卫与软警戒共用一套结构；文案取自 MESSAGES，数值现场 fmtBytes。 */
   function openExportTooLargeSheet(ctx, result, format, opts) {
     var warn = (result && result.softWarning) ? result.softWarning : (result || {});
     var blocked = !result || result.ok !== true;
@@ -2061,8 +1361,6 @@
 
   function deliverExport(ctx, result, format, options) {
     var opts = options || {};
-    /* 照片附注先在导出结果上算好：无论走系统分享还是「下载」兜底，提示里都要带上
-       「N 张照片 / 约 X」（不含图片导出时为空白）。 */
     var photoNote = photoExportSummary(result);
     var nav = global.navigator;
     var canTryShare = nav && typeof nav.share === 'function' &&
@@ -2121,8 +1419,28 @@
 
   /* ---------------- 数据：导入 ---------------- */
 
+  /* 临时 <input type=file>：change / cancel / 焦点回来 300ms 都移除，连点不叠加。 */
+  var importInput = null;
+  var importTimer = 0;
+
+  function removeImportInput() {
+    if (importTimer) { global.clearTimeout(importTimer); importTimer = 0; }
+    if (!importInput) { return; }
+    var node = importInput;
+    importInput = null;
+    try { node.value = ''; } catch (error) { /* 忽略 */ }
+    if (node.parentNode) { node.parentNode.removeChild(node); }
+  }
+
+  function onWindowFocusForImport() {
+    if (!importInput) { return; }
+    if (importTimer) { global.clearTimeout(importTimer); }
+    importTimer = global.setTimeout(removeImportInput, 300);
+  }
+
   function pickImportFile(ctx) {
     if (!live.root) { return; }
+    removeImportInput();
     var input = h('input', {
       className: 's-settings-fileinput',
       type: 'file',
@@ -2130,19 +1448,28 @@
       tabindex: '-1',
       aria: { hidden: 'true' }
     });
+    importInput = input;
     input.addEventListener('change', function () {
       var file = input.files && input.files.length ? input.files[0] : null;
-      try { input.value = ''; } catch (error) { /* 忽略 */ }
-      if (input.parentNode) { input.parentNode.removeChild(input); }
-      if (file) { readImportFile(ctx, file); }
+      removeImportInput();
+      if (file) {
+        toast(ctx, '正在读取备份…', { type: 'info' });
+        readImportFile(ctx, file);
+      }
     });
+    input.addEventListener('cancel', removeImportInput);
     live.root.appendChild(input);
-    input.click();
+    try {
+      input.click();
+    } catch (error) {
+      removeImportInput();
+      toast(ctx, '系统不允许打开文件选择，请检查浏览器权限后再试', { type: 'danger' });
+      return;
+    }
+    toast(ctx, '请选择要导入的备份文件', { type: 'info' });
   }
 
   function readImportFile(ctx, file) {
-    /* 上限唯一来源 = XZB.Core.backup.MAX_IMPORT_BYTES（§8.5 同步点，T12 已 10MB → 128MB）。
-       本文件不再留 10MB 兜底副本；上限读不到时不在这里拦，交给 parseInput 的文本闸门判定。 */
     var limit = importLimitBytes();
     if (limit > 0 && file.size > limit) {
       toast(ctx, importTooLargeText(), { type: 'danger' });
@@ -2188,8 +1515,6 @@
     return min + ' 至 ' + max;
   }
 
-  /* 备份 JSON 里的照片段（§9.1：单文件 JSON + base64 内嵌；老备份没有这一段）。
-     只为**展示**而读，不解读 base64；结构不认识一律当「没有照片」，绝不让导入预览失败。 */
   function photoSectionInBackup(value) {
     if (!value || typeof value !== 'object') { return null; }
     if (value.photos && typeof value.photos === 'object') { return value.photos; }
@@ -2340,9 +1665,7 @@
     });
   }
 
-  /* 导入结果里的照片段（backup.js importData 的 report.photos：{mode,present,count,bytes,
-     skipped,missingRefs}）。含图备份要如实回报「还原了几张、约多少体积」；老备份（present
-     false / 无 photos 段）一个字都不加，绝不把它说成导入失败。 */
+  /* 导入结果的照片段如实回报张数与体积；老备份无该段不加一字、不当失败。 */
   function photoRestoredText(report) {
     var photos = report ? report.photos : null;
     if (!photos || photos.present !== true) { return ''; }
@@ -2377,8 +1700,6 @@
       var report = result.report || {};
       var count = report.transactions || 0;
       var skipped = report.skipped || 0;
-      /* 「跳过」里有一部分是被判成重复的真实流水（v1 数据缺 id 时尤其常见），
-         所以有跳过就不能报成全部成功，提示里要说明这些记录没进来。 */
       var missed = skippedText(skipped);
       /* 含图备份：还原张数并进同一句提示（体积用 fmtBytes）；缺图的引用（A13）单独说明 */
       var restored = photoRestoredText(report);
@@ -2529,86 +1850,41 @@
   /* ---------------- 数据：清空 ---------------- */
 
   function openClearSheet(ctx) {
-    var handle = null;
-    var body = h('div', { className: 's-settings-sheet s-settings-danger' });
-    body.appendChild(t('p', 's-settings-danger__title', '这会删除全部账本、流水、分类、预算和存钱目标。'));
-    body.appendChild(t('p', 's-settings-danger__text', '执行前会自动保存一份快照，之后可以在「自动快照」里恢复。'));
-
-    var field = h('label', { className: 'c-field c-field--boxed s-settings-clear__field' });
-    field.appendChild(t('span', 'c-field__label', '确认'));
-    var input = h('input', {
-      className: 'c-field__input s-settings-clear__input',
-      type: 'text',
-      placeholder: '输入「清空」两个字',
-      autocomplete: 'off',
-      autocapitalize: 'off',
-      spellcheck: 'false',
-      maxlength: '8',
-      aria: { label: '输入「清空」两个字确认' }
-    });
-    field.appendChild(input);
-    body.appendChild(field);
-    var error = t('p', 's-settings-danger__hint', '确认文字不一致时不会执行任何操作。');
-    body.appendChild(error);
-
-    function confirmClear() {
-      if (live.busy) { return false; }
-      var typed = String(input.value || '').replace(/\s+/g, '');
-      if (typed !== CONFIRM_CLEAR) {
-        error.textContent = '确认文字不一致，操作已取消';
-        error.classList.add('is-error');
-        toast(ctx, '确认文字不一致，操作已取消', { type: 'warning' });
-        try { input.focus(); } catch (err) { /* 忽略 */ }
-        return false;
-      }
-      var store = storeApi();
-      if (!store || typeof store.reset !== 'function') {
-        toast(ctx, MESSAGES.E_STORAGE_WRITE, { type: 'danger' });
-        return false;
-      }
-      live.busy = true;
-      Promise.resolve(store.reset()).then(function (result) {
-        live.busy = false;
-        if (!result || !result.ok) {
-          toast(ctx, messageOf(result), { type: 'danger' });
+    var sheet = XZB.ui && XZB.ui.sheet;
+    if (!sheet || typeof sheet.confirm !== 'function') { return; }
+    /* 清空可恢复（store.reset 先落 manual 快照）；照片不动、不列张数；toast 固定「已清空全部数据」。 */
+    sheet.confirm({
+      title: '清空全部账单',
+      message: '这会删除全部账本、流水、分类、预算和存钱目标。执行前会自动保存一份快照，之后可以在「快照记录」里恢复。照片不会被删除，但会失去对应流水。',
+      confirmLabel: '清空全部账单',
+      kind: 'danger',
+      requireText: CONFIRM_CLEAR,
+      inputLabel: '输入「清空」两个字',
+      mismatchText: '确认文字不一致，操作已取消',
+      onConfirm: function (close) {
+        if (live.busy) { return; }
+        var store = storeApi();
+        if (!store || typeof store.reset !== 'function') {
+          toast(ctx, MESSAGES.E_STORAGE_WRITE, { type: 'danger' });
           return;
         }
-        if (handle) { handle.close(); }
-        refreshData(ctx).then(function () {
-          toast(ctx, '已清空全部数据', { type: 'success' });
-          go(ctx, '#/home');
+        live.busy = true;
+        Promise.resolve(store.reset()).then(function (result) {
+          live.busy = false;
+          if (!result || !result.ok) {
+            toast(ctx, messageOf(result), { type: 'danger' });
+            return;
+          }
+          close();
+          refreshData(ctx).then(function () {
+            toast(ctx, '已清空全部数据', { type: 'success' });
+            go(ctx, '#/home');
+          });
+        }, function () {
+          live.busy = false;
+          toast(ctx, MESSAGES.E_STORAGE_WRITE, { type: 'danger' });
         });
-      }, function () {
-        live.busy = false;
-        toast(ctx, MESSAGES.E_STORAGE_WRITE, { type: 'danger' });
-      });
-      return false;
-    }
-
-    input.addEventListener('keydown', function (event) {
-      if (event && event.key === 'Enter') {
-        event.preventDefault();
-        confirmClear();
       }
-    });
-    input.addEventListener('input', function () {
-      if (error.classList.contains('is-error')) {
-        error.classList.remove('is-error');
-        error.textContent = '确认文字不一致时不会执行任何操作。';
-      }
-    });
-
-    handle = XZB.ui.sheet.open({
-      title: '清空所有数据',
-      content: body,
-      actions: [
-        { label: '取消', kind: 'text' },
-        {
-          label: '清空全部数据',
-          kind: 'danger',
-          onClick: confirmClear
-        }
-      ]
     });
   }
 
@@ -2636,9 +1912,7 @@
     refreshPhotoRow();
   }
 
-  /* 5 秒撤销条：优先用门面给的 undoToken（restoreUndo 原样回填）；门面当前只在 removeWithUndo
-     上给 token，purge / purgeAll 不给 ⇒ 退回「删除前读回的内存 records + 门面 put」这条路。
-     两条路都只做编排：删除与写回都由门面/core 负责，本文件不实现任何删除逻辑。 */
+  /* 5 秒撤销：优先门面 undoToken，否则用删除前读回的 records + 门面 put（只做编排）。 */
   function offerPhotoUndo(ctx, message, undoToken, records, after) {
     var api = photosApi();
     var canToken = !!(undoToken && api && typeof api.restoreUndo === 'function');
@@ -2668,8 +1942,6 @@
     });
   }
 
-  /* 「清理未引用的照片」（UI.md §2.6：直接执行、不弹确认 + 5s 撤销）。
-     只删 stats().orphanRefs 里那几个 id —— 带图流水的照片不在其中（A18：不误删）。 */
   function cleanOrphanPhotos(ctx, stats, after) {
     var api = photosApi();
     if (!api || typeof api.purge !== 'function') {
@@ -2707,9 +1979,7 @@
     });
   }
 
-  /* 「清空所有照片」：门面 purgeAll() 内部**先建 pre 快照**再清空（app.js:1480-1516）。
-     门面若回 undoToken 就给 5 秒撤销；当前门面回的是 {purged,bytes,snapshot}（PLAN §2:243
-     「同 photoPurgeAll」），因此如实说明「照片不随快照保留、无法恢复」，绝不假装可撤销。 */
+  /* 清空所有照片：purgeAll 先建 pre 快照，但照片不随快照保留，如实说明、不假装可撤销。 */
   function purgeAllPhotos(ctx, after) {
     var api = photosApi();
     if (!api || typeof api.purgeAll !== 'function') {
@@ -2747,8 +2017,6 @@
     var body = h('div', { className: 's-settings-sheet s-settings-danger' });
     body.appendChild(t('p', 's-settings-danger__title',
       '将删除 ' + count + ' 张照片，释放 ' + fmtBytes(bytes) + '。流水、金额与账本不会被删除。'));
-    /* 照片不进快照（store.js:43：只存照片二进制，不进 TABLES/快照/state），
-       所以「有快照」不等于「照片能回来」，这里必须写清楚。 */
     body.appendChild(t('p', 's-settings-danger__text',
       '清空前会自动保存一份快照，但照片本身不随快照保留，清理后无法恢复。'));
     body.appendChild(noteBlock('照片只存在这台手机上，不会被带出这台设备。', 's-settings-danger__hint'));
@@ -2898,8 +2166,6 @@
 
     var rows = [
       snapRow,
-      /* 照片行（UI.md §2.6 位置：自动快照之后、导出备份之前 —— 先看占用再决定是否导出）。
-         右值 '12 张 · 3.4 MB' / '暂无照片' / 门面缺席时 '不可用'，全部异步填在 .c-row__value 上。 */
       photosRow,
       row({
         icon: 'download',
@@ -2921,20 +2187,30 @@
       })
     ];
 
-    return group('备份与恢复', rows, '导出、快照都只在本机完成，不会上传任何内容。');
+    return group('数据与备份', rows, '导出、快照都只在本机完成，不经过服务器。');
   }
 
-  /* 危险区独立分组（M12）：红色边界 + 只放清空，不与普通数据管理混排 */
-  function sectionDanger(ctx) {
+  /* 危险区独立分组（M12 / D-04）：上行可回退替代，下行清空需手输确认；不进胶囊。 */
+  function sectionDanger(ctx, db) {
     var wrap = h('section', { className: 's-settings-group s-settings-group--danger' });
     var head = h('div', { className: 's-settings-group__head' });
     head.appendChild(t('h2', 's-settings-group__title', '危险区'));
     wrap.appendChild(head);
 
+    /* 上行：普通色（不是 danger 行）——归档可随时切回，不删任何流水 */
+    var safeList = h('div', { className: 'c-list s-settings-list' });
+    safeList.appendChild(row({
+      icon: 'folder',
+      title: '归档当前账本并新建',
+      sub: '账本先归档（可随时切回），不会删除任何流水',
+      onClick: function () { openFreshStartSheet(ctx, db); }
+    }));
+    wrap.appendChild(safeList);
+
     var list = h('div', { className: 'c-list s-settings-list s-settings-list--danger' });
     list.appendChild(row({
       icon: 'trash',
-      title: '清空所有数据',
+      title: '清空全部账单',
       sub: '删除这台设备上的全部账本与流水',
       className: 's-settings-row--danger',
       chevron: false,
@@ -2943,6 +2219,120 @@
     wrap.appendChild(list);
     wrap.appendChild(t('p', 's-settings-group__note', '清空前会自动生成一份快照，可在「快照记录」里恢复。'));
     return wrap;
+  }
+
+  function openFreshStartSheet(ctx, db) {
+    var sheet = XZB.ui && XZB.ui.sheet;
+    var schema = schemaApi();
+    if (!sheet || typeof sheet.confirm !== 'function' || !schema || typeof schema.createBook !== 'function') {
+      toast(ctx, '暂时无法新建账本，请稍后重试', { type: 'danger' });
+      return;
+    }
+    var current = currentBookSnapshot(ctx, db);
+    if (!current) {
+      toast(ctx, '还没有可归档的账本', { type: 'warning' });
+      return;
+    }
+    var counts = countsOf(db);
+    sheet.confirm({
+      title: '归档当前账本并新建',
+      message: '「' + String(current.name || '当前账本') + '」的 ' + counts.transactions + ' 笔流水会全部保留，随时可以切回；新账本从空开始。这不会删除任何数据。',
+      confirmLabel: '归档并新建',
+      kind: 'primary',
+      onConfirm: function (close) {
+        if (live.busy) { return; }
+        live.busy = true;
+        var now = nowIso();
+        var nextName = nextBookName(db);
+        var book = null;
+        try {
+          book = schema.createBook({ name: nextName, sort: 10 }, now);
+        } catch (error) {
+          book = null;
+        }
+        if (!book) {
+          live.busy = false;
+          toast(ctx, '新建账本失败，请稍后重试', { type: 'danger' });
+          return;
+        }
+        var result = null;
+        try {
+          result = ctx.commit(function (draft) {
+            var books = draft.books || [];
+            for (var i = 0; i < books.length; i += 1) {
+              if (books[i] && books[i].id === current.id) {
+                books[i].archived = true;
+                books[i].updatedAt = now;
+              }
+            }
+            books.push(book);
+            return { value: { bookId: book.id, bookName: book.name } };
+          }, { label: '归档账本并新建' });
+        } catch (error) {
+          result = null;
+        }
+        Promise.resolve(result).then(function (res) {
+          live.busy = false;
+          if (!res || !res.ok) {
+            toast(ctx, messageOf(res), { type: 'danger' });
+            return;
+          }
+          var value = res.value || {};
+          var prefs = ctx && ctx.prefs;
+          if (value.bookId && prefs && typeof prefs.set === 'function') {
+            prefs.set('activeBookId', value.bookId);
+          }
+          close();
+          refreshData(ctx).then(function () {
+            toast(ctx, '已归档「' + String(current.name || '原账本') + '」并新建「' + (value.bookName || nextName) + '」', { type: 'success' });
+            go(ctx, '#/books');
+          });
+        }, function () {
+          live.busy = false;
+          toast(ctx, MESSAGES.E_COMMIT, { type: 'danger' });
+        });
+      }
+    });
+  }
+
+  /* 当前账本：ui.activeBookId → settings.activeBookId → 第一本未归档的 */
+  function currentBookSnapshot(ctx, db) {
+    var books = listOf(db, 'books');
+    var want = '';
+    var ui = ctx && ctx.state && ctx.state.ui;
+    if (ui && ui.activeBookId) { want = String(ui.activeBookId); }
+    if (!want) {
+      var prefs = ctx && ctx.prefs;
+      if (prefs && typeof prefs.get === 'function') {
+        var stored = prefs.get('activeBookId', '');
+        if (stored) { want = String(stored); }
+      }
+    }
+    var i;
+    if (want) {
+      for (i = 0; i < books.length; i += 1) {
+        if (books[i] && String(books[i].id) === want && books[i].deleted !== true) { return books[i]; }
+      }
+    }
+    for (i = 0; i < books.length; i += 1) {
+      if (books[i] && books[i].deleted !== true && books[i].archived !== true) { return books[i]; }
+    }
+    return null;
+  }
+
+  /* 新账本名：先试「新账本」，重名就追加序号（不覆盖、不静默改名） */
+  function nextBookName(db) {
+    var books = listOf(db, 'books');
+    var base = '新账本';
+    var taken = {};
+    for (var i = 0; i < books.length; i += 1) {
+      if (books[i] && books[i].deleted !== true) { taken[String(books[i].name || '')] = true; }
+    }
+    if (!taken[base]) { return base; }
+    for (var n = 2; n < 100; n += 1) {
+      if (!taken[base + ' ' + n]) { return base + ' ' + n; }
+    }
+    return base;
   }
 
   function fillSnapshotValue(ctx, node) {
@@ -3184,8 +2574,6 @@
     };
   }
 
-  /* 分类色 → --cat-N 槽位：2.6 起统一走 kit.nearestTone（固定色表，
-     不随主题变化），保证同一分类在浅色/深色下都是同一个槽位。 */
   function toneIndexOf(color, category) {
     var kitApi = XZB.ui && XZB.ui.kit ? XZB.ui.kit : null;
     if (kitApi && typeof kitApi.categoryTone === 'function' && category) {
@@ -3491,13 +2879,9 @@
       }
       body.appendChild(iconGrid);
     } else {
-      /* 自定义分类 / 新增：专属图标库（搜索 + 分组 + 最近使用），与记账面板同一个组件。
-         2.22.1：计数取实际值；图标模块缺失时不再报一个看似真实的假数。 */
-      var iconCount = (XZB.ui && XZB.ui.icons && XZB.ui.icons.customKeys)
-        ? XZB.ui.icons.customKeys().length : 0;
-      body.appendChild(t('p', 's-settings-sheet__hint', iconCount > 0
-        ? '这 ' + iconCount + ' 枚是给自定义分类留的专属图标，系统分类里不会出现，所以不会跟系统图标撞脸。'
-        : '这里是给自定义分类留的专属图标库，系统分类里不会出现，所以不会跟系统图标撞脸。'));
+      /* 自定义分类 / 新增：专属图标库（搜索 + 分组 + 最近使用），与记账面板同一个组件 */
+      body.appendChild(t('p', 's-settings-sheet__hint',
+        '这 96 枚是给自定义分类留的专属图标，系统分类里不会出现，所以不会跟系统图标撞脸。'));
       var pickerHost = h('div', { className: 's-settings-picker' });
       body.appendChild(pickerHost);
       var pickerApi = XZB.ui && XZB.ui.iconPicker;
@@ -3839,10 +3223,11 @@
     var privacy = h('section', { className: 'c-card s-settings-about__privacy' });
     var privacyBody = h('div', { className: 'c-card__body' });
     privacyBody.appendChild(t('h2', 'c-card__title', '隐私'));
-    privacyBody.appendChild(t('p', 's-settings-about__p s-settings-about__p--strong', '数据只存在这台设备上，无账号、无服务器、不上传。'));
+    privacyBody.appendChild(t('p', 's-settings-about__p s-settings-about__p--strong',
+      '账目默认只存在这台设备上，无账号、无服务器；开启在线模型后只把当轮原话与账户名称发给你配置的模型服务。'));
     var guarantees = h('ul', { className: 's-settings-about__list' });
     var items = [
-      '不上传账目等个人数据；首次加载后支持离线记账',
+      '不主动上传任何账目；仅在开启在线模型时发送当轮原话',
       '导出 JSON 就是完整备份，可在新设备还原',
       '卸载应用或清除网站数据会一并删除',
       '快照也只保存在本机，最多 30 份'
@@ -3890,9 +3275,7 @@
       value: 'v' + (info.schemaVersion || (db && db.schemaVersion) || 2),
       chevron: false
     }));
-    /* A31：本机数据保护的可机判两态行（结果由 app.js 启动序探测后落 db.settings） */
-    storeRows.push(storageProtectRow(db));
-    storeRows.push(lockRow(db));
+    /* A31 / IA-3：这两行已上移主屏「安全」组，这里不再渲染第二个入口。 */
     var snapRow = row({ icon: 'clock', title: '快照数量', value: '…', chevron: false });
     storeRows.push(snapRow);
     storeRows.push(row({
@@ -3957,7 +3340,232 @@
         className: 's-settings-version'
       })
     ];
-    return group('关于', rows, '数据只存在这台设备上，无账号、无服务器、不上传。');
+    /* R-11 / D-05：原句在「可选联网」后为假，已改为如实口径（与 renderAbout 隐私卡同源）。 */
+    return group('支持与关于', rows, '账目默认只存在这台设备上，无账号、无服务器；开启在线模型后只把当轮原话与账户名称发给你配置的模型服务。');
+  }
+
+  /* ---------------- 索引胶囊（SPEC P2-1 / DESIGN §4.2） ---------------- */
+
+  /* A–G 七项；危险区 H 按 IA-4 视觉隔离，不进胶囊。 */
+  var TOC_GROUPS = [
+    ['appearance', '显示与手感'], ['security', '安全'], ['assistant', '小助手与联网'],
+    ['manage', '记账与分类'], ['automation', '自动化'], ['data', '数据与备份'],
+    ['about', '支持与关于']
+  ];
+
+  function tocTarget(key) {
+    var doc = global.document;
+    return doc && typeof doc.getElementById === 'function' ? doc.getElementById('settings-group-' + key) : null;
+  }
+
+  function tocActive(nav, key) {
+    var items = nav.querySelectorAll('.s-settings-toc__item');
+    for (var i = 0; i < items.length; i += 1) {
+      var on = items[i].getAttribute('data-group') === key;
+      items[i].classList.toggle('is-active', on);
+      items[i].setAttribute('aria-current', on ? 'true' : 'false');
+    }
+  }
+
+  /* 滚动容器是路由挂载的 SECTION.app-screen，不是 window、不是 #app。 */
+  function tocHost(node) {
+    var cur = node ? node.parentNode : null;
+    while (cur && cur.nodeType === 1) {
+      if (cur.classList && cur.classList.contains('app-screen')) { return cur; }
+      cur = cur.parentNode;
+    }
+    return null;
+  }
+
+  /* 落点让给 CSS 的 scroll-margin-top（顶栏 + 胶囊高度）；失败才退回容器 scrollTop。 */
+  function tocGoTo(nav, key) {
+    var target = tocTarget(key);
+    if (!target) { return; }
+    tocActive(nav, key);
+    if (typeof target.scrollIntoView === 'function') {
+      try { target.scrollIntoView({ block: 'start' }); return; } catch (error) { /* 走兜底 */ }
+    }
+    var host = tocHost(nav);
+    if (host) { host.scrollTop = target.offsetTop; }
+  }
+
+  function buildToc(ctx) {
+    var nav = h('nav', { className: 's-settings-toc', role: 'navigation', aria: { label: '分组索引' } });
+    function add(key, label, first) {
+      var item = h('button', {
+        className: 's-settings-toc__item' + (first ? ' is-active' : ''),
+        type: 'button', text: label, dataset: { group: key },
+        aria: { current: first ? 'true' : 'false' }
+      });
+      item.addEventListener('click', function () { buzz(ctx); tocGoTo(nav, key); });
+      nav.appendChild(item);
+    }
+    for (var i = 0; i < TOC_GROUPS.length; i += 1) { add(TOC_GROUPS[i][0], TOC_GROUPS[i][1], i === 0); }
+    return nav;
+  }
+
+  /* 高亮只在滚动容器上算（120ms 合帧），不监听 window。 */
+  function bindTocScroll(nav, root) {
+    var host = tocHost(root);
+    if (!host || typeof host.addEventListener !== 'function') { return; }
+    var ticking = false;
+    function sync() {
+      ticking = false;
+      if (!alive(nav)) { return; }
+      var line = host.scrollTop + 120;
+      var best = TOC_GROUPS[0][0];
+      for (var i = 0; i < TOC_GROUPS.length; i += 1) {
+        var node = tocTarget(TOC_GROUPS[i][0]);
+        if (node && node.offsetTop <= line) { best = TOC_GROUPS[i][0]; }
+      }
+      tocActive(nav, best);
+    }
+    host.addEventListener('scroll', function () {
+      if (ticking) { return; }
+      ticking = true;
+      if (typeof global.setTimeout === 'function') { global.setTimeout(sync, 120); }
+    }, { passive: true });
+  }
+
+  /* ---------------- C 组子页 #/settings/ai：在线模型 ---------------- */
+
+  var AI_ERR_TEXT = {
+    E_AS_NOT_CONFIGURED: '地址、模型、密钥要填齐', E_AS_NET_CONFIG: '配置不合法，检查地址与模型名',
+    E_AS_NET_TIMEOUT: '连接超时，检查网络或地址', E_AS_NET_BAD: '返回内容看不懂，换一个模型试试',
+    E_AS_NET_OFFLINE: '当前没有网络'
+  };
+
+  function aiStatusText(result) {
+    if (!result) { return '还没测试过'; }
+    if (result.ok === true) {
+      var ms = Math.floor(Number(result.ms) || 0);
+      return ms > 0 ? '连接正常 · ' + ms + ' 毫秒' : '连接正常';
+    }
+    var code = result.code ? String(result.code) : '';
+    return AI_ERR_TEXT[code] || '测试没通过，检查配置后再试';
+  }
+
+  /* 配置读写一律经 XZB.core.assistant.llm；先惰性 ensure('core-assistant') 再取 API。 */
+  function renderAiSettings(root, ctx) {
+    deferTitle(ctx, '在线模型');
+    var page = h('div', { className: 's-settings-page' });
+    var note = h('p', { className: 's-settings-note', text: '正在加载联网配置…' });
+    page.appendChild(note);
+    root.appendChild(page);
+    function fail() {
+      if (alive(note)) { note.textContent = '联网模块没加载起来，稍后重新进入本页再试。'; }
+    }
+    ensureAssistantCore().then(function (ready) {
+      if (!alive(page)) { return; }
+      if (!ready || !llmApi()) { fail(); return; }
+      if (note.parentNode) { note.parentNode.removeChild(note); }
+      page.appendChild(buildAiForm(ctx));
+    }, fail);
+  }
+
+  function buildAiForm(ctx) {
+    var cfg = llmCfg() || {};
+    var wrap = h('section', { className: 's-settings-group' });
+    var head = h('div', { className: 's-settings-group__head' });
+    head.appendChild(t('h2', 's-settings-group__title', '接口与密钥'));
+    wrap.appendChild(head);
+
+    var status = h('p', { className: 's-settings-note', text: '还没测试过' });
+    var inputs = {};
+    var fields = h('div', { className: 's-settings-sheet' });
+    var SPEC = [
+      ['baseURL', 'url', '接口地址', 'api.example.com/v1'],
+      ['model', 'text', '模型名', '如 gpt-4o-mini'],
+      ['key', 'password', '密钥', '粘到这里，只存这台手机']
+    ];
+    for (var i = 0; i < SPEC.length; i += 1) {
+      (function (name, inputType, label, placeholder) {
+        var field = h('div', { className: 's-settings-sheet__field' });
+        field.appendChild(t('span', 's-settings-sheet__label', label));
+        var input = h('input', {
+          className: 's-settings-sheet__input', type: inputType, placeholder: placeholder,
+          autocomplete: 'off', spellcheck: 'false', aria: { label: label }
+        });
+        if (name !== 'key') { input.value = cfg[name] || ''; }
+        input.addEventListener('change', function () { apply(); });
+        inputs[name] = input;
+        field.appendChild(input);
+        fields.appendChild(field);
+      }(SPEC[i][0], SPEC[i][1], SPEC[i][2], SPEC[i][3]));
+    }
+    wrap.appendChild(fields);
+
+    /* getConfig 只回掩码 ••••尾4：用户不回改就不覆盖真 key。 */
+    function markKey() {
+      var saved = llmCfg() || {};
+      inputs.key.value = '';
+      inputs.key.placeholder = saved.hasKey === true
+        ? '已保存 ' + (saved.keyMasked || '••••')
+        : '粘到这里，只存这台手机';
+    }
+    markKey();
+
+    function apply() {
+      var api = llmApi();
+      if (!api || typeof api.setConfig !== 'function') { return false; }
+      var patch = { baseURL: String(inputs.baseURL.value || ''), model: String(inputs.model.value || '') };
+      var typed = String(inputs.key.value || '');
+      if (typed && typed.indexOf('••••') !== 0) { patch.key = typed; }
+      var res = null;
+      try { res = api.setConfig(patch); } catch (error) { res = null; }
+      if (!res || res.ok !== true) { status.textContent = '没保存：检查接口地址与模型名'; return false; }
+      markKey();
+      status.textContent = '已保存';
+      return true;
+    }
+
+    var list = h('div', { className: 'c-list s-settings-list' });
+    list.appendChild(switchRow(ctx, {
+      icon: 'cloud', title: '开启在线模型', sub: '关闭时小助手只在本机解析',
+      checked: cfg.enabled === true,
+      onChange: function (next) {
+        var api = llmApi();
+        if (!api || typeof api.setConfig !== 'function') { return false; }
+        var res = null;
+        try { res = api.setConfig({ enabled: next }); } catch (error) { res = null; }
+        if (!res || res.ok !== true) { toast(ctx, '保存失败，请重试', { type: 'danger' }); return false; }
+        status.textContent = next ? '已开启：会把当轮原话发给你配置的模型服务' : '已关闭：全部在本机解析';
+        return true;
+      }
+    }));
+    list.appendChild(switchRow(ctx, {
+      icon: 'eye', title: '显示密钥', sub: '只在本次打开时明文显示', checked: false,
+      onChange: function (next) { inputs.key.type = next ? 'text' : 'password'; return true; }
+    }));
+    wrap.appendChild(list);
+
+    var actions = h('div', { className: 's-settings-actions' });
+    var testBtn = h('button', { className: 'c-btn c-btn--primary', type: 'button', text: '测试连接' });
+    testBtn.addEventListener('click', function () {
+      var api = llmApi();
+      if (!api || typeof api.test !== 'function' || !apply()) {
+        status.textContent = '地址、模型、密钥要填齐';
+        return;
+      }
+      status.textContent = '正在测试连接…';
+      var pending = null;
+      try { pending = api.test(); } catch (error) { pending = null; }
+      Promise.resolve(pending).then(function (res) {
+        if (alive(status)) { status.textContent = aiStatusText(res); }
+      }, function () {
+        if (alive(status)) { status.textContent = '测试失败，请重试'; }
+      });
+    });
+    actions.appendChild(testBtn);
+    wrap.appendChild(actions);
+    wrap.appendChild(status);
+
+    /* R-11 / D-05：只写事实，不暗示加密或绝对安全。 */
+    wrap.appendChild(h('p', {
+      className: 's-settings-group__note',
+      text: '密钥只存在本机；只有开启在线模型时，才会把当轮原话与账户名称发给你的模型服务。'
+    }));
+    return wrap;
   }
 
   /* ---------------- 子页标题 ---------------- */
@@ -3998,18 +3606,34 @@
       renderAbout(root, ctx, db);
       return;
     }
+    if (ctx.sub === 'ai') {
+      renderAiSettings(root, ctx);
+      return;
+    }
 
     /* A32：空库首启一次性横幅（置位后不再出现；样式沿用既有 c-* / s-settings-note） */
     firstRunBannerMaybe(root, ctx, db);
 
-    root.appendChild(sectionAppearance(ctx));
-    root.appendChild(sectionAssistant(ctx));
-    root.appendChild(sectionAiEnhance(ctx));
-    root.appendChild(sectionManage(ctx, db));
-    root.appendChild(sectionAutomation(ctx, db));
-    root.appendChild(sectionData(ctx, db));
-    root.appendChild(sectionDanger(ctx));
-    root.appendChild(sectionAbout(ctx, db));
+    /* SPEC P2-1 / DESIGN §4.2：吸顶索引胶囊（A–G），危险区 H 不进胶囊。 */
+    var toc = buildToc(ctx);
+    root.appendChild(toc);
+
+    /* A→H 八段（DESIGN §4.2/§4.3）：视觉重排但条目能力零净减少。 */
+    var sections = [
+      ['appearance', sectionAppearance(ctx)],
+      ['security', sectionSecurity(ctx, db)],
+      ['assistant', sectionAssistant(ctx)],
+      ['manage', sectionManage(ctx, db)],
+      ['automation', sectionAutomation(ctx, db)],
+      ['data', sectionData(ctx, db)],
+      ['about', sectionAbout(ctx, db)]
+    ];
+    for (var i = 0; i < sections.length; i += 1) {
+      sections[i][1].id = 'settings-group-' + sections[i][0];
+      root.appendChild(sections[i][1]);
+    }
+    root.appendChild(sectionDanger(ctx, db));
+    bindTocScroll(toc, root);
   }
 
   /* ---------------- 注册 ---------------- */
@@ -4018,9 +3642,7 @@
     title: '我的',
     subtitle: '偏好与数据',
     render: render,
-    /* 纯函数测试缝（无 DOM、无 IO；tools/_t21_selfcheck.cjs 经 screen.photosTestKit 取用）。
-       与 ledger.js:2318 的 photoTestKit 同一惯例：把「文案怎么拼、上限从哪来、体积怎么格式化」
-       这些判断从渲染里拿出来，好让自检注入计数版 fmtBytes 直接验证唯一实现被调用。 */
+    /* 纯函数测试缝（无 DOM / 无 IO），tools/_t21_selfcheck.cjs 经 screen.photosTestKit 取用。 */
     photosTestKit: {
       photoCountText: photoCountText,
       photoOrphanText: photoOrphanText,
@@ -4039,4 +3661,8 @@
       firstRunBannerLines: function () { return FIRST_RUN_BANNER_LINES.slice(); }
     }
   });
+
+  if (typeof global.addEventListener === 'function') {
+    global.addEventListener('focus', onWindowFocusForImport);
+  }
 }(window));
