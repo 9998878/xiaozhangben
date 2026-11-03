@@ -6393,6 +6393,8 @@ textarea::selection {
   overflow-y: hidden;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+  padding-right: calc(var(--page-x) + var(--safe-right) + 16px);
+  mask-image: linear-gradient(to right, var(--c-bg) calc(100% - 16px), transparent); /* mask 只取 alpha，用不透明 token 即可 */
 }
 
 .s-ledger-chips::-webkit-scrollbar {
@@ -6529,6 +6531,8 @@ textarea::selection {
   color: var(--c-text-2);
 }
 
+.s-ledger-day__head.is-stuck::after { content: ""; position: absolute; top: 100%; right: 0; left: 0; height: 12px; pointer-events: none; background: linear-gradient(to bottom, var(--c-bg), transparent); }
+
 .s-ledger-day__date {
   font-size: var(--fs-footnote);
   font-weight: var(--fw-semibold);
@@ -6556,6 +6560,8 @@ textarea::selection {
   overflow: hidden;
   background: var(--c-bg);
 }
+
+.s-ledger-item.is-active::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 36px; z-index: 2; pointer-events: none; background: linear-gradient(to right, var(--c-bg) 20%, transparent); }
 
 .s-ledger-item + .s-ledger-item::before {
   content: "";
@@ -12882,9 +12888,11 @@ textarea::selection {
   display: flex;
   gap: var(--sp-2);
   padding-bottom: var(--sp-2);
+  padding-right: 16px;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
 }
 
 .s-assistant__chips::-webkit-scrollbar,
@@ -32457,7 +32465,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.26.3';
+  XZB.version = '2.26.4';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};

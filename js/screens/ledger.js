@@ -3048,6 +3048,18 @@
     }
   }
 
+  /* 2.26.4：吸顶日头只在「真的吸住」时挂 is-stuck，下沿才渐隐；
+     静止时若也渐隐，会把第一行内容压暗。 */
+  function syncStuck(st) {
+    if (!st || st.dead || !st.nodes || !st.nodes.days) { return; }
+    var heads = st.nodes.days.querySelectorAll('.s-ledger-day__head');
+    for (var i = 0; i < heads.length; i += 1) {
+      var top = parseFloat(heads[i].style.top);
+      if (!isFinite(top)) { continue; }
+      heads[i].classList.toggle('is-stuck', heads[i].getBoundingClientRect().top <= top + 1);
+    }
+  }
+
   /* render 期间新屏还没挂载，offsetHeight 全是 0；挂载后再量，量不到就多试几帧。 */
   function scheduleMeasure(st) {
     var tries = 0;
@@ -3288,6 +3300,7 @@
           ticking = false;
           if (st.dead) { return; }
           if (st.openItem) { closeSwiped(st); }
+          syncStuck(st);
           var remain = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
           if (remain < LOAD_AHEAD && st.rendered < MAX_AUTO_ROWS) { loadMore(st); }
         });
@@ -3314,6 +3327,7 @@
         timer = 0;
         if (st.dead) { return; }
         measureSticky(st);
+        syncStuck(st);
       }, 180);
     }
     /* [D2-28] ④ 地址栏 / 键盘引起的 --vvh 变化（visualViewport 与 window.resize 不同源） */

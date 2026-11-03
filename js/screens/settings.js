@@ -1247,7 +1247,7 @@
       row({
         icon: 'tag',
         title: '分类管理',
-        sub: '常用分类会优先出现在记一笔宫格',
+        sub: '常用的会排在前面',
         value: categories + ' 个分类',
         onClick: function () { go(ctx, '#/settings/categories?kind=expense'); }
       }),
