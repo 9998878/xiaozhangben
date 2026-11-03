@@ -1881,18 +1881,19 @@
     var longFired = false;
     var longTimer = 0;
 
-    /* 2.17.1 方向仲裁：触摸设备上先由 touchmove 决定这次手势归谁。
-       浏览器一旦开始滚动，指针流会被 pointercancel 掐断、行再也拖不动，
-       所以第一帧必须先 preventDefault 把滚动压住，再判断是横滑还是滚动。
-       在完成「判断」之前绝不放手，宁可晚一帧再交还给系统滚动。 */
+    /* 2.26.3 方向仲裁：先交还浏览器，只在确认横滑时才接管（响应「首页滑不动、要特定角度」）。
+       2.17.1 的做法是未定方向时无条件 preventDefault 把滚动压住，等判断完再放手；
+       但「判断」用 1.25 倍阈值，斜向或先横后纵的手势有一段会一直判不出方向，
+       于是整段手势都在 preventDefault，页面被冻结，只有接近纯纵向才滚得动。
+       现在改成：未定方向不拦截，浏览器可立即起滚；横向意图足够明确
+       （偏离垂直 > 56°，即 ax > ay * 1.5）才 preventDefault 锁住整段手势。
+       已锁横滑、但用户其实在纵向用力且尚未真正拖动行时，及时收手放行滚动。 */
     var touchAxis = '';       /* '' 未定 | 'x' 横滑（整段压住滚动） | 'y' 交还滚动 */
     var touchX = 0;
     var touchY = 0;
-    var touchBlocked = false;
 
     function onTouchStart(event) {
       touchAxis = '';
-      touchBlocked = false;
       if (st.dead || !event.touches || event.touches.length !== 1) { return; }
       if (event.target && event.target.closest && event.target.closest('.s-ledger-item__actions')) {
         touchAxis = 'y';
@@ -1908,25 +1909,26 @@
       var ax = Math.abs(event.touches[0].clientX - touchX);
       var ay = Math.abs(event.touches[0].clientY - touchY);
       if (touchAxis === 'x') {
+        if (!dragging && ay >= 10 && ay > ax * 1.5) {
+          touchAxis = 'y';   /* 纵向用力更明确：撤销横滑锁，交还滚动 */
+          return;
+        }
         if (event.cancelable) { event.preventDefault(); }
         return;
       }
-      /* 还没定方向：这一帧先吃掉，避免浏览器抢先开滚 */
-      if (event.cancelable) { event.preventDefault(); }
-      touchBlocked = true;
-      if (ax >= 4 && ax * 1.25 >= ay) {
+      /* 未定方向：这一帧不拦截，让浏览器有机会照常滚动 */
+      if (ax >= 8 && ax > ay * 1.5) {
         touchAxis = 'x';
+        if (event.cancelable) { event.preventDefault(); }
         return;
       }
-      if (ay >= 6 && ay > ax * 1.25) {
-        /* 明确纵向：从下一帧起不再 preventDefault，滚动照常 */
+      if (ay >= 8 && ay > ax) {
         touchAxis = 'y';
       }
     }
 
     function onTouchEnd() {
       touchAxis = '';
-      touchBlocked = false;
     }
 
     function clearLong() {
