@@ -412,6 +412,12 @@
     renderChips();
     autoGrow(input);
 
+    /* 情境入口（2.25.0 合并 2.24.3）：从首页/解读页带 ?q= 进来时预填问题，不替用户发 */
+    if (ctx && ctx.params && ctx.params.q && !input.value.trim()) {
+      input.value = String(ctx.params.q).slice(0, 60);
+      autoGrow(input);
+    }
+
     composer.addEventListener('submit', function (event) {
       event.preventDefault();
       var text = input.value;
@@ -518,6 +524,9 @@
       body.appendChild(totalsBlock(reply.totals));
       if (reply.rows && reply.rows.length) { body.appendChild(queryRows(reply.rows)); }
       if (reply.link) { body.appendChild(linkButton(reply.link)); }
+    } else if (kind === 'insight') {
+      /* 2.25.0（合并 2.24.3）：本地洞察答案卡 —— 口径/结论/指标/原因/证据/假设/操作 */
+      body.appendChild(insightCard(reply));
     } else if (kind === 'targets') {
       body.appendChild(targetList(reply));
     } else if (kind === 'clarify') {
@@ -848,6 +857,92 @@
       el('span', { className: 's-assistant__total-label', text: '笔数' }),
       el('span', { className: 's-assistant__total-value', text: String(totals.count) })
     ]));
+    return wrap;
+  }
+
+  /* ============================== 洞察答案卡（P0-2） ==============================
+   * 结构固定：口径 → 结论 → 指标 → 原因/证据 → 假设 → 操作/追问。
+   * 所有数字都是 insight-qa 本地算好后传进来的，这里只渲染、不计算。 */
+
+  function insightMetricsBlock(metrics) {
+    if (!metrics || !metrics.length) { return null; }
+    var wrap = el('div', { className: 's-assistant__totals' });
+    metrics.forEach(function (metric) {
+      wrap.appendChild(el('div', { className: 's-assistant__total' }, [
+        el('span', { className: 's-assistant__total-label', text: metric.label }),
+        el('span', {
+          className: 's-assistant__total-value' + (metric.tone ? ' is-' + metric.tone : ''),
+          text: metric.value || '—'
+        })
+      ]));
+      if (metric.sub) {
+        wrap.appendChild(el('div', { className: 's-assistant__metric-sub', text: metric.sub }));
+      }
+    });
+    return wrap;
+  }
+
+  function insightCard(reply) {
+    var wrap = el('div', { className: 's-assistant__insight' });
+
+    if (reply.scope) {
+      wrap.appendChild(el('p', { className: 's-assistant__insight-scope', text: '口径：' + reply.scope }));
+    }
+
+    if (reply.empty) {
+      wrap.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: reply.text || '数据不足，没法下结论。' }));
+      return wrap;
+    }
+
+    var metrics = insightMetricsBlock(reply.metrics);
+    if (metrics) { wrap.appendChild(metrics); }
+
+    /* 原因分类（环比卡）：每类一条，金额 + 对比 + 证据流水 */
+    if (reply.causes && reply.causes.length) {
+      var causeList = el('div', { className: 's-assistant__causes' });
+      reply.causes.forEach(function (cause) {
+        var head = el('div', { className: 's-assistant__cause-head' }, [
+          el('span', { className: 's-assistant__cause-name', text: cause.name }),
+          el('span', {
+            className: 's-assistant__cause-delta ' + (cause.sign === '\u2212' ? 'is-income' : 'is-expense'),
+            text: cause.sign + cause.amountText
+          })
+        ]);
+        if (cause.countText) {
+          head.appendChild(el('span', { className: 's-assistant__cause-count', text: cause.countText }));
+        }
+        causeList.appendChild(head);
+        if (cause.evidence && cause.evidence.length) {
+          causeList.appendChild(queryRows(cause.evidence));
+        }
+      });
+      wrap.appendChild(causeList);
+    }
+
+    /* 证据流水（分类下钻 / 最大的三笔） */
+    if (reply.rows && reply.rows.length) {
+      wrap.appendChild(queryRows(reply.rows));
+    }
+
+    if (reply.assumption) {
+      wrap.appendChild(el('p', { className: 's-assistant__assumption', text: reply.assumption }));
+    }
+
+    if (reply.links && reply.links.length) {
+      var actions = el('div', { className: 's-assistant__actions' });
+      reply.links.forEach(function (link) {
+        actions.appendChild(el('button', {
+          className: 's-assistant__ghost',
+          type: 'button',
+          onclick: function () { if (link && link.hash) { location.hash = link.hash; } }
+        }, [String(link.label || '看明细')]));
+      });
+      wrap.appendChild(actions);
+    }
+
+    if (reply.followUps && reply.followUps.length) {
+      wrap.appendChild(optionChips(reply.followUps.map(function (q) { return { label: q, value: q }; })));
+    }
     return wrap;
   }
 

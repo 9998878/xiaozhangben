@@ -807,6 +807,16 @@
       label: '返回首页调整预算',
       href: '#/home?focus=budget'
     });
+    if (assistantEntryOn()) {
+      actions.push({
+        icon: 'sparkles',
+        label: '让助手继续分析',
+        href: assistantHash(report, { q: report.range.months > 1
+          ? '近' + report.range.months + '个月支出趋势怎么样？'
+          : monthLabel(report.endMonth) + '支出和上月比差在哪？' })
+      });
+      return actions.slice(0, RULES.ACTION_MAX + 1);
+    }
     return actions.slice(0, RULES.ACTION_MAX);
   }
 
@@ -1334,6 +1344,37 @@
 
   /* ---------------- 结论 / 提示 / 建议 ---------------- */
 
+  /* 2.25.0（合并 2.24.3 P0-1）情境入口：带着账期/分类跳进小助手。
+   * 只预填问题，不自动执行；涉及写入的仍要走助手自己的预览确认。 */
+  function assistantEntryOn() {
+    var prefs = (S.ctx && S.ctx.prefs) || (XZB.app && XZB.app.prefs);
+    var v = null;
+    if (prefs && typeof prefs.get === 'function') {
+      try { v = prefs.get('assistant.contextualEntry'); } catch (error) { v = null; }
+    }
+    return v !== false; /* 未设置 = 开 */
+  }
+
+  function assistantHash(report, opts) {
+    var o = opts || {};
+    var params = { from: 'insights', m: report.endMonth, r: report.range.key };
+    if (o.cat) { params.cat = o.cat; }
+    if (o.q) { params.q = String(o.q).slice(0, 60); }
+    var bits = [];
+    Object.keys(params).forEach(function (key) { bits.push(key + '=' + encodeURIComponent(params[key])); });
+    return '#/assistant?' + bits.join('&');
+  }
+
+  function coreAskQuestion(report) {
+    if (report.range.months > 1) {
+      return '近' + report.range.months + '个月支出为什么变化？';
+    }
+    var delta = expenseDelta(report);
+    if (!delta.hasPrev) { return monthLabel(report.endMonth) + '的支出结构是什么样的？'; }
+    if (delta.diff < 0) { return '为什么' + monthLabel(report.endMonth) + '支出比上月减少了？'; }
+    return '为什么' + monthLabel(report.endMonth) + '支出比上月增加了？';
+  }
+
   function coreCard(report) {
     var card = el('section', { className: 'c-card s-insights-core' });
     if (!report.core.length) {
@@ -1359,6 +1400,16 @@
       }(report.core[i]));
     }
     card.appendChild(list);
+    if (assistantEntryOn()) {
+      card.appendChild(el('div', { className: 's-insights-core__ask' }, [
+        buttonNode('问为什么', {
+          className: 's-insights-core__more',
+          icon: 'sparkles',
+          ariaLabel: '带当前账期问小助手为什么',
+          href: assistantHash(report, { q: coreAskQuestion(report) })
+        })
+      ]));
+    }
     return card;
   }
 
@@ -1429,6 +1480,22 @@
     return cell;
   }
 
+  /* 每条提示的「继续分析」问题：模板固定，数字由助手按本地数据现算 */
+  function tipAskQuestion(report, tip) {
+    var catName = '';
+    if (tip.categoryId && report.meta && report.meta[tip.categoryId]) {
+      catName = String(report.meta[tip.categoryId].name || '');
+    }
+    if (tip.key === 'large') { return '这个期间最大的三笔支出是哪些？'; }
+    if (tip.key === 'trend') { return '近' + RULES.HISTORY_MONTHS + '个月支出趋势怎么样？'; }
+    if (!catName) { return ''; }
+    if (tip.key.indexOf('anomaly:') === 0) { return catName + '为什么这么多？比前几个月多在哪？'; }
+    if (tip.key.indexOf('growth:') === 0) { return catName + '是不是一直在涨？涨在哪？'; }
+    if (tip.key.indexOf('struct:') === 0) { return catName + '比上期多在哪？'; }
+    if (tip.key.indexOf('frequent:') === 0) { return catName + '的小额支出都花在哪了？'; }
+    return '';
+  }
+
   function tipsCard(report) {
     var card = moduleCard('值得留意', '按数据质量、异常、结构与趋势排序', 's-insights-tips');
     var list = el('ul', { className: 's-insights-tip__list' });
@@ -1454,6 +1521,17 @@
             icon: 'arrow-up-right',
             onClick: tip.action.onClick
           }));
+        }
+        if (assistantEntryOn()) {
+          var q = tipAskQuestion(report, tip);
+          if (q) {
+            body.appendChild(buttonNode('继续分析', {
+              className: 's-insights-tip__action',
+              icon: 'sparkles',
+              ariaLabel: '带上下文问小助手：' + q,
+              href: assistantHash(report, { cat: tip.categoryId || '', q: q })
+            }));
+          }
         }
         item.appendChild(body);
         list.appendChild(item);
