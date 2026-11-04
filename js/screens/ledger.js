@@ -1,37 +1,14 @@
 /* 小账本 2.0 · js/screens/ledger.js · owner: 前端#2（T10 明细 / F31 照片角标·详情照片区·大图入口）
- * 契约锚点：UI.md §6.3（:840-905 线框与逐项规格）、SPEC A1/A2/A13/A17/A20/A22、
- *           INTERFACE-FREEZE §1（token）§3（类名 s-ledger-*）§8（十二条红线）、DECISIONS D06/D16；
- *           F31 追加：UI.md §2.4（角标）/§2.5.1（详情照片区）/§2.5.3（复制不共享照片）、
- *           SPEC A14/A15/A17/A18/C-2、PLAN §2（XZB.app.photos / XZB.UI.bloburl / XZB.UI.photoViewer 冻结签名）、
- *           PLAN §3 步骤 11–13、§9.4 / §9.4.1（URL 生命周期）、§10 R-6（null 位降级）。
- *
- * 形状：2.15.0 起同一份实现支持两态（DESIGN D2-* / D4-*，T05）：
- *   ① 嵌入态 embedded === true：root 是首页 .s-home-inner 里的容器 div，本屏在它身上加
- *      s-ledger + s-ledger--embedded + data-ledger-embed="1"，不渲染独立外壳 / 吸顶容器；
- *   ② 独立态 embedded === false（回滚保险，2.15.0 路由不可达）：root 是 .app-screen__body.s-ledger。
- *   两态都返回 controller（destroy/embedded/focusSearch/month/openBudgetStatus/
- *   openCategoryFilter/root/scrollToList/toggleReimburse，恰好 9 键，见 D2-11）；
- *   .app-screen 是全页唯一滚动容器，.app-nav 在独立态下 position:sticky 在顶部。
- * 能力：
- *   1. 月份切换：左右箭头 ±1 月；点月份标签开「选择月份」浮层（年份 ±，12 宫格）。
- *   2. 账本切换入口 → #/books；标题展示当前账本名。
- *   3. 搜索：备注 / 分类名 / 账户名 / 金额（¥32.40、32.40、3240 都能命中），120ms 防抖，输入即筛。
- *   4. 筛选抽屉（XZB.ui.sheet）：类型 / 账户多选 / 分类多选 / 金额区间 / 清空。
- *   5. 月 → 日分组：日期头「今天 周三」+ 当日小结（支出/收入/转账）；日期头 sticky 在工具栏下方。
- *   6. 分页 50 条 + 触底自动加载，DocumentFragment 批量插入，不做全量重建。
- *   7. 左滑出「编辑 / 删除」（pointer 事件），长按同样出操作表；删除=软删 + 5 秒撤销 toast（XZB.app.undo）。
- *   8. 顶部汇总条：本期支出 / 收入 / 结余 / 笔数（随筛选实时变化）。
- *   9. 空状态与无结果文案分开；筛选条件回写 nav 标题（「餐饮 · 微信 · 本月」）。
- *  10. 照片（F31）：有图的明细行出「📷[N]」角标（只读 photoIds 长度，零异步 IO）→ 点角标开大图；
- *      详情面板出「照片」文本行 + 缩略图行 → 点缩略图开大图（XZB.UI.photoViewer）；
- *      照片记录为 null 位（跨标签页被删 / 导入缺图）时按「无图」降级，不抛错、不白屏。
- *
- * 硬约束：不碰 IndexedDB / localStorage / TabBar；用户数据一律 textContent；
- *        金额只用整数分；日期只用本地 YYYY-MM-DD 字符串；类名只 s-ledger-*。
- *        照片（F31）：屏幕层不直连 store，一律经 XZB.app.photos.*；
- *        blob URL 一律经 XZB.UI.bloburl（同 id 恒同 URL），本屏只 release 自己创建的键，
- *        路由级 releaseAll 归 app.js（PLAN §9.4）。
- */
+ * 契约：UI.md §6.3（:840-905）、§2.4/§2.5.1/§2.5.3；SPEC A1/A2/A13/A14/A15/A17/A18/A20/A22/C-2；
+ *   INTERFACE-FREEZE §1/§3/§8；DECISIONS D06/D16；PLAN §2/§3 步骤 11–13/§9.4/§9.4.1/§10 R-6。
+ * 形状（2.15.0 起一份实现两态，D2-* / D4-*）：① embedded：root 是首页 .s-home-inner 容器，加
+ *   s-ledger + s-ledger--embedded + data-ledger-embed="1"，不渲染独立外壳/吸顶容器；② 独立态
+ *   （回滚保险，2.15.0 路由不可达）：root 是 .app-screen__body.s-ledger。两态都返回 controller
+ *   （9 键，见 D2-11）；.app-screen 是全页唯一滚动容器。
+ * 能力：月份/账本切换/搜索/筛选抽屉/月→日分组/分页 50+触底加载/左滑编辑删除与长按操作表（软删+5 秒
+ *   撤销）/汇总条/空态与无结果/照片（F31 角标·详情照片区·大图）。
+ * 硬约束：不碰 IndexedDB/localStorage/TabBar；数据只用 textContent；金额只用整数分；日期只用本地
+ *   YYYY-MM-DD；类名只 s-ledger-*；照片层不直连 store；blob URL 一律经 XZB.UI.bloburl，releaseAll 归 app.js。 */
 (function (global) {
   'use strict';
 
@@ -62,9 +39,8 @@
   var TYPE_KEYS = ['all', 'expense', 'income', 'transfer'];
   var TYPE_LABEL = { all: '全部', expense: '支出', income: '收入', transfer: '转账' };
   var TITLE_MAX = 24;
-  /* F31 照片：张数上限真源 = schema.LIMITS.txPhotos（2.13.0 起「不限张数」⇒ 999，只是校验安全上界）。
-     本屏**不再**按 3 截断：超过 3 张也要全部渲染、全部进查看器。
-     2.14 起列表行直接展示 64px 缩略图（角标只负责 N>1 的数字），不再是「camera 小图标代表有照片」。 */
+  /* F31 照片：张数上限真源 = schema.LIMITS.txPhotos（2.13.0 起「不限张数」⇒ 999，只是校验安全上界）。本屏**不再**按 3 截断：超过 3 张也要全部渲染、全部进查看器。2.14
+     起列表行直接展示 64px 缩略图（角标只负责 N>1 的数字），不再是「camera 小图标代表有照片」。 */
   var PHOTO_MAX_FALLBACK = 999;
   function photoMaxPerTx() {
     var Core = XZB && XZB.Core ? XZB.Core : null;
@@ -84,7 +60,7 @@
     comm: 'phone'
   };
 
-  /* ---------------- 依赖取用（缺件不白屏） ---------------- */
+  /* ---------------- 依赖取用（缺件不白屏）---------------- */
 
   function uiApi() { return XZB.ui || XZB.UI || {}; }
   function domApi() { return uiApi().dom || null; }
@@ -118,7 +94,7 @@
     return '操作失败，请重试';
   }
 
-  /* ---------------- 极简 DOM 构造（复用 XZB.ui.dom） ---------------- */
+  /* ---------------- 极简 DOM 构造（复用 XZB.ui.dom）---------------- */
 
   function appendAll(node, kids) {
     if (kids === undefined || kids === null || kids === false) { return node; }
@@ -186,8 +162,7 @@
     while (node.firstChild) { node.removeChild(node.firstChild); }
   }
 
-  /* icons.icon() 的标记缺 xmlns：DOMParser 以 image/svg+xml 解析会得到空命名空间
-     元素，浏览器不描边（图标空白）。这里补 xmlns 后再解析并导入为真 SVG 节点。 */
+  /* icons.icon() 的标记缺 xmlns：DOMParser 以 image/svg+xml 解析会得到空命名空间 元素，浏览器不描边（图标空白）。这里补 xmlns 后再解析并导入为真 SVG 节点。 */
   function svgFromMarkup(markup) {
     var text = String(markup || '');
     if (!text) { return null; }
@@ -237,24 +212,19 @@
     return target;
   }
 
-  /* ---------------- 照片（F31：角标 / 详情照片区 / 大图入口 / URL 生命周期） ----------------
-   * 契约：PLAN §2（XZB.app.photos / XZB.UI.bloburl / XZB.UI.photoViewer 冻结签名）、PLAN §3 步骤 11–13、
-   *       §9.4 + §9.4.1（blob URL 生命周期）、§10 R-6（null 位降级）、UI.md §2.4/§2.5.1/§2.5.3、SPEC A14/A15/A18/C-2。
-   * 三条边界：
-   *   ① 屏幕层不直连 store/IndexedDB：读经 XZB.app.photos.get（= photoGetMany 直通），写经 removeWithUndo（PLAN:249 冻结不变量）；
-   *   ② 逐图 null 位（跨标签页被删 / 导入缺图）一律降级成「无图」，不抛错、不白屏、不阻塞其它行；
-   *   ③ releaseAll 归路由销毁（app.js 的 F22），本屏只 release 自己经 urlOf 创建、且确定已无人持有的键。
-   */
+  /* ---------------- 照片（F31：角标 / 详情照片区 / 大图入口 / URL 生命周期）---------------- 契约：PLAN §2（XZB.app.photos / XZB.UI.bloburl /
+     XZB.UI.photoViewer 冻结签名）、PLAN §3 步骤 11–13、§9.4 + §9.4.1（blob URL 生命周期）、§10 R-6（null 位降级）、UI.md
+     §2.4/§2.5.1/§2.5.3、SPEC A14/A15/A18/C-2。三条边界：① 屏幕层不直连 store/IndexedDB：读经 XZB.app.photos.get（= photoGetMany 直通），写经
+     removeWithUndo（PLAN:249 冻结不变量）；② 逐图 null 位（跨标签页被删 / 导入缺图）一律降级成「无图」，不抛错、不白屏、不阻塞其它行；③ releaseAll 归路由销毁（app.js 的
+     F22），本屏只 release 自己经 urlOf 创建、且确定已无人持有的键。 */
 
-  /* --- 纯函数（无 DOM、无 IO；tools/_t20_selfcheck.cjs 经 screen.photoTestKit 取用） --- */
+  /* --- 纯函数（无 DOM、无 IO；tools/_t20_selfcheck.cjs 经 screen.photoTestKit 取用）--- */
 
   function kitApi() {
     return global.XZB && XZB.ui && XZB.ui.kit ? XZB.ui.kit : null;
   }
 
-  /* 归一化 tx.photoIds：非数组 → []；去重、保首现顺序、丢弃非字符串/空串/超长项。
-   * 唯一的纯函数实现已落在 XZB.ui.kit（CONTRACT §缩略图选择规则）；本屏只做薄委托，
-   * 老包缺 kit 时退回本地同语义实现，保证不白屏。 */
+  /* 归一化 tx.photoIds：非数组 → []；去重、保首现顺序、丢弃非字符串/空串/超长项。唯一的纯函数实现已落在 XZB.ui.kit（CONTRACT §缩略图选择规则）；本屏只做薄委托，老包缺 kit 时退回本地同语义实现，保证不白屏。 */
   function photoIdList(tx) {
     var kit = kitApi();
     if (kit && typeof kit.photoIdList === 'function') {
@@ -274,8 +244,7 @@
     return out;
   }
 
-  /* 角标决策（UI.md §2.4 / CONTRACT §数量角标规则）：N=0 → null；N>1 才出数字（数字＝总数）。
-   * 纯函数来自 kit（含 99+ 与真实张数的 aria-label），老包缺件时退回本地版本。 */
+  /* 角标决策（UI.md §2.4 / CONTRACT §数量角标规则）：N=0 → null；N>1 才出数字（数字＝总数）。纯函数来自 kit（含 99+ 与真实张数的 aria-label），老包缺件时退回本地版本。 */
   function badgePlan(tx) {
     var kit = kitApi();
     if (kit && typeof kit.badgePlan === 'function') {
@@ -290,12 +259,9 @@
     return { count: count, showCount: count > 1, text: count > 99 ? '99+' : String(count), label: '含 ' + count + ' 张照片' };
   }
 
-  /* 记录按位对齐：photoGetMany 的 records 与入参同序同长、缺失元素是 null（CONTRACT）。
-   * kit.photoSlots 返回**同序同长**的槽位数组（不可读位是 null，绝不 filter 洗位）；
-   * 老包缺件时本地实现也保持同长，调用方必须逐位判空。 */
+  /* 记录按位对齐：photoGetMany 的 records 与入参同序同长、缺失元素是 null（CONTRACT）。kit.photoSlots 返回**同序同长**的槽位数组（不可读位是 null，绝不 filter 洗位）；老包缺件时本地实现也保持同长，调用方必须逐位判空。 */
   function photoSlots(ids, records) {
-    /* 兼容 CONTRACT 的对象式调用 photoSlots({ ids, records }) 与位置式 (ids, records)；
-     * 对象式不能先被归一成 []，否则 kit 拿到空 ids 直接返回空数组。 */
+    /* 兼容 CONTRACT 的对象式调用 photoSlots({ ids, records }) 与位置式 (ids, records)；对象式不能先被归一成 []，否则 kit 拿到空 ids 直接返回空数组。 */
     var pack = ids && !Array.isArray(ids) && typeof ids === 'object' ? ids : null;
     var list = pack ? (Array.isArray(pack.ids) ? pack.ids : []) : (Array.isArray(ids) ? ids : []);
     var recs = pack ? pack.records : records;
@@ -325,8 +291,7 @@
     return out;
   }
 
-  /* 可读槽（跳 null）——只给查看器/详情这类「按可读张数顺序」的场景用；
-   * 列表选择第一张可读时必须用上面的同长数组，靠索引找。 */
+  /* 可读槽（跳 null）——只给查看器/详情这类「按可读张数顺序」的场景用；列表选择第一张可读时必须用上面的同长数组，靠索引找。 */
   function readableSlots(slots) {
     var out = [];
     if (!Array.isArray(slots)) { return out; }
@@ -336,13 +301,12 @@
     return out;
   }
 
-  /* URL 归属判定：只有「调用 urlOf 之前该键还不存在」时，这个 URL 才是本屏创建的、才由本屏 release。
-   * 别人已建键 ⇒ 本屏不重复持有（否则越权 revoke 会把别人正在显示的图变成白图，PLAN §9.4）。 */
+  /* URL 归属判定：只有「调用 urlOf 之前该键还不存在」时，这个 URL 才是本屏创建的、才由本屏 release。别人已建键 ⇒ 本屏不重复持有（否则越权 revoke 会把别人正在显示的图变成白图，PLAN §9.4）。 */
   function ownsUrl(hadBefore, url) {
     return hadBefore !== true && !!url;
   }
 
-  /* --- blob URL 生命周期（PLAN §9.4：同一 id 恒同一 URL；releaseAll 只在路由销毁） --- */
+  /* --- blob URL 生命周期（PLAN §9.4：同一 id 恒同一 URL；releaseAll 只在路由销毁）--- */
 
   var photoKeys = [];           /* 本屏经 urlOf 创建、尚未 release 的键（模块级：跨 paint / render 存活） */
   var photoDetailOpen = false;  /* 详情面板是否仍持有缩略图 */
@@ -352,8 +316,7 @@
     if (key && photoKeys.indexOf(key) < 0) { photoKeys.push(key); }
   }
 
-  /* 键词表唯一入口：${photoId}:thumb / ${photoId}:full（CONTRACT §Blob URL key 词表）。
-   * 全部经 XZB.UI.bloburl 纯字符串函数构造；老包缺函数时返回 ''（空图，不抛错）。 */
+  /* 键词表唯一入口：${photoId}:thumb / ${photoId}:full（CONTRACT §Blob URL key 词表）。全部经 XZB.UI.bloburl 纯字符串函数构造；老包缺函数时返回 ''（空图，不抛错）。 */
   function photoKeyOf(photoId, variant) {
     var id = photoId === undefined || photoId === null ? '' : String(photoId);
     if (!id) { return ''; }
@@ -389,8 +352,7 @@
     return photoKeyOf(photoId, 'full');
   }
 
-  /* 当前文档里仍被引用的键（列表行媒体区 + 详情缩略图都写了 data-photo-key）。
-   * flush 只扫描**已上屏**的 DOM，因此必须等 swapDom 之后调用，避免把新页面的键误判成孤儿。 */
+  /* 当前文档里仍被引用的键（列表行媒体区 + 详情缩略图都写了 data-photo-key）。flush 只扫描**已上屏**的 DOM，因此必须等 swapDom 之后调用，避免把新页面的键误判成孤儿。 */
   function livePhotoKeySet() {
     var set = Object.create(null);
     var doc = global.document;
@@ -405,9 +367,7 @@
     return set;
   }
 
-  /* 释放时机：列表重绘后（DOM 已上屏）/ 详情关闭 / 查看器关闭。
-   * 只释放「本屏创建 + 当前 DOM 已无人引用」的键；详情或查看器打开时一律推迟。
-   * 禁止组件卸载 release、禁止引用计数归零 revoke、禁止 releaseAll（路由 teardown 除外）。 */
+  /* 释放时机：列表重绘后（DOM 已上屏）/ 详情关闭 / 查看器关闭。只释放「本屏创建 + 当前 DOM 已无人引用」的键；详情或查看器打开时一律推迟。禁止组件卸载 release、禁止引用计数归零 revoke、禁止 releaseAll（路由 teardown 除外）。 */
   function flushPhotoUrls() {
     if (!photoKeys.length) { return 0; }
     if (photoDetailOpen || photoViewerOpen) { return 0; }
@@ -427,8 +387,7 @@
     return released;
   }
 
-  /* 取 URL：一律经 XZB.UI.bloburl.urlOf(key, blob)，key 必须是本屏词表内的 :thumb/:full。
-   * 缺件 / 非法键 / 抛错 → 返回 ''（调用方按无图渲染，不抛错、不自造第二套键）。 */
+  /* 取 URL：一律经 XZB.UI.bloburl.urlOf(key, blob)，key 必须是本屏词表内的 :thumb/:full。缺件 / 非法键 / 抛错 → 返回 ''（调用方按无图渲染，不抛错、不自造第二套键）。 */
   function photoUrlOf(key, blob) {
     var bloburl = blobUrlApi();
     if (!bloburl || typeof bloburl.urlOf !== 'function' || !key) { return ''; }
@@ -443,7 +402,7 @@
     return url;
   }
 
-  /* --- 大图查看器入口（PLAN §2 photoViewer.open / §3 步骤 13；UI.md §2.5.2） --- */
+  /* --- 大图查看器入口（PLAN §2 photoViewer.open / §3 步骤 13；UI.md §2.5.2）--- */
 
   function photoErrorText() {
     return messageOf('E_PHOTO_NOT_FOUND', '照片不存在或已被清理');
@@ -476,10 +435,9 @@
       for (var i = 0; i < slots.length; i += 1) {
         /* 同序同长数组：缺失位是 null，逐位跳过，绝不把 null 当记录用 */
         if (!slots[i]) { continue; }
-        /* 大图查看器**自己**持有 URL（photo-viewer.js 的 PhotoRef 形态：item.blob ⇒ urlOf 并记入 owned）。
-           这里只传 blob、**不传 url**：否则本屏先 urlOf 注册 ⇒ 查看器判定 existed=true 不接管所有权
-           ⇒ 本屏 flushPhotoUrls 一跑就把查看器正在显示的 URL 回收 ⇒ 图变白（真机实测 ERR_FILE_NOT_FOUND）。
-           大图取 full（原尺寸压缩件），不能用 slots[i].blob（缩略图优先）放大冒充。 */
+        /* 大图查看器**自己**持有 URL（photo-viewer.js 的 PhotoRef 形态：item.blob ⇒ urlOf 并记入 owned）。这里只传 blob、**不传 url**：否则本屏先
+           urlOf 注册 ⇒ 查看器判定 existed=true 不接管所有权 ⇒ 本屏 flushPhotoUrls 一跑就把查看器正在显示的 URL 回收 ⇒ 图变白（真机实测
+           ERR_FILE_NOT_FOUND）。大图取 full（原尺寸压缩件），不能用 slots[i].blob（缩略图优先）放大冒充。 */
         var big = slots[i].full || slots[i].blob;
         if (!big) { continue; }                        /* 拿不到图：该位不进查看器（降级，不抛错） */
         items.push({ id: slots[i].id, blob: big, compressed: slots[i].compressed, bytes: slots[i].bytes });
@@ -517,15 +475,14 @@
     });
   }
 
-  /* --- 详情面板照片区（UI.md §2.5.1 / CONTRACT §三态状态机） --- */
+  /* --- 详情面板照片区（UI.md §2.5.1 / CONTRACT §三态状态机）--- */
 
   function dropDetailPhotoArea(row, grid) {
     if (grid && grid.parentNode) { grid.parentNode.removeChild(grid); }
     if (row && row.parentNode) { row.parentNode.removeChild(row); }
   }
 
-  /* 详情缩略图与列表共用同一个 :thumb 键（CONTRACT §Blob URL key 词表）；
-   * thumb 缺失时退 rec.blob，此时必须走 :full，不能把原图挂到 :thumb 名下。 */
+  /* 详情缩略图与列表共用同一个 :thumb 键（CONTRACT §Blob URL key 词表）；thumb 缺失时退 rec.blob，此时必须走 :full，不能把原图挂到 :thumb 名下。 */
   function buildDetailPhoto(st, tx, ids, slot, index, total) {
     var variant = slot.thumb ? 'thumb' : 'full';
     var key = variant === 'thumb' ? thumbKeyOf(slot.id) : fullKeyOf(slot.id);
@@ -946,7 +903,7 @@
   var live = null;        /* 当前屏状态（用于清理上一屏监听） */
   var cleanups = [];
 
-  /* ---------------- 2.15.0 嵌入契约（T05：DESIGN §2 §4） ---------------- */
+  /* ---------------- 2.15.0 嵌入契约（T05：DESIGN §2 §4）---------------- */
 
   /* [D4-1] 五键白名单：URL 上只有这五个键参与状态构造，其余键一律忽略 */
   var URL_KEYS = ['detail', 'month', 'flag', 'date', 'ca'];
@@ -975,8 +932,7 @@
     };
   }
 
-  /* [D2-6]/[D2-7] 宿主节点就是根节点本身：s-ledger 三件套一律打在传入的 root 上，不建中间壳。
-   * embedded === false 是回滚路径，恒不带 --embedded / data 属性（供 CSS 与断言区分两态）。 */
+  /* [D2-6]/[D2-7] 宿主节点就是根节点本身：s-ledger 三件套一律打在传入的 root 上，不建中间壳。embedded === false 是回滚路径，恒不带 --embedded / data 属性（供 CSS 与断言区分两态）。 */
   function mountRoot(root, options) {
     if (!root || !root.classList) { return; }
     root.classList.add('s-ledger');
@@ -989,8 +945,7 @@
     if (typeof root.removeAttribute === 'function') { root.removeAttribute(EMBED_ATTR); }
   }
 
-  /* 五键取值：ctx.query 与 ctx.params 是同一份解析结果（router 的 query 恒为 params 克隆），
-   * [D4-3] 同名键「后者覆盖」已由 parseHash 完成，这里只做缺省回落。 */
+  /* 五键取值：ctx.query 与 ctx.params 是同一份解析结果（router 的 query 恒为 params 克隆），[D4-3] 同名键「后者覆盖」已由 parseHash 完成，这里只做缺省回落。 */
   function readUrlParams(ctx) {
     var query = ctx && ctx.query && typeof ctx.query === 'object' ? ctx.query : {};
     var params = ctx && ctx.params && typeof ctx.params === 'object' ? ctx.params : {};
@@ -1046,8 +1001,7 @@
     var month = st.month;
     var categoryIds = st.categoryIds.slice(0);
     var reimburseOnly = st.reimburseOnly === true;
-    /* [D4-11] URL 派生值不得写回 persisted：值仍等于落地时由 URL 派生出来的值 ⇒ 视为用户未改动，
-     * persisted 保持「访问前」的那份值（否则 #/home?month=2020-01 会污染后续无参访问）。 */
+    /* [D4-11] URL 派生值不得写回 persisted：值仍等于落地时由 URL 派生出来的值 ⇒ 视为用户未改动，persisted 保持「访问前」的那份值（否则 #/home?month=2020-01 会污染后续无参访问）。 */
     if (derived.month && derived.month === st.month) {
       month = prev && isValidMonth(prev.month) ? prev.month : monthOf(today());
     }
@@ -1293,15 +1247,13 @@
     chips.appendChild(filterBtn);
     bar.appendChild(chips);
 
-    /* --- P3 筛选状态条：坐在 chips 行下方，有筛选才挂进 DOM（无筛选时不占高、querySelector 为 null） --- */
+    /* --- P3 筛选状态条：坐在 chips 行下方，有筛选才挂进 DOM（无筛选时不占高、querySelector 为 null）--- */
     var activebar = buildActivebar(st);
-    /* 紧跟 chips 行之后挂载。注释一直写着「挂进 DOM」，但缺的正是这一步：
-       只把节点存进 st.nodes 而不 append，DOM 里永远查不到 .s-ledger-activebar
-       （A11b/A12/A13/A14 全查不到）。sticky 重叠时后绘制者在上，
-       紧跟 chips 之后才能压在月份/汇总那一层正下方。 */
+    /* 紧跟 chips 行之后挂载。注释一直写着「挂进 DOM」，但缺的正是这一步：只把节点存进 st.nodes 而不 append，DOM 里永远查不到 .s-ledger-activebar
+       （A11b/A12/A13/A14 全查不到）。sticky 重叠时后绘制者在上，紧跟 chips 之后才能压在月份/汇总那一层正下方。 */
     if (activebar) { bar.appendChild(activebar); }
 
-    /* --- 已启用的高级筛选：可删除 chips（无筛选时不占高度） --- */
+    /* --- 已启用的高级筛选：可删除 chips（无筛选时不占高度）--- */
     var activeRow = el('div', { className: 's-ledger-activechips' });
     activeRow.hidden = true;
     bar.appendChild(activeRow);
@@ -1350,15 +1302,14 @@
     return bar;
   }
 
-  /* ---------------- P3 筛选状态条（常驻可见 + 一键撤销） ---------------- */
+  /* ---------------- P3 筛选状态条（常驻可见 + 一键撤销）---------------- */
 
-  /* R10：只有这三个维度触达「可见筛选」；账户 / 分类 / 金额区 / 单日 仍由
-   * .s-ledger-activechips 那行负责（不重复进状态条，避免同一条件说两遍）。 */
+  /* R10：只有这三个维度触达「可见筛选」；账户 / 分类 / 金额区 / 单日 仍由 .s-ledger-activechips 那行负责（不重复进状态条，避免同一条件说两遍）。 */
   function activebarVisible(st) {
     return st.type !== 'all' || st.reimburseOnly === true || String(st.query || '').trim() !== '';
   }
 
-  /* R11：固定顺序 筛选： + 类型 + 仅待报销 + <N>月 + 搜索「<q>」，用 · 连接 */
+  /* R11：固定顺序 筛选：+ 类型 + 仅待报销 + <N>月 + 搜索「<q>」，用 · 连接 */
   function activebarParts(st) {
     var parts = [];
     if (st.type !== 'all' && TYPE_LABEL[st.type]) { parts.push(TYPE_LABEL[st.type]); }
@@ -1370,8 +1321,7 @@
     return parts;
   }
 
-  /* R12：一次撤销类型 / 待报销 / 搜索词三个维度；月份与日期属导航维度，保留。
-     抽成函数是因为状态条被摘除后还要能重建，重建时必须重绑同一个撤销行为。 */
+  /* R12：一次撤销类型 / 待报销 / 搜索词三个维度；月份与日期属导航维度，保留。抽成函数是因为状态条被摘除后还要能重建，重建时必须重绑同一个撤销行为。 */
   function bindActivebarClear(st, barNode) {
     if (!barNode) { return; }
     barNode.addEventListener('click', function () {
@@ -1385,8 +1335,7 @@
     });
   }
 
-  /* 状态条与 chips 行同属列表页顶栏，取 chips 的父节点即可；
-     chips 尚未挂载时退回 st.nodes.bar，避免重建时抛错。 */
+  /* 状态条与 chips 行同属列表页顶栏，取 chips 的父节点即可；chips 尚未挂载时退回 st.nodes.bar，避免重建时抛错。 */
   function listBarOf(st) {
     var chips = st.nodes.chips;
     return (chips && chips.parentNode) || st.nodes.bar;
@@ -1415,9 +1364,7 @@
   function syncActivebar(st) {
     var bar = st.nodes.activebar;
     if (!bar) {
-      /* 曾被一键清除摘除（activebar 置 null）后又命中筛选：
-         必须在这里重建，否则 paint 每次都在 !bar 处提前 return，
-         状态条再也回不来（点「支出」后无反应）。 */
+      /* 曾被一键清除摘除（activebar 置 null）后又命中筛选：必须在这里重建，否则 paint 每次都在 !bar 处提前 return，状态条再也回不来（点「支出」后无反应）。 */
       if (!activebarVisible(st)) { return; }
       var fresh = buildActivebar(st);
       if (!fresh) { return; }
@@ -1507,10 +1454,9 @@
     return 12;
   }
 
-  /* ---------------- M4：媒体列三态（列表行） ---------------- */
+  /* ---------------- M4：媒体列三态（列表行）---------------- */
 
-  /* 唯一的媒体 DOM 入口：优先用 XZB.ui.kit.mediaCell（c-photo-cell 家族）；
-   * 老包缺件时退回同 class 的最小结构，保证三态在运行时都有可渲染的节点。 */
+  /* 唯一的媒体 DOM 入口：优先用 XZB.ui.kit.mediaCell（c-photo-cell 家族）；老包缺件时退回同 class 的最小结构，保证三态在运行时都有可渲染的节点。 */
   function mediaCellNode(spec) {
     var kit = kitApi();
     if (kit && typeof kit.mediaCell === 'function') {
@@ -1622,10 +1568,8 @@
     }
   }
 
-  /* 当前页一次性批量读取（CONTRACT §照片批量读取契约）：
-   *   · 只调一次 XZB.app.photos.get(ids)，绝不逐行 N+1；
-   *   · 回包必须校验 st.dead + renderToken，旧请求不得写进新页面；
-   *   · 返回长度不符 / 非数组 / ok:false 一律按失败态，坏包不炸。 */
+  /* 当前页一次性批量读取（CONTRACT §照片批量读取契约）：· 只调一次 XZB.app.photos.get(ids)，绝不逐行 N+1；· 回包必须校验 st.dead + renderToken，旧请求不得写进新页面；·
+     返回长度不符 / 非数组 / ok:false 一律按失败态，坏包不炸。 */
   function loadPhotosForRows(st, refs) {
     if (!st || st.dead || !refs || !refs.length) { return; }
     var ids = [];
@@ -1701,9 +1645,7 @@
     var cents = Math.abs(Number(tx.amountCents) || 0);
     var cat = maps.categories[tx.categoryId] || null;
     var title = isTransfer ? '转账' : (cat && cat.name ? String(cat.name) : '未分类');
-    /* P1 副标题拆行（SPEC R1–R4 / R8–R9）：
-       sub1 = 账户（转账为 from → to），sub2 = 备注；原 __sub 保留为视觉高度 0 的完整语义串。
-       账户查不到（不存在 / 已软删）⇒ sub1 显示「未指定账户」并挂 --muted（R3）。 */
+    /* P1 副标题拆行（SPEC R1–R4 / R8–R9）：sub1 = 账户（转账为 from → to），sub2 = 备注；原 __sub 保留为视觉高度 0 的完整语义串。账户查不到（不存在 / 已软删）⇒ sub1 显示「未指定账户」并挂 --muted（R3）。 */
     var fromAcc = tx.accountId ? (maps.accounts[tx.accountId] || null) : null;
     var fromName = fromAcc ? accountName(fromAcc) : '未指定账户';
     var fromMuted = !fromAcc;
@@ -1750,15 +1692,13 @@
         ? kit.photoAriaLabel(mainLabel, photoIds.length)
         : mainLabel + '，含 ' + photoIds.length + ' 张照片';
     }
-    /* 词表唯一：行容器与部件一律 s-ledger-item*（ledger.css 已有整套规则）。
-       外层 wrap 已是 s-ledger-item，这里不再重复挂；s-ledger-row 已作废。 */
+    /* 词表唯一：行容器与部件一律 s-ledger-item*（ledger.css 已有整套规则）。外层 wrap 已是 s-ledger-item，这里不再重复挂；s-ledger-row 已作废。 */
     var main = el('a', {
       className: 's-ledger-item__main',
       href: '#/ledger?detail=' + encodeURIComponent(String(tx.id || '')),
       'aria-label': mainLabel
     });
-    /* 链接原生支持 Enter；Space 在部分浏览器不触发 click，这里补齐
-       （与首页 a.s-home-row 的无障碍口径一致，见 home.js 的同一段注释） */
+    /* 链接原生支持 Enter；Space 在部分浏览器不触发 click，这里补齐 （与首页 a.s-home-row 的无障碍口径一致，见 home.js 的同一段注释） */
     main.addEventListener('keydown', function (event) {
       if (event.key !== ' ' && event.key !== 'Spacebar') { return; }
       event.preventDefault();
@@ -1781,10 +1721,8 @@
       text: title
     }));
     var subLine = el('span', { className: 's-ledger-item__sub c-row__sub u-ellipsis' });
-    /* sub1：账户行（转账 from → to）。muted = 账户缺失/已软删（R3）。
-       垫付待报销的行保留「待报」标记：原挂在旧副标题行 __sub 上、位于文本之前；
-       P1 拆行后 __sub 已退化为视觉高度 0，标记若留在其中就成了不可见，
-       故前移到第 1 行行首（第 2 行无备注时整体 hidden，标记会跟着消失，不能用）。 */
+    /* sub1：账户行（转账 from → to）。muted = 账户缺失/已软删（R3）。垫付待报销的行保留「待报」标记：原挂在旧副标题行 __sub 上、位于文本之前；P1 拆行后 __sub 已退化为视觉高度
+       0，标记若留在其中就成了不可见，故前移到第 1 行行首（第 2 行无备注时整体 hidden，标记会跟着消失，不能用）。 */
     var sub1Node = el('span', {
       className: 's-ledger-item__sub1' + (fromMuted || toMuted ? ' s-ledger-item__sub1--muted' : '')
     });
@@ -1795,8 +1733,7 @@
     /* sub2：备注行。为空整行不渲染（hidden ⇒ 高度 0，R2） */
     var sub2Node = el('span', { className: 's-ledger-item__sub2', text: noteText });
     if (!noteText) { sub2Node.hidden = true; }
-    /* 原 __sub 节点保留：仍是完整「账户 · 备注」串，但视觉高度为 0（R9 / A9）。
-       里面放纯文本，不加 role 以免与行级 aria-label 重复播报。 */
+    /* 原 __sub 节点保留：仍是完整「账户 · 备注」串，但视觉高度为 0（R9 / A9）。里面放纯文本，不加 role 以免与行级 aria-label 重复播报。 */
     subLine.appendChild(document.createTextNode(sub));
     mainText.appendChild(sub1Node);
     mainText.appendChild(sub2Node);
@@ -1881,13 +1818,9 @@
     var longFired = false;
     var longTimer = 0;
 
-    /* 2.26.3 方向仲裁：先交还浏览器，只在确认横滑时才接管（响应「首页滑不动、要特定角度」）。
-       2.17.1 的做法是未定方向时无条件 preventDefault 把滚动压住，等判断完再放手；
-       但「判断」用 1.25 倍阈值，斜向或先横后纵的手势有一段会一直判不出方向，
-       于是整段手势都在 preventDefault，页面被冻结，只有接近纯纵向才滚得动。
-       现在改成：未定方向不拦截，浏览器可立即起滚；横向意图足够明确
-       （偏离垂直 > 56°，即 ax > ay * 1.5）才 preventDefault 锁住整段手势。
-       已锁横滑、但用户其实在纵向用力且尚未真正拖动行时，及时收手放行滚动。 */
+    /* 2.26.3 方向仲裁：先交还浏览器，只在确认横滑时才接管（响应「首页滑不动、要特定角度」）。2.17.1 的做法是未定方向时无条件 preventDefault 把滚动压住，等判断完再放手；但「判断」用 1.25
+       倍阈值，斜向或先横后纵的手势有一段会一直判不出方向，于是整段手势都在 preventDefault，页面被冻结，只有接近纯纵向才滚得动。现在改成：未定方向不拦截，浏览器可立即起滚；横向意图足够明确 （偏离垂直 > 56°，即
+       ax > ay * 1.5）才 preventDefault 锁住整段手势。已锁横滑、但用户其实在纵向用力且尚未真正拖动行时，及时收手放行滚动。 */
     var touchAxis = '';       /* '' 未定 | 'x' 横滑（整段压住滚动） | 'y' 交还滚动 */
     var touchX = 0;
     var touchY = 0;
@@ -1909,8 +1842,19 @@
       var ax = Math.abs(event.touches[0].clientX - touchX);
       var ay = Math.abs(event.touches[0].clientY - touchY);
       if (touchAxis === 'x') {
-        if (!dragging && ay >= 10 && ay > ax * 1.5) {
+        /* 2.26.5：纵向意图后来居上时，即使行的横拖已经开始，也必须撤销横滑锁、把滚动交还浏览器。旧实现带了 !dragging 前置条件，而起手横移一旦超过 SWIPE_SLOP(8) 就会把 dragging
+           置真（pointermove 先于 touchmove 触发），此后无论怎样纵向用力都再也回不到滚动：touchAxis 永远停在 'x'，每个 touchmove 都被 preventDefault，整段手势被冻死
+           —— 正是「手指按在 账目条上起手、先横后纵就滑不动」的残留场景（2.26.3 的遗漏）。 */
+        if (ay >= 10 && ay > ax * 1.5) {
           touchAxis = 'y';   /* 纵向用力更明确：撤销横滑锁，交还滚动 */
+          if (dragging) {
+            /* 收掉已经拖开的行，避免「一边滚动一边把行拖开」；baseX 是本次手势 起点的位移，先恢复到它，不让拖到一半的 transform 残留。（手势交还滚动后若浏览器发 pointercancel，仍会按项目既有行为 收起已展开的行，这与纯纵向滚动时的表现一致。） */
+            dragging = false;
+            active = false;
+            clearLong();
+            surface.style.transition = '';
+            setX(baseX);
+          }
           return;
         }
         if (event.cancelable) { event.preventDefault(); }
@@ -1952,10 +1896,22 @@
       setX(0);
     }
 
+    /* 2.26.6：嵌入态纵向接管器用它收掉本行手势（不置 is-active、不弹长按、不吃点击）。moved=true 是为了吃掉随后合成的 click —— 一旦被当点击就会误进详情。 */
+    function cancelRow() {
+      if (!active && !dragging) { return; }
+      active = false;
+      dragging = false;
+      moved = true;
+      clearLong();
+      surface.style.transition = '';
+      close();
+    }
+
     wrap.addEventListener('pointerdown', function (event) {
       if (st.dead) { return; }
       if (event.pointerType === 'mouse' && event.button !== 0) { return; }
       if (event.target && event.target.closest && event.target.closest('.s-ledger-item__actions')) { return; }
+      if (st.embedded) { st.rowCancel = cancelRow; }
       active = true;
       dragging = false;
       moved = false;
@@ -2051,6 +2007,84 @@
     st.cleanups.push(clearLong);
   }
 
+  /* 2.26.6 嵌入态纵向接管：Chrome 把「先横后纵」在合成器层锁成横向后（累计横移 ≥12~16px）既不滚也发不出可取消 touchmove，只剩指针流，于是自己写 scrollTop 补纵向。判据两层：纵向意图（ay>ax*1.5）+ 原生没跟手（连续 2 帧 |ΔscrollTop|≤ay*0.35），只留前者会抢写（实测 E1 221→252）；取舍：接管期间无原生回弹，惯性 0.75/帧模拟。 */
+  function bindTakeover(st, scroller) {
+    var request = global.requestAnimationFrame; var cancel = global.cancelAnimationFrame;
+    var sx = 0; var sy = 0; var top0 = 0; var ey = 0; var et = 0; var y = 0; var hist = [];
+    var taken = false; var aborted = false; var div = 0; var frame = 0; var inertia = 0;
+    function clock() { return global.performance.now(); }
+    function maxTop() { var m = scroller.scrollHeight - scroller.clientHeight; return m > 0 ? m : 0; }
+    function stop() { if (inertia) { cancel(inertia); inertia = 0; } }
+    function onDown(e) {
+      if (st.dead || !st.root || !st.root.contains || !st.root.contains(e.target)) { return; }
+      stop();
+      sx = e.clientX; sy = e.clientY; y = sy; top0 = scroller.scrollTop;
+      taken = false; aborted = false; div = 0; hist.length = 0;
+    }
+    function onMove(e) {
+      if (st.dead) { return; }
+      if (!taken && !aborted) {
+        var ax = Math.abs(e.clientX - sx);
+        var ay = Math.abs(e.clientY - sy);
+        var vertical = ay >= 30 && ay > ax * 1.5;
+        /* 顶部向下让路给 home.js 的下拉刷新；原生跟手时也绝不接管 */
+        if (vertical && !(top0 <= 0 && e.clientY > sy) && Math.abs(scroller.scrollTop - top0) <= ay * 0.35) {
+          div += 1;
+          if (div >= 2) { taken = true; ey = e.clientY; et = scroller.scrollTop; if (st.rowCancel) { st.rowCancel(); } }
+        } else if (vertical) { aborted = true; } else { div = 0; }
+      }
+      if (!taken) { return; }
+      y = e.clientY;
+      hist.push({ y: y, t: clock() });
+      if (hist.length > 5) { hist.shift(); }
+      if (frame) { return; }
+      frame = request(function () {
+        frame = 0;
+        var n = et - (y - ey);                       /* rebase：engage 前划过的位移不补 */
+        scroller.scrollTop = n < 0 ? 0 : (n > maxTop() ? maxTop() : n);
+      });
+    }
+    function onUp() {
+      if (frame) { cancel(frame); frame = 0; }
+      if (!taken) { return; }
+      taken = false;
+      var last = hist[hist.length - 1];
+      if (!last || clock() - last.t > 60) { return; }           /* 松手前停住就没有惯性 */
+      var span = last.t - hist[0].t;
+      if (span <= 0 || span > 160) { return; }
+      var v = (hist[0].y - last.y) / span;                      /* px/ms，向上为正 */
+      if (v > 2.4) { v = 2.4; } else if (v < -2.4) { v = -2.4; } /* 速度上限 */
+      if (Math.abs(v) < 0.02) { return; }
+      var cap = Math.round(scroller.clientHeight * 0.5);         /* 单次惯性距离上限 */
+      var moved = 0;
+      var prev = clock();
+      (function step(t) {
+        var dt = t - prev; prev = t;
+        if (dt > 40) { dt = 40; }
+        var cur = scroller.scrollTop;
+        var m = maxTop();
+        var n = cur + v * dt;
+        v *= Math.pow(0.75, dt / 16.7);                          /* 0.75/帧：对齐原生 7~22px 量级 */
+        if (n <= 0) { n = 0; v = 0; } else if (n >= m) { n = m; v = 0; }
+        moved += Math.abs(n - cur);
+        scroller.scrollTop = n;
+        inertia = (Math.abs(v) > 0.02 && moved < cap && !st.dead) ? request(step) : 0;
+      })(prev);
+    }
+    scroller.addEventListener('pointerdown', onDown, { passive: true });
+    scroller.addEventListener('pointermove', onMove, { passive: true });
+    scroller.addEventListener('pointerup', onUp, { passive: true });
+    scroller.addEventListener('pointercancel', onUp, { passive: true });
+    return function () {
+      stop();
+      st.rowCancel = null;
+      scroller.removeEventListener('pointerdown', onDown);
+      scroller.removeEventListener('pointermove', onMove);
+      scroller.removeEventListener('pointerup', onUp);
+      scroller.removeEventListener('pointercancel', onUp);
+    };
+  }
+
   /* ---------------- 操作表 / 删除 ---------------- */
 
   function navigate(st, hash) {
@@ -2063,9 +2097,8 @@
 
   /* ---------------- 流水详情面板（N3）/ 删除 / 复制 ---------------- */
 
-  /* [D4-8] 清参用的 baseHash：五键参数一律取 live 状态（不取 URL 快照），detail 恒删。
-   * 路径优先取宿主给的 options.baseHash（首页传 '#/home…'），否则按当前视图拼；
-   * 编码一律经 XZB.router.hash（D7-2：禁止字符串拼接注入 query）。 */
+  /* [D4-8] 清参用的 baseHash：五键参数一律取 live 状态（不取 URL 快照），detail 恒删。路径优先取宿主给的 options.baseHash（首页传 '#/home…'），否则按当前视图拼；编码一律经
+     XZB.router.hash（D7-2：禁止字符串拼接注入 query）。 */
   function liveParams(st) {
     var params = {};
     if (isValidMonth(st.month)) { params.month = st.month; }
@@ -2212,9 +2245,8 @@
       toast('复制失败，请重试', { type: 'danger' });
       return;
     }
-    /* 修既有缺陷：原先是裸调 todayStr()，但本文件作用域内没有该函数（只有 dates.todayStr），
-     * 运行到这里会抛 ReferenceError ⇒「复制为新记录」整条链路不可用，C-2 也就无从谈。
-     * 改用本屏自己的 today()（内部已按 dates.todayStr → 本地日期兜底）；变量名不能再叫 today，否则 var 提升会遮蔽同名函数。 */
+    /* 修既有缺陷：原先是裸调 todayStr()，但本文件作用域内没有该函数（只有 dates.todayStr），运行到这里会抛 ReferenceError ⇒「复制为新记录」整条链路不可用，C-2
+       也就无从谈。改用本屏自己的 today()（内部已按 dates.todayStr → 本地日期兜底）；变量名不能再叫 today，否则 var 提升会遮蔽同名函数。 */
     var todayValue = today();
     var source = assign({}, tx, {
       id: undefined,
@@ -2224,9 +2256,8 @@
       deletedAt: null,
       reimburse: tx.type === 'expense' && tx.reimburse === 'pending' ? 'pending' : 'none'
     });
-    /* SPEC C-2 / PLAN §1.5 裁决 7 / UI.md §2.5.3 方案 A：复制品不得共享原流水的照片引用。
-     * photos 表无引用计数（PLAN §10-5），若复制品沿用 src.photoIds，删掉其中一条会把照片物理删掉，
-     * 另一条立刻变悬空引用 ⇒ 复制出的新流水 photoIds 恒为 []（照片不跟着复制）。 */
+    /* SPEC C-2 / PLAN §1.5 裁决 7 / UI.md §2.5.3 方案 A：复制品不得共享原流水的照片引用。photos 表无引用计数（PLAN §10-5），若复制品沿用
+       src.photoIds，删掉其中一条会把照片物理删掉，另一条立刻变悬空引用 ⇒ 复制出的新流水 photoIds 恒为 []（照片不跟着复制）。 */
     source.photoIds = [];
     var entity = null;
     if (schema && typeof schema.createTransaction === 'function') {
@@ -2262,7 +2293,7 @@
     });
   }
 
-  /* ---------------- M6：删除两段式（先确认，再软删） ---------------- */
+  /* ---------------- M6：删除两段式（先确认，再软删）---------------- */
 
   function deleteAmountText(tx) {
     var cents = Math.abs(Number(tx && tx.amountCents) || 0);
@@ -2353,8 +2384,7 @@
     setBusy(false);
   }
 
-  /* 第二段：唯一删除 commit 路径。只软删（deleted/deletedAt/updatedAt），
-   * 保留 photoIds 与 photos store —— 撤销后照片必须还能显示（SPEC A17/A19）。 */
+  /* 第二段：唯一删除 commit 路径。只软删（deleted/deletedAt/updatedAt），保留 photoIds 与 photos store —— 撤销后照片必须还能显示（SPEC A17/A19）。 */
   function doDelete(options) {
     var opts = options || {};
     var txId = String(opts.txId || '');
@@ -2426,8 +2456,7 @@
           }
         }
       });
-      /* 成功重绘由 ctx.commit 的 refresh→router.rerender 完成（日期组为空自然没有组头）。
-       * 深链来源还要清掉 ?detail，避免下一次进入又消费一次。 */
+      /* 成功重绘由 ctx.commit 的 refresh→router.rerender 完成（日期组为空自然没有组头）。深链来源还要清掉 ?detail，避免下一次进入又消费一次。 */
       if (hadDetail) { clearDetailParam(st); }
       else if (st && !st.dead) { paint(st); }
       return { ok: true };
@@ -3012,8 +3041,7 @@
     if (st && st.embedded === true) { return; }
     var text = titleOf(st);
     applyTitle(st, text);
-    /* render 期间新屏尚未挂载，ctx.setTitle 会落到上一屏标题上；挂载后补一次。
-     * 若此时已离开明细屏则放弃，避免误改别的屏标题。 */
+    /* render 期间新屏尚未挂载，ctx.setTitle 会落到上一屏标题上；挂载后补一次。若此时已离开明细屏则放弃，避免误改别的屏标题。 */
     global.setTimeout(function () {
       if (st.dead) { return; }
       var route = XZB.router && XZB.router.current ? XZB.router.current() : null;
@@ -3024,9 +3052,8 @@
 
   /* ---------------- 渲染 / 分页 ---------------- */
 
-  /* [D2-25] 吸顶偏移一律读实际计算值：首页没有 .app-nav，用常量 44 会多顶一段（A16）。
-   * 只有 getComputedStyle 不可用（测试桩）时才退回 options.stickyTop → .app-nav 高度兜底。
-   * 本函数内不得出现 embedded 分支：两态共用同一套算法。 */
+  /* [D2-25] 吸顶偏移一律读实际计算值：首页没有 .app-nav，用常量 44 会多顶一段（A16）。只有 getComputedStyle 不可用（测试桩）时才退回 options.stickyTop → .app-nav
+     高度兜底。本函数内不得出现 embedded 分支：两态共用同一套算法。 */
   function measureSticky(st) {
     if (!st || !st.nodes) { return; }
     var stickyTop = 0;
@@ -3048,8 +3075,7 @@
     }
   }
 
-  /* 2.26.4：吸顶日头只在「真的吸住」时挂 is-stuck，下沿才渐隐；
-     静止时若也渐隐，会把第一行内容压暗。 */
+  /* 2.26.4：吸顶日头只在「真的吸住」时挂 is-stuck，下沿才渐隐；静止时若也渐隐，会把第一行内容压暗。 */
   function syncStuck(st) {
     if (!st || st.dead || !st.nodes || !st.nodes.days) { return; }
     var heads = st.nodes.days.querySelectorAll('.s-ledger-day__head');
@@ -3102,8 +3128,7 @@
     }
     days.appendChild(fragment);
     st.rendered = end;
-    /* 本页所有 photoIds 已由 buildItem 收集到 st.photoRows；这里只发起一次批量读取。
-     * 先上屏再读：文字/金额立即可用，照片区停在 64px 骨架，不阻塞整页（CONTRACT §三态）。 */
+    /* 本页所有 photoIds 已由 buildItem 收集到 st.photoRows；这里只发起一次批量读取。先上屏再读：文字/金额立即可用，照片区停在 64px 骨架，不阻塞整页（CONTRACT §三态）。 */
     var refs = st.photoRows.splice(0);
     loadPhotosForRows(st, refs);
     return added;
@@ -3145,7 +3170,7 @@
 
   /* ---------------- 收支日历（D1 已删）：看每日节奏去统计页热力图 ---------------- */
 
-  /* ---------------- M5：深链 ?detail= 消费（render → 上屏 → paint 之后） ---------------- */
+  /* ---------------- M5：深链 ?detail= 消费（render → 上屏 → paint 之后）---------------- */
 
   function raf(fn) {
     if (global.requestAnimationFrame) { return global.requestAnimationFrame(fn); }
@@ -3177,8 +3202,7 @@
     openDetailSheet(st, target);
   }
 
-  /* paint 完成且 DOM 真正上屏后：先做一次 URL 回收，再消费深链。
-   * 必须等 swapDom，否则 flush 会把「旧屏 DOM 仍引用」的键误放、深链也会在 render 阶段抢跑。 */
+  /* paint 完成且 DOM 真正上屏后：先做一次 URL 回收，再消费深链。必须等 swapDom，否则 flush 会把「旧屏 DOM 仍引用」的键误放、深链也会在 render 阶段抢跑。 */
   function scheduleAfterPaint(st) {
     var token = st.renderToken;
     var attempts = 0;
@@ -3280,8 +3304,7 @@
     syncCancel(st);
   }
 
-  /* 滚动容器只认 .app-screen（[D2-30]：首页不得出现第二个滚动容器）。
-   * 首页可能先 render 再把宿主挂进文档，找不到时按帧重试（最多 30 帧，不新增全局监听）。 */
+  /* 滚动容器只认 .app-screen（[D2-30]：首页不得出现第二个滚动容器）。首页可能先 render 再把宿主挂进文档，找不到时按帧重试（最多 30 帧，不新增全局监听）。 */
   function bindScroll(st) {
     var tries = 0;
     function pick() {
@@ -3308,6 +3331,8 @@
 
       scroller.addEventListener('scroll', onScroll, { passive: true });
       st.cleanups.push(function () { scroller.removeEventListener('scroll', onScroll); });
+      /* 2.26.6：嵌入态才装纵向接管器（独立明细态不装，行为完全不变） */
+      if (st.embedded) { st.cleanups.push(bindTakeover(st, scroller)); }
     }
     function retry() {
       if (st.dead) { return; }
@@ -3381,7 +3406,7 @@
     st.cleanups.push(function () { try { observer.disconnect(); } catch (error) { /* 忽略 */ } });
   }
 
-  /* ---------------- 销毁 / controller（2.15.0 嵌入契约） ---------------- */
+  /* ---------------- 销毁 / controller（2.15.0 嵌入契约）---------------- */
 
   function teardownState(st) {
     if (!st) { return; }
@@ -3394,8 +3419,7 @@
     }
   }
 
-  /* [D2-18] destroy：① dead ② 跑完 cleanups ③ flushPhotoUrls ④ live 摘指针；② 起幂等（重复调用为空操作）。
-   * [D2-19] 不调 bloburl.releaseAll（路由级职责）；[D2-20] 不关任何 Sheet。 */
+  /* [D2-18] destroy：① dead ② 跑完 cleanups ③ flushPhotoUrls ④ live 摘指针；② 起幂等（重复调用为空操作）。[D2-19] 不调 bloburl.releaseAll（路由级职责）；[D2-20] 不关任何 Sheet。 */
   function destroyScreen(st) {
     if (!st || st.destroyed === true) { return; }
     st.destroyed = true;
@@ -3482,21 +3506,17 @@
 
   /* ---------------- 屏幕 ---------------- */
 
-  /**
-   * 2.15.0 明细屏：既独立成屏，也可被首页嵌入（DESIGN D2-* / D4-*）。
-   * @param {HTMLElement} root 宿主节点：嵌入态是首页里的容器 div，独立态是 .app-screen__body
-   * @param {object} ctx 路由上下文
-   * @param {object} [options] {embedded, baseHash, stickyTop, onMonthChange, onBudgetStatus}（缺省见 D2-5）
-   * @returns {object} controller（9 键，见 D2-11）
-   */
+  /** 2.15.0 明细屏：既独立成屏，也可被首页嵌入（DESIGN D2-* / D4-*）。
+   * @param {HTMLElement} root 宿主节点：嵌入态是首页容器 div，独立态是 .app-screen__body
+   * @param {object} ctx 路由上下文；@param {object} [options] {embedded, baseHash, stickyTop, onMonthChange, onBudgetStatus}
+   * @returns {object} controller（9 键，见 D2-11） */
   function render(root, ctx, options) {
     if (!root) { return null; }
     var opts = normalizeOptions(options);
     /* [D2-8] 单实例：第二次 render 必须先把旧实例置 dead 并跑完 cleanups */
     if (live) { teardownState(live); }
     runCleanups();
-    /* F31：整屏重建（路由切换 / commit 后 app 重建本屏）前释放本屏上一轮创建的 blob URL；
-     * 详情或查看器仍打开时自动推迟（它们可能正显示同一批 URL），本屏不做 releaseAll —— 路由级 releaseAll 归 app.js（PLAN §9.4）。 */
+    /* F31：整屏重建（路由切换 / commit 后 app 重建本屏）前释放本屏上一轮创建的 blob URL；详情或查看器仍打开时自动推迟（它们可能正显示同一批 URL），本屏不做 releaseAll —— 路由级 releaseAll 归 app.js（PLAN §9.4）。 */
     flushPhotoUrls();
 
     /* [D2-6]/[D2-7] 类名与标记一律打在宿主节点本身，不建中间壳（禁止 s-home-* 这类包裹层） */
@@ -3529,8 +3549,7 @@
     var controller = buildController(st, opts);
     st.controller = controller;
 
-    /* 一次性轻提示（N3）：左滑快捷操作不容易被发现。只给独立态——嵌入态首页已有自己的引导层，
-       UI.md:327 把这条留给前端定（非视觉阻塞）。 */
+    /* 一次性轻提示（N3）：左滑快捷操作不容易被发现。只给独立态——嵌入态首页已有自己的引导层，UI.md:327 把这条留给前端定（非视觉阻塞）。 */
     if (!st.embedded) {
       var app = appApi();
       var prefs = app && app.prefs ? app.prefs : null;
@@ -3548,8 +3567,7 @@
     title: '明细',
     subtitle: '全部流水',
     render: render,
-    /* F31 工具测试缝（只给 tools/_t20_selfcheck.cjs 用：纯函数单测 + 行渲染探针）。
-     * 不参与运行时逻辑，不被 app/router 读取；这里挂的是纯函数与纯构造函数，无状态、无 IO。 */
+    /* F31 工具测试缝（只给 tools/_t20_selfcheck.cjs 用：纯函数单测 + 行渲染探针）。不参与运行时逻辑，不被 app/router 读取；这里挂的是纯函数与纯构造函数，无状态、无 IO。 */
     photoTestKit: {
       photoIdList: photoIdList,
       badgePlan: badgePlan,

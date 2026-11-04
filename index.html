@@ -6644,15 +6644,21 @@ textarea::selection {
     calc(var(--sp-page) + var(--safe-left));
   color: inherit;
   text-decoration: none;
-  /* 2.17.1：原来是 pan-y，等于告诉浏览器「纵向滚动直接归你，不用等 JS」。
-     横向左滑只要带一点纵向抖动，浏览器就抢先开始滚动并发 pointercancel，
-     整行因此弹回、页面上下滑。改回 auto，让行上的非被动 touchmove 先判方向
-     （方向判定见 src/js/screens/ledger.js 的 bindGesture）。 */
+  /* 2.17.1：原本是 pan-y —— 横向左滑只要带纵向抖动，浏览器就抢先滚并发 pointercancel，
+     整行弹回。改回 auto，让行上的非被动 touchmove 先判方向（见 ledger.js 的 bindGesture）。 */
   touch-action: auto;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
   transition: background-color var(--dur-base) var(--ease-standard);
+}
+
+/* 2.26.6 只作用于嵌入首页的账目条（独立明细态不命中）：只允许纵向平移与双指缩放。
+   pinch-zoom 必须带上 —— 页面 viewport 没写 user-scalable=no，漏掉会把账目条区域的
+   双指缩放一起禁掉。横向留给行手势；「先横后纵」被合成器锁轴时由 ledger.js 的
+   接管器补纵向（见 bindTakeover），纯视觉属性一概不动。 */
+[data-ledger-embed="1"] .s-ledger-item {
+  touch-action: pan-y pinch-zoom;
 }
 
 @media (hover: hover) {
@@ -32465,7 +32471,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.26.4';
+  XZB.version = '2.26.6';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
