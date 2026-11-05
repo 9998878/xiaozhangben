@@ -310,6 +310,20 @@ regCase('6.3 privacy 回落附「去设置」chip（迭代4）', function () {
   check(ASSISTANT_JS.indexOf("'去设置'"), 'chip 文案应为「去设置」');
 });
 
+regCase('6.4 密钥超长/类型错归因 field:key，settings 提示细分（迭代5）', function () {
+  seedCompleteConfig();
+  let res = llm.setConfig({ key: new Array(302).join('x') });
+  checkEq(res && res.code, 'E_AS_NET_CONFIG', '超长 code');
+  checkEq(res && res.field, 'key', '超长 field 应为 key');
+  res = llm.setConfig({ key: 123 });
+  checkEq(res && res.field, 'key', '类型错 field 应为 key');
+  check(CORE_JS.indexOf('if (!aiWrite(cfg)) { return { ok: false, code: E.NET_CONFIG }; }') >= 0,
+    '写盘失败不应误标 field');
+  check(SETTINGS_JS.indexOf('密钥太长（上限 300 字符）') >= 0, 'settings 应有密钥超长提示');
+  check(CORE_JS.indexOf('AI_MAX_KEY = 300') >= 0 && SETTINGS_JS.indexOf('> 300') >= 0,
+    '300 常量应与 AI_MAX_KEY 同值（同步锚点）');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {

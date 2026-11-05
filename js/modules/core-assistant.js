@@ -2364,11 +2364,12 @@
       cfg.model = aiTrim(p.model, AI_MAX_MODEL);
     }
     if (hasOwn(p, 'key')) {
+      /* key 相关失败归因 field:key，不再误标 model（2.26.9 迭代5） */
       if (typeof p.key !== 'string' && p.key !== null) {
-        return { ok: false, code: E.NET_CONFIG, field: 'model' };
+        return { ok: false, code: E.NET_CONFIG, field: 'key' };
       }
       var wantKey = aiTrim(p.key, AI_MAX_KEY + 1);
-      if (wantKey.length > AI_MAX_KEY) { return { ok: false, code: E.NET_CONFIG, field: 'model' }; }
+      if (wantKey.length > AI_MAX_KEY) { return { ok: false, code: E.NET_CONFIG, field: 'key' }; }
       /* T06 密钥边界：UI 把 getConfig 的掩码（••••尾4）原样回传时视为「不改」，
          否则明文密钥会被自己的掩码覆盖（用户以为改成功，实际凭证已销毁） */
       if (wantKey.indexOf('••••') === 0) { wantKey = cfg.key; }
@@ -2382,7 +2383,8 @@
       cfg.noticeAt = (isFinite(at) && at > 0) ? at : 0;
     }
     /* v / redact 不接受外部改写：R-11 已删除脱敏档，字段只为旧数据形状兼容保留 */
-    if (!aiWrite(cfg)) { return { ok: false, code: E.NET_CONFIG, field: 'model' }; }
+    /* 写盘失败与任何表单字段无关，不误标 field（2.26.9 迭代5） */
+    if (!aiWrite(cfg)) { return { ok: false, code: E.NET_CONFIG }; }
     return { ok: true, cfg: llmConfigView() };
   }
 

@@ -3554,11 +3554,15 @@
       var res = null;
       try { res = api.setConfig(patch); } catch (error) { res = null; }
       if (!res || res.ok !== true) {
-        /* 缺协议是最常见的失败因（2.26.9）：直接点明原因，其余失败保持原提示。 */
+        /* 失败归因：缺协议 → 密钥超长（300 与 core-assistant AI_MAX_KEY 一致）→ 兜底（2.26.9） */
         var addr = String(inputs.baseURL.value || '').trim();
-        status.textContent = addr && addr.indexOf('://') === -1
-          ? '没保存：接口地址需以 http:// 或 https:// 开头'
-          : '没保存：检查接口地址与模型名';
+        var failMsg = '没保存：检查接口地址与模型名';
+        if (addr && addr.indexOf('://') === -1) {
+          failMsg = '没保存：接口地址需以 http:// 或 https:// 开头';
+        } else if (typed && typed.indexOf('••••') !== 0 && typed.length > 300) {
+          failMsg = '没保存：密钥太长（上限 300 字符）';
+        }
+        status.textContent = failMsg;
         return false;
       }
       markKey();
