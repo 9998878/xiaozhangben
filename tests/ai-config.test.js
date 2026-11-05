@@ -303,6 +303,13 @@ regCase('6.2 消费方映射源码断言：reasonOf/assistant 渲染/ai-insights
   check(CORE_JS.indexOf("NOT_CONFIGURED: 'E_AS_NOT_CONFIGURED'") >= 0 && CORE_JS.indexOf("E_AS_NOT_CONFIGURED: '还没配置联网模型，当前是本地模式'") >= 0, '既有码与文案应原样保留（只增不改）');
 });
 
+regCase('6.3 privacy 回落附「去设置」chip（迭代4）', function () {
+  check(ASSISTANT_JS.indexOf("if (turn.reason === 'privacy') {") >= 0, '渲染应有 privacy 分支');
+  check(/privacyJump[\s\S]{0,300}gotoSettings\(\)/.test(ASSISTANT_JS), 'privacy 分支应调用 gotoSettings');
+  check(ASSISTANT_JS.indexOf("'aria-label': '去设置：同意隐私告知'") >= 0, 'chip 应有无障碍标签');
+  check(ASSISTANT_JS.indexOf("'去设置'"), 'chip 文案应为「去设置」');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {

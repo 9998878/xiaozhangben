@@ -583,6 +583,16 @@
     }
     if (reasonLine) {
       body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: reasonLine }));
+      /* privacy（已配置未告知）：一行说明 + 一键去设置，闭环迭代3 的分码（2.26.9 迭代4） */
+      if (turn.reason === 'privacy') {
+        var privacyJump = el('div', { className: 's-assistant__opts' });
+        privacyJump.appendChild(el('button', {
+          className: 's-assistant__opt', type: 'button',
+          'aria-label': '去设置：同意隐私告知',
+          onclick: function () { gotoSettings(); }
+        }, ['去设置']));
+        body.appendChild(privacyJump);
+      }
     }
 
     if (turn.mode === 'fallback') {
