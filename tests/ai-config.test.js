@@ -251,6 +251,21 @@ regCase('4.3 测试连接预检 noticeAt=0：提示真实缺口而非「要填�
   check(gate > testBtn, '预检应在测试按钮定义之后（同一 handler 内）');
 });
 
+/* ============================== 用例 5：接口地址占位符与失败提示对齐协议要求 ============================== */
+
+section('用例 5：占位符与保存失败提示（2.26.9 迭代 1）');
+
+regCase('5.1 占位符示范带协议，与 aiNormalizeURL 的 http(s):// 要求一致', function () {
+  check(SETTINGS_JS.indexOf("'接口地址', 'https://api.example.com/v1'") >= 0, '占位符应以 https:// 开头');
+  check(SETTINGS_JS.indexOf("'接口地址', 'api.example.com/v1'") < 0, '不应再保留无协议示范');
+});
+
+regCase('5.2 保存失败时，缺协议输入点明原因，其余保持原提示', function () {
+  check(SETTINGS_JS.indexOf("addr.indexOf('://') === -1") >= 0, '应存在缺协议判定分支');
+  check(SETTINGS_JS.indexOf('接口地址需以 http:// 或 https:// 开头') >= 0, '应有协议提示文案');
+  check(SETTINGS_JS.indexOf('没保存：检查接口地址与模型名') >= 0, '其余失败应保持原提示');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {

@@ -3511,7 +3511,9 @@
     var inputs = {};
     var fields = h('div', { className: 's-settings-sheet' });
     var SPEC = [
-      ['baseURL', 'url', '接口地址', 'api.example.com/v1'],
+      /* 2.26.9：占位符对齐 aiNormalizeURL 的协议要求（必须 http(s):// 开头），
+         照示范输入不再必然归一化失败。 */
+      ['baseURL', 'url', '接口地址', 'https://api.example.com/v1'],
       ['model', 'text', '模型名', '如 gpt-4o-mini'],
       ['key', 'password', '密钥', '粘到这里，只存这台手机']
     ];
@@ -3550,7 +3552,14 @@
       if (typed && typed.indexOf('••••') !== 0) { patch.key = typed; }
       var res = null;
       try { res = api.setConfig(patch); } catch (error) { res = null; }
-      if (!res || res.ok !== true) { status.textContent = '没保存：检查接口地址与模型名'; return false; }
+      if (!res || res.ok !== true) {
+        /* 缺协议是最常见的失败因（2.26.9）：直接点明原因，其余失败保持原提示。 */
+        var addr = String(inputs.baseURL.value || '').trim();
+        status.textContent = addr && addr.indexOf('://') === -1
+          ? '没保存：接口地址需以 http:// 或 https:// 开头'
+          : '没保存：检查接口地址与模型名';
+        return false;
+      }
       markKey();
       status.textContent = '已保存';
       return true;
