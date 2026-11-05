@@ -510,14 +510,14 @@ test('4.11 「买 30」不因内置/种子别名黑名单之外的宽泛词误�
   check(NEW_IDS.indexOf(best.categoryId) < 0, '「买」不应路由到新分类，实际 ' + best.categoryId);
 });
 
-/* 大小写敏感性属于既有行为：小写 chatgpt 命中不了 'ChatGPT' 别名，
- * 记录实际路由结果，不算 FAIL（验收条款原文允许）。 */
+/* 大小写敏感性曾是既有行为（小写 chatgpt 命中不了 'ChatGPT' 别名）；
+ * 迭代 2 起匹配大小写不敏感，路由断言移至用例 10.1，此处仅固化金额解析。 */
 test('4.N 「chatgpt 20」（小写）解析成功，记录实际路由（观察项）', function () {
   const result = nlApi.parse('chatgpt 20', buildNlCtx());
   checkEq(result.ok, true, '小写 chatgpt 应能解析出金额');
   if (result.ok) {
     note('「chatgpt 20」实际路由 -> ' + result.best.categoryId +
-      '（nl 匹配大小写敏感，别名表存的是 ChatGPT；属既有行为，非本次改动引入）');
+      '（迭代2 起别名匹配大小写不敏感，路由已由用例 10.1 断言）');
   }
 });
 
@@ -719,6 +719,33 @@ test('9.3 EXTRA_ALIASES 含全部 12 个新 id，且 ca_social 词表已不含 �
   }
   check(extra.ca_social.indexOf('礼物') < 0, 'EXTRA_ALIASES.ca_social 不应再含「礼物」');
   check(extra.ca_social.indexOf('随礼') < 0, 'EXTRA_ALIASES.ca_social 不应再含「随礼」');
+});
+
+/* ============================== 用例 10（迭代2）：别名匹配大小写不敏感 ============================== */
+
+section('用例 10（迭代2）：别名匹配大小写不敏感（nl 与 resolveCategory 双路径）');
+
+test('10.1 nl：小写拉丁别名命中 ca_aifee', function () {
+  checkEq(parseCategory('chatgpt 20').categoryId, 'ca_aifee', 'chatgpt');
+  checkEq(parseCategory('openai 30').categoryId, 'ca_aifee', 'openai');
+  checkEq(parseCategory('claude 15').categoryId, 'ca_aifee', 'claude');
+  checkEq(parseCategory('gemini 25').categoryId, 'ca_aifee', 'gemini');
+  checkEq(parseCategory('ai 20').categoryId, 'ca_aifee', 'ai');
+});
+
+test('10.2 nl：纯 ASCII 词内子串不误中，CJK 毗邻正常命中', function () {
+  const email = parseCategory('email 20');
+  check(email.categoryId !== 'ca_aifee', 'email 不应误路由 ca_aifee，实际 ' + email.categoryId);
+  checkEq(parseCategory('ai课 30').categoryId, 'ca_aifee', 'ai课');
+});
+
+test('10.3 resolveCategory：小写别名命中、email 不误中（与 nl 同语义）', function () {
+  const cx = buildAssistantCx();
+  const resolve = sandbox.XZB.Core.assistant.resolveCategory;
+  checkEq(resolve('chatgpt 会员', 'expense', cx).id, 'ca_aifee', 'chatgpt');
+  checkEq(resolve('openai api 费', 'expense', cx).id, 'ca_aifee', 'openai');
+  check(resolve('email 费', 'expense', cx).id !== 'ca_aifee',
+    'email 不应误中，实际 ' + (resolve('email 费', 'expense', cx).id || '无'));
 });
 
 /* ============================== 汇总 ============================== */

@@ -417,8 +417,26 @@
     ca_settings: ['设置', '系统设置', '软件设置', '配置服务']
   };
 
+  /* 2.26.9 迭代2：别名匹配大小写不敏感，与 nl.findCategoryMatches 同语义——
+     等长小写副本匹配（个别 Unicode 小写会变长则回退精确匹配）；纯 ASCII
+     关键词要求两侧不是 ASCII 字母数字（'email' 里的 'ai' 不误中），
+     CJK 关键词维持子串语义。 */
+  function isAsciiAlnumCh(ch) {
+    return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
+  }
+
+  function isAllAsciiAlnum(s) {
+    if (!s) { return false; }
+    for (var i = 0; i < s.length; i++) {
+      if (!isAsciiAlnumCh(s.charAt(i))) { return false; }
+    }
+    return true;
+  }
+
   function resolveCategory(text, kind, cx) {
     var s = String(text || '');
+    var hay = s.toLowerCase();
+    var ci = hay.length === s.length;
     var best = null;
     var bestLen = 0;
     var i;
@@ -426,7 +444,19 @@
       var t = String(token || '').trim();
       if (!t) { return; }
       if (kind && cat.kind && cat.kind !== kind) { return; }
-      if (s.indexOf(t) < 0) { return; }
+      var pos = -1;
+      if (ci) {
+        var lw = t.toLowerCase();
+        if (lw.length === t.length) { pos = hay.indexOf(lw); }
+      }
+      if (pos < 0) { pos = s.indexOf(t); }
+      if (pos < 0) { return; }
+      /* 边界检查对精确/小写两条命中路径同样生效（种子名 'ai' 在 'email' 内
+         的老坑在精确路径下本就会误中）。 */
+      if (isAllAsciiAlnum(t)) {
+        var before = pos > 0 ? s.charAt(pos - 1) : '';
+        if (isAsciiAlnumCh(before) || isAsciiAlnumCh(s.charAt(pos + t.length))) { return; }
+      }
       if (t.length > bestLen || (t.length === bestLen && best && cat.sort < best.sort)) {
         best = cat;
         bestLen = t.length;

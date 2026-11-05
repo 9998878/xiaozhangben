@@ -1270,17 +1270,47 @@
     return dict;
   }
 
+  /* 2.26.9 迭代2：别名匹配大小写不敏感（'chatgpt' 命中 'ChatGPT'）。
+     纯 ASCII 关键词要求命中两侧不是 ASCII 字母数字——'email' 里的 'ai'
+     不误中，'ai课'/'chatgpt 20' 正常命中；CJK 关键词维持子串语义。 */
+  function isAsciiAlnumCh(ch) {
+    return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
+  }
+
+  function isAllAsciiAlnum(s) {
+    if (!s) { return false; }
+    for (var i = 0; i < s.length; i++) {
+      if (!isAsciiAlnumCh(s.charAt(i))) { return false; }
+    }
+    return true;
+  }
+
   function findCategoryMatches(work, blocked, dict) {
     var list = [];
+    var hay = work.toLowerCase();
+    var ci = hay.length === work.length; /* 个别 Unicode 小写会变长，此时该输入整体回退精确匹配 */
     for (var i = 0; i < dict.length; i++) {
       var entry = dict[i];
+      var keyword = entry.keyword;
+      var kw = keyword;
+      if (ci) {
+        var lower = keyword.toLowerCase();
+        if (lower.length === keyword.length) { kw = lower; }
+      }
+      var searchIn = kw === keyword ? work : hay;
+      var asciiWord = isAllAsciiAlnum(keyword);
       var from = 0;
       var pos;
-      while ((pos = work.indexOf(entry.keyword, from)) >= 0) {
-        var end = pos + entry.keyword.length;
-        if (!isBlocked(blocked, pos, end) && !isAccountSuffixAt(work, end)) {
+      while ((pos = searchIn.indexOf(kw, from)) >= 0) {
+        var end = pos + kw.length;
+        var ok = !isBlocked(blocked, pos, end) && !isAccountSuffixAt(work, end);
+        if (ok && asciiWord) {
+          var before = pos > 0 ? work.charAt(pos - 1) : '';
+          if (isAsciiAlnumCh(before) || isAsciiAlnumCh(work.charAt(end))) { ok = false; }
+        }
+        if (ok) {
           list.push({
-            start: pos, end: end, keyword: entry.keyword,
+            start: pos, end: end, keyword: keyword,
             cat: entry.cat, kind: entry.kind, sort: entry.sort, name: entry.name
           });
         }
