@@ -64,17 +64,34 @@
     'ca_repair',    // 维修
     'ca_elder',     // 长辈
     'ca_kids',      // 孩子
-    'ca_auto'       // 汽车（通勤刚需）
+    'ca_auto',      // 汽车（通勤刚需）
+    /* 2.26.9 扩充分类 */
+    'ca_express',     // 快递
+    'ca_laundry',     // 洗衣服
+    'ca_bathing',     // 洗澡
+    'ca_haircut',     // 理发
+    'ca_electricity', // 电费
+    'ca_settings'     // 设置
   ];
 
   /* 发展：服务长期目标 */
-  var BUCKET_DEVELOPMENT = ['ca_study', 'ca_office', 'ca_sports', 'ca_tools'];
+  var BUCKET_DEVELOPMENT = [
+    'ca_study', 'ca_office', 'ca_sports', 'ca_tools',
+    /* 2.26.9 扩充分类 */
+    'ca_books',     // 书籍
+    'ca_aifee',     // AI
+    'ca_documents'  // 资料
+  ];
 
   /* 享受：可压缩 */
   var BUCKET_ENJOYMENT = [
     'ca_fun', 'ca_game', 'ca_snack', 'ca_shopping', 'ca_clothes', 'ca_beauty',
     'ca_socialize', 'ca_social', 'ca_travel', 'ca_smoke', 'ca_lottery',
-    'ca_pet', 'ca_digital', 'ca_appliance', 'ca_household', 'ca_family', 'ca_donate'
+    'ca_pet', 'ca_digital', 'ca_appliance', 'ca_household', 'ca_family', 'ca_donate',
+    /* 2.26.9 扩充分类 */
+    'ca_gift_money', // 礼金
+    'ca_gift',       // 礼物
+    'ca_topup'       // 充值
   ];
 
   /* 一次性收入：分类命中即算 */

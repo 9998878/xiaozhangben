@@ -75,7 +75,10 @@
     'baby', 'elder', 'chat', 'plane', 'glass', 'plug', 'car', 'pet',
     'briefcase', 'hammer', 'heart', 'ticket', 'gamepad', 'wrench', 'washer',
     'family', 'salary', 'bonus', 'invest', 'parttime', 'redpacket',
-    'coins', 'dots', 'ellipsis'
+    'coins', 'dots', 'ellipsis',
+    /* 2.26.9 分类扩充：仅注册表缺失时的兜底，正常路径走 systemCategoryKeys() */
+    'envelope', 'package', 'recharge', 'shower', 'scissors', 'bolt', 'ai',
+    'file', 'settings'
   ];
 
   function systemIconChoices() {

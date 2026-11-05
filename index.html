@@ -15811,9 +15811,9 @@ textarea::selection {
       createCategory({ id: 'ca_home', kind: 'expense', name: '居住', icon: 'house', color: '#8E8E93', sort: 40, hidden: false, system: true, aliases: ['房租', '水电', '物业', '燃气', '宽带'] }, at),
       createCategory({ id: 'ca_fun', kind: 'expense', name: '娱乐', icon: 'game', color: '#AF52DE', sort: 50, hidden: false, system: true, aliases: ['电影', '游戏', '演出', '会员', '旅游'] }, at),
       createCategory({ id: 'ca_health', kind: 'expense', name: '医疗', icon: 'health', color: '#FF3B30', sort: 60, hidden: false, system: true, aliases: ['看病', '买药', '体检', '牙医'] }, at),
-      createCategory({ id: 'ca_study', kind: 'expense', name: '学习', icon: 'book', color: '#5856D6', sort: 70, hidden: false, system: true, aliases: ['书', '课程', '培训', '学费'] }, at),
+      createCategory({ id: 'ca_study', kind: 'expense', name: '学习', icon: 'book', color: '#5856D6', sort: 70, hidden: false, system: true, aliases: ['课程', '培训', '学费'] }, at),
       createCategory({ id: 'ca_comm', kind: 'expense', name: '通讯', icon: 'phone', color: '#34C759', sort: 80, hidden: false, system: true, aliases: ['话费', '流量', '手机费'] }, at),
-      createCategory({ id: 'ca_social', kind: 'expense', name: '人情', icon: 'gift', color: '#FF9500', sort: 90, hidden: false, system: true, aliases: ['红包', '礼物', '随礼', '请客'] }, at),
+      createCategory({ id: 'ca_social', kind: 'expense', name: '人情', icon: 'gift', color: '#FF9500', sort: 90, hidden: false, system: true, aliases: ['红包', '请客'] }, at),
       createCategory({ id: 'ca_other_expense', kind: 'expense', name: '其他', icon: 'ellipsis', color: '#8E8E93', sort: 100, hidden: false, system: true, aliases: ['其他', '杂项'] }, at),
       /* 2.5 扩充分类目录（2.2 已备好 36 个字形）：纯增量，老库经 ensureShape→mergeSeedById 补齐 */
       createCategory({ id: 'ca_daily', kind: 'expense', name: '日用', icon: 'daily', color: '#FF9500', sort: 110, hidden: false, system: true, aliases: ['日用品', '纸巾', '洗衣液', '超市', '洗手液'] }, at),
@@ -15822,7 +15822,7 @@ textarea::selection {
       createCategory({ id: 'ca_snack', kind: 'expense', name: '零食', icon: 'snack', color: '#FF2D55', sort: 140, hidden: false, system: true, aliases: ['奶茶', '甜品', '蛋糕', '饼干', '薯片'] }, at),
       createCategory({ id: 'ca_sports', kind: 'expense', name: '运动', icon: 'sport', color: '#5856D6', sort: 150, hidden: false, system: true, aliases: ['健身', '游泳', '跑步', '瑜伽'] }, at),
       createCategory({ id: 'ca_clothes', kind: 'expense', name: '服饰', icon: 'shirt', color: '#007AFF', sort: 160, hidden: false, system: true, aliases: ['衣服', '买衣服', '鞋', '裤子', '帽子'] }, at),
-      createCategory({ id: 'ca_beauty', kind: 'expense', name: '美容', icon: 'beauty', color: '#FF2D55', sort: 170, hidden: false, system: true, aliases: ['化妆品', '理发', '护肤', '美甲', '口红'] }, at),
+      createCategory({ id: 'ca_beauty', kind: 'expense', name: '美容', icon: 'beauty', color: '#FF2D55', sort: 170, hidden: false, system: true, aliases: ['化妆品', '护肤', '美甲', '口红'] }, at),
       createCategory({ id: 'ca_household', kind: 'expense', name: '居家', icon: 'sofa', color: '#8E8E93', sort: 180, hidden: false, system: true, aliases: ['家具', '沙发', '床品', '窗帘'] }, at),
       createCategory({ id: 'ca_kids', kind: 'expense', name: '孩子', icon: 'baby', color: '#FF9500', sort: 190, hidden: false, system: true, aliases: ['奶粉', '玩具', '亲子', '儿童'] }, at),
       createCategory({ id: 'ca_elder', kind: 'expense', name: '长辈', icon: 'elder', color: '#5856D6', sort: 200, hidden: false, system: true, aliases: ['给爸妈', '给父母', '赡养费', '孝敬'] }, at),
@@ -15840,6 +15840,21 @@ textarea::selection {
       createCategory({ id: 'ca_tools', kind: 'expense', name: '工具', icon: 'wrench', color: '#8E8E93', sort: 320, hidden: false, system: true, aliases: ['五金', '工具', '螺丝'] }, at),
       createCategory({ id: 'ca_appliance', kind: 'expense', name: '电器', icon: 'washer', color: '#007AFF', sort: 330, hidden: false, system: true, aliases: ['家电', '冰箱', '洗衣机', '空调'] }, at),
       createCategory({ id: 'ca_family', kind: 'expense', name: '亲友', icon: 'family', color: '#34C759', sort: 340, hidden: false, system: true, aliases: ['走亲戚', '亲戚', '看望'] }, at),
+      /* 2.26.9 扩充分类目录：纯增量，支出 sort 从 350 续排；老库经启动期目录同步
+         （loadInternal→catalogNeedsSync→syncCategoryCatalog→mergeSeedCategories）补齐。
+         别名每类不超过 schema.LIMITS.aliases(8) 个，超限会被 validateDb 判坏。 */
+      createCategory({ id: 'ca_books', kind: 'expense', name: '书籍', icon: 'book', color: '#5856D6', sort: 350, hidden: false, system: true, aliases: ['书籍', '买书', '图书', '小说', '漫画', '纸质书', '电子书'] }, at),
+      createCategory({ id: 'ca_gift_money', kind: 'expense', name: '礼金', icon: 'envelope', color: '#FF3B30', sort: 360, hidden: false, system: true, aliases: ['礼金', '随礼', '份子钱', '喜宴', '红包支出'] }, at),
+      createCategory({ id: 'ca_gift', kind: 'expense', name: '礼物', icon: 'gift', color: '#FF9500', sort: 370, hidden: false, system: true, aliases: ['礼物', '礼品', '生日礼物', '节日礼物', '伴手礼'] }, at),
+      createCategory({ id: 'ca_express', kind: 'expense', name: '快递', icon: 'package', color: '#FF9500', sort: 380, hidden: false, system: true, aliases: ['快递', '寄快递', '运费', '邮费', '顺丰', '菜鸟'] }, at),
+      createCategory({ id: 'ca_topup', kind: 'expense', name: '充值', icon: 'recharge', color: '#AF52DE', sort: 390, hidden: false, system: true, aliases: ['充值', '话费充值', '手机充值', '会员充值', '账户充值', '点卡', 'Q币'] }, at),
+      createCategory({ id: 'ca_laundry', kind: 'expense', name: '洗衣服', icon: 'washer', color: '#007AFF', sort: 400, hidden: false, system: true, aliases: ['洗衣服', '洗衣', '干洗', '衣物洗护', '洗鞋'] }, at),
+      createCategory({ id: 'ca_bathing', kind: 'expense', name: '洗澡', icon: 'shower', color: '#34C759', sort: 410, hidden: false, system: true, aliases: ['洗澡', '洗浴', '澡堂', '浴资'] }, at),
+      createCategory({ id: 'ca_haircut', kind: 'expense', name: '理发', icon: 'scissors', color: '#FF2D55', sort: 420, hidden: false, system: true, aliases: ['理发', '剪发', '美发', '烫发', '染发'] }, at),
+      createCategory({ id: 'ca_electricity', kind: 'expense', name: '电费', icon: 'bolt', color: '#FF9500', sort: 430, hidden: false, system: true, aliases: ['电费', '购电', '充电费', '电量', '阶梯电价'] }, at),
+      createCategory({ id: 'ca_aifee', kind: 'expense', name: 'ai', icon: 'ai', color: '#5856D6', sort: 440, hidden: false, system: true, aliases: ['AI', '人工智能', 'AI订阅', '大模型', 'ChatGPT', 'OpenAI', 'Claude', 'Gemini'] }, at),
+      createCategory({ id: 'ca_documents', kind: 'expense', name: '资料', icon: 'file', color: '#8E8E93', sort: 450, hidden: false, system: true, aliases: ['资料', '材料', '文档', '文件', '资料费', '文献', '论文下载'] }, at),
+      createCategory({ id: 'ca_settings', kind: 'expense', name: '设置', icon: 'settings', color: '#8E8E93', sort: 460, hidden: false, system: true, aliases: ['设置', '系统设置', '软件设置', '配置服务'] }, at),
       createCategory({ id: 'ca_salary', kind: 'income', name: '工资', icon: 'salary', color: '#34C759', sort: 10, hidden: false, system: true, aliases: ['工资', '发薪', '月薪', '薪水'] }, at),
       createCategory({ id: 'ca_bonus', kind: 'income', name: '奖金', icon: 'bonus', color: '#FF9500', sort: 20, hidden: false, system: true, aliases: ['奖金', '年终奖', '提成'] }, at),
       createCategory({ id: 'ca_invest', kind: 'income', name: '理财', icon: 'invest', color: '#007AFF', sort: 30, hidden: false, system: true, aliases: ['利息', '基金', '股票', '分红'] }, at),
@@ -15890,6 +15905,31 @@ textarea::selection {
     return list;
   }
 
+  /* 2.26.9 分类种子合并：在按 ID 去重之上追加「同类型同名跳过」保护——
+   * 用户可能已手工创建过与种子同名的自定义分类（如「书籍」），validateCategory
+   * 对同 kind 同 name（不同 id）报 E_CATEGORY_DUP，直接追加会让整库判坏、
+   * 启动/导入失败。同名时保留用户自己的分类、跳过该种子。 */
+  function mergeSeedCategories(list, seeds) {
+    var existingIds = Object.create(null);
+    var existingNames = Object.create(null);
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (!isObj(item)) { continue; }
+      if (typeof item.id === 'string' && item.id !== '') { existingIds[item.id] = true; }
+      if (typeof item.kind === 'string' && typeof item.name === 'string') {
+        existingNames[item.kind + '|' + item.name] = true;
+      }
+    }
+    for (var j = 0; j < seeds.length; j++) {
+      var seed = seeds[j];
+      if (!isObj(seed) || typeof seed.id !== 'string') { continue; }
+      if (existingIds[seed.id]) { continue; }
+      if (existingNames[seed.kind + '|' + seed.name]) { continue; }
+      list.push(seed);
+    }
+    return list;
+  }
+
   /* 修复导入/旧库：补齐设置与种子、归一化实体、丢弃未知字段。不负责校验。 */
   function ensureShape(input) {
     var raw = isObj(input) ? input : {};
@@ -15915,8 +15955,20 @@ textarea::selection {
     if (db.books.length === 0) { db.books.push(defaultBook(at)); }
     mergeSeedById(db.books, seeds.books);
     mergeSeedById(db.accounts, seeds.accounts);
-    mergeSeedById(db.categories, seeds.categories);
+    mergeSeedCategories(db.categories, seeds.categories);
+    upgradeSeedCategoryAliases(db.categories);
     upgradeSeedCategoryIcons(db.categories);
+    return db;
+  }
+
+  /* 2.26.9 同 Schema 分类目录同步（窄合并）：只补缺失的系统分类种子、清理旧默认
+   * 别名，不重建其他表、不归一化既有实体、不迁移流水——供 store.load 在
+   * schemaVersion 不变的库上补目录用（ensureShape 的全量 normalize 会连流水
+   * 字段一起重建，超出「只动分类元数据」的承诺，这里刻意不用它）。 */
+  function syncCategoryCatalog(db) {
+    if (!isObj(db) || !Array.isArray(db.categories)) { return db; }
+    mergeSeedCategories(db.categories, seedData().categories);
+    upgradeSeedCategoryAliases(db.categories);
     return db;
   }
 
@@ -15936,6 +15988,32 @@ textarea::selection {
       if (!category || category.system !== true) { continue; }
       var rule = SEED_ICON_UPGRADES[category.id];
       if (rule && category.icon === rule.from) { category.icon = rule.to; }
+    }
+    return list;
+  }
+
+  /* 2.26.9 别名归属调整：这些旧默认别名会让旧分类抢走本应归新分类的流水——
+   *   ca_study『书』→ ca_books、ca_beauty『理发』→ ca_haircut、
+   *   ca_social『礼物』→ ca_gift、『随礼』→ ca_gift_money。
+   * nl/categoryCompare 与 assistant resolveCategory 都是「最长命中优先、
+   * 平手取 sort 小者」，旧分类 sort 更小必赢。seedData 已同步摘除（createDb
+   * 不走 ensureShape，新装机必须生来干净）；本表只负责清存量老库里已落存的
+   * 旧别名。只清 system 分类的默认别名，不碰用户自建分类与历史流水。 */
+  var SEED_ALIAS_REMOVALS = {
+    ca_study: { '书': 1 },
+    ca_beauty: { '理发': 1 },
+    ca_social: { '礼物': 1, '随礼': 1 }
+  };
+
+  function upgradeSeedCategoryAliases(list) {
+    if (!Array.isArray(list)) { return list; }
+    for (var i = 0; i < list.length; i++) {
+      var category = list[i];
+      if (!category || category.system !== true) { continue; }
+      var rule = SEED_ALIAS_REMOVALS[category.id];
+      if (rule && Array.isArray(category.aliases)) {
+        category.aliases = category.aliases.filter(function (alias) { return !rule[alias]; });
+      }
     }
     return list;
   }
@@ -16265,6 +16343,7 @@ textarea::selection {
     validateDb: validateDb,
 
     ensureShape: ensureShape,
+    syncCategoryCatalog: syncCategoryCatalog,
     applyCategoryDelete: applyCategoryDelete,
 
     seedData: seedData,
@@ -16895,6 +16974,22 @@ textarea::selection {
     state = mode === 'memory' ? 'memory' : 'ready';
   }
 
+  /* 2.26.9 同 Schema 分类目录同步判定：seedData 里有、而库里没有的系统分类 id
+   * 即视为需要补齐。系统分类「删除」只是 hidden=true 软删（applyCategoryDelete），
+   * 实体仍在数组里，因此按 id 判存在不会复活用户删掉的分类。 */
+  function catalogNeedsSync(db) {
+    if (!isObject(db) || !Array.isArray(db.categories)) { return false; }
+    var seeds = schema.seedData().categories;
+    for (var i = 0; i < seeds.length; i++) {
+      var found = false;
+      for (var j = 0; j < db.categories.length; j++) {
+        if (isObject(db.categories[j]) && db.categories[j].id === seeds[i].id) { found = true; break; }
+      }
+      if (!found) { return true; }
+    }
+    return false;
+  }
+
   function loadInternal() {
     return open().then(function () {
       ensureChannel();
@@ -17037,6 +17132,42 @@ textarea::selection {
           }, function () {
             return corruptFailure(null);
           });
+        }
+        /* 2.26.9 同 Schema 分类目录同步：schemaVersion 不变、只新增系统分类时，
+           老库在启动加载期补齐分类目录（窄合并：只补缺失种子 + 清理旧默认别名，
+           不重建其他表、不改流水字段、不升 SCHEMA_VERSION）。同步后校验不过
+           （理论不可达）则退回加载原库，行为与旧版本一致。 */
+        if (catalogNeedsSync(value)) {
+          var synced = clone(value);
+          schema.syncCategoryCatalog(synced);
+          synced.appVersion = XZB.version;
+          synced.updatedAt = nowIso();
+          if (schema.validateDb(synced).ok) {
+            var syncStamp = synced.updatedAt;
+            return writeStateRecord({ key: STATE_KEY, value: clone(synced), savedAt: syncStamp })
+              .then(function () {
+                installCache(synced, syncStamp);
+                persistStorageOnce();
+                return {
+                  ok: true,
+                  data: clone(cache),
+                  meta: { source: 'synced', degraded: false, savedAt: syncStamp }
+                };
+              }, function () {
+                /* 同步落盘失败：目录已补齐就先给 App 用，下次启动再尝试落盘 */
+                installCache(synced, recordSavedAt);
+                return {
+                  ok: true,
+                  data: clone(cache),
+                  meta: {
+                    source: 'idb',
+                    degraded: false,
+                    savedAt: recordSavedAt,
+                    warnings: [messageOf('E_STORAGE_WRITE')]
+                  }
+                };
+              });
+          }
         }
         installCache(value, recordSavedAt);
         persistStorageOnce();
@@ -25677,7 +25808,11 @@ textarea::selection {
     coins: 1, ellipsis: 1, dots: 1, target: 1, tag: 1, award: 1,
     /* Morphicons 图标包：老版本留下的线性分类图标，命名不变、保持可用 */
     store: 1, coffee: 1, pizza: 1, truck: 1, package: 1, droplet: 1, building: 1,
-    headphones: 1, film: 1, graduation: 1, crown: 1, diamond: 1, scissors: 1
+    headphones: 1, film: 1, graduation: 1, crown: 1, diamond: 1, scissors: 1,
+    /* 2.26.9 分类扩充：recharge/shower/ai 为新增双色，bolt/file 复用现有字形。
+       settings 有意不进表——tab-settings 别名解析到同一 key（描边在 resolveName
+       之后按 CATEGORY_KEYS[key] 取），登记会把底部导航图标线宽 1.8 改成 1.75。 */
+    recharge: 1, shower: 1, ai: 1, bolt: 1, file: 1
   };
 
   /* 分类图标的两支画笔：
@@ -26627,6 +26762,19 @@ textarea::selection {
   /* 单色几何图标：闪电（水电） */
   PATHS['bolt'] = '<path d="M13.5 2.5 5 13.2h5.3L10.5 21.5 19 10.8h-5.3l-.2-8.3Z"/>';
 
+  /* 2.26.9 分类扩充新增的双色图标：充值（recharge）/ 洗澡（shower）/ AI（ai），
+     与上方双色分类图标同一套画法（A 局部填充 + S 描边，24×24、线宽 1.75）。 */
+  PATHS['recharge'] = A('M8 5.5h8v13H8z')
+    + S('M8 5.5h8A1.5 1.5 0 0 1 17.5 7v10A1.5 1.5 0 0 1 16 18.5H8A1.5 1.5 0 0 1 6.5 17V7A1.5 1.5 0 0 1 8 5.5Z')
+    + S('M12 9.2v4.2M9.9 11.3h4.2');
+  PATHS['shower'] = A('M5 10h9v3H5z')
+    + S('M4 10h11a3 3 0 0 0-6-4')
+    + S('M6 15v2M10 15v2M14 15v2');
+  PATHS['ai'] = A('M7 7.5h10v6H7z')
+    + S('M4 5h16v12H4zM9 20h6M12 17v3')
+    + S('M9.2 13.5 10.8 9.5l1.6 4M9.7 12h2.2')
+    + S('M14.6 9.5v4');
+
   /* ---------------- 自定义图标库落地 ----------------
    * 把 8 组 × 12 枚写进 PATHS，同时建一份元数据表：
    *   META[key] = { key, label, group, keywords, custom }
@@ -26662,7 +26810,9 @@ textarea::selection {
     'daily', 'carrot', 'fruit', 'snack', 'sport', 'shirt', 'beauty', 'sofa', 'baby', 'elder',
     'chat', 'plane', 'glass', 'plug', 'car', 'pet', 'briefcase', 'hammer', 'heart', 'ticket',
     'gamepad', 'wrench', 'washer', 'family', 'salary', 'bonus', 'invest', 'parttime',
-    'redpacket', 'coins', 'kit', 'cap', 'box', 'dots'
+    'redpacket', 'coins', 'kit', 'cap', 'box', 'dots',
+    /* 2.26.9 分类扩充：新分类用到的图标也进设置页候选 */
+    'envelope', 'package', 'recharge', 'shower', 'scissors', 'bolt', 'ai', 'file', 'settings'
   ];
 
   /* 系统分类图标的中文名：设置页的 aria-label 和候选格标签都从这里来，
@@ -26676,7 +26826,10 @@ textarea::selection {
     briefcase: '办公', hammer: '维修', heart: '捐赠', ticket: '彩票', gamepad: '游戏',
     wrench: '工具', washer: '电器', family: '亲友', salary: '工资', bonus: '奖金',
     invest: '理财', parttime: '兼职', redpacket: '红包', coins: '硬币', kit: '医疗箱',
-    cap: '学习', box: '其他'
+    cap: '学习', box: '其他',
+    /* 2.26.9 分类扩充新增候选（标签跟着主要用途走，同 hammer:'维修' 惯例） */
+    envelope: '礼金', package: '快递', recharge: '充值', shower: '洗澡',
+    scissors: '理发', bolt: '电费', ai: 'AI', file: '资料', settings: '设置'
   };
 
   (function registerSystemMeta() {
@@ -27878,6 +28031,10 @@ textarea::selection {
     ca_socialize: 10, ca_travel: 7, ca_smoke: 12, ca_digital: 5, ca_auto: 7,
     ca_pet: 8, ca_office: 11, ca_repair: 8, ca_donate: 6, ca_lottery: 3,
     ca_game: 5, ca_tools: 12, ca_appliance: 2, ca_family: 10,
+    /* 2.26.9 扩充分类的稳定色槽（新分类配色未动时命中，用户改色后走取色兜底） */
+    ca_books: 11, ca_gift_money: 6, ca_gift: 3, ca_express: 8,
+    ca_topup: 5, ca_laundry: 2, ca_bathing: 10, ca_haircut: 3,
+    ca_electricity: 1, ca_aifee: 11, ca_documents: 12, ca_settings: 12,
     ca_salary: 10, ca_bonus: 8, ca_invest: 2, ca_parttime: 11,
     ca_redpacket: 6, ca_other_income: 4
   };
@@ -32542,7 +32699,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.26.8';
+  XZB.version = '2.26.9';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};

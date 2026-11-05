@@ -50,7 +50,12 @@
     ca_kids: 'baby', ca_elder: 'elder', ca_socialize: 'chat', ca_travel: 'plane',
     ca_smoke: 'glass', ca_digital: 'plug', ca_auto: 'car', ca_pet: 'pet',
     ca_office: 'briefcase', ca_repair: 'hammer', ca_donate: 'heart', ca_lottery: 'ticket',
-    ca_game: 'gamepad', ca_tools: 'wrench', ca_appliance: 'washer', ca_family: 'family'
+    ca_game: 'gamepad', ca_tools: 'wrench', ca_appliance: 'washer', ca_family: 'family',
+    /* 2.26.9 扩充分类（与 schema 种子一一对应；旧库分类 icon 字段优先于此表） */
+    ca_books: 'book', ca_gift_money: 'envelope', ca_gift: 'gift',
+    ca_express: 'package', ca_topup: 'recharge', ca_laundry: 'washer',
+    ca_bathing: 'shower', ca_haircut: 'scissors', ca_electricity: 'bolt',
+    ca_aifee: 'ai', ca_documents: 'file', ca_settings: 'settings'
   };
   var HOLD_MS = 500;
 
