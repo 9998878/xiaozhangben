@@ -1152,14 +1152,16 @@
     } catch (error) { return null; }
   }
 
-  /* 四态右值（设计 §4.5）：未配置 / 已关闭·纯本地 / 未就绪·纯本地 / 已开启。主页面不放模型名。 */
+  /* 四态右值（设计 §4.5）：未配置 / 已关闭·纯本地 / 未就绪·纯本地 / 已开启。主页面不放模型名。
+     2.26.9 修复：getConfig 从未返回过 status 字段，旧判定恒走「未就绪」；
+     改用 llmConfigView 实际提供的 ready（=已开启且已同意隐私告知）。 */
   function llmRowValue() {
     var cfg = llmCfg();
     if (!cfg) { return '未配置 · 纯本地'; }
     var configured = cfg.hasKey === true && cfg.baseURL && cfg.model;
     if (!configured) { return '未配置 · 纯本地'; }
     if (cfg.enabled !== true) { return '已关闭 · 纯本地'; }
-    if (cfg.status !== 'ok') { return '未就绪 · 纯本地'; }
+    if (cfg.ready !== true) { return '未就绪 · 纯本地'; }
     return '已开启';
   }
 
@@ -3592,6 +3594,27 @@
         return true;
       }
     }));
+    /* 2.26.9 修复：noticeAt（隐私告知时间戳）此前只能在小助手/AI 解读页的弹卡里
+       写入，设置页没有任何入口——用户在本文填齐三项后「测试连接」会被
+       core-assistant 的出站前置门（A28，noticeAt=0 不发请求）拦下，且错误文案
+       误报成「地址、模型、密钥要填齐」。这里补一个与弹卡同语义的告知开关，
+       同意即写 noticeAt，与 assistant.js acceptNotice / insights.js 的口径一致。 */
+    list.appendChild(switchRow(ctx, {
+      icon: 'shield', title: '同意隐私告知',
+      sub: '知悉并同意：开启后，当轮原话与账户名称会发送给你配置的模型服务；密钥只存在本机',
+      checked: Number(cfg.noticeAt) > 0,
+      onChange: function (next) {
+        var api = llmApi();
+        if (!api || typeof api.setConfig !== 'function') { return false; }
+        var res = null;
+        try { res = api.setConfig({ noticeAt: next ? Date.now() : 0 }); } catch (error) { res = null; }
+        if (!res || res.ok !== true) { toast(ctx, '保存失败，请重试', { type: 'danger' }); return false; }
+        status.textContent = next
+          ? '已同意：可以测试连接；小助手联网不再重复询问'
+          : '已撤回：联网功能停用，可随时再次同意';
+        return true;
+      }
+    }));
     list.appendChild(switchRow(ctx, {
       icon: 'eye', title: '显示密钥', sub: '只在本次打开时明文显示', checked: false,
       onChange: function (next) { inputs.key.type = next ? 'text' : 'password'; return true; }
@@ -3608,6 +3631,12 @@
       var api = llmApi();
       if (!api || typeof api.test !== 'function' || !apply()) {
         status.textContent = '地址、模型、密钥要填齐';
+        return;
+      }
+      /* A28：测试连接是出站请求，未同意隐私告知（noticeAt=0）不发。
+         提前说明真实缺口，不再沿用「要填齐」的误导文案（2.26.9 修复）。 */
+      if (Number((llmCfg() || {}).noticeAt) <= 0) {
+        status.textContent = '三项已填齐。先在上方同意隐私告知，再测试连接';
         return;
       }
       busy = true;
