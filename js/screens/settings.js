@@ -3467,7 +3467,8 @@
   /* ---------------- C 组子页 #/settings/ai：在线模型 ---------------- */
 
   var AI_ERR_TEXT = {
-    E_AS_NOT_CONFIGURED: '地址、模型、密钥要填齐', E_AS_NET_CONFIG: '配置不合法，检查地址与模型名',
+    E_AS_NOT_CONFIGURED: '地址、模型、密钥要填齐', E_AS_NOT_ACKED: '已配置：先同意隐私告知，再测试连接',
+    E_AS_NET_CONFIG: '配置不合法，检查地址与模型名',
     E_AS_NET_TIMEOUT: '连接超时，检查网络或地址', E_AS_NET_BAD: '返回内容看不懂，换一个模型试试',
     E_AS_NET_OFFLINE: '当前没有网络'
   };

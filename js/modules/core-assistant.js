@@ -71,6 +71,7 @@
     /* 联网（DESIGN §0.8 / §2.3）：新增码只增不改，既有 15 个码名与文案保持原样 */
     NOT_CONFIGURED: 'E_AS_NOT_CONFIGURED',
     AI_DISABLED: 'E_AS_AI_DISABLED',
+    NOT_ACKED: 'E_AS_NOT_ACKED',
     NET_CONFIG: 'E_AS_NET_CONFIG',
     NET_TIMEOUT: 'E_AS_NET_TIMEOUT',
     NET_RATE: 'E_AS_NET_RATE',
@@ -94,6 +95,7 @@
     E_AS_UNKNOWN: '这句我还听不懂，换个说法或点下面的快捷入口',
     E_AS_NOT_CONFIGURED: '还没配置联网模型，当前是本地模式',
     E_AS_AI_DISABLED: '联网已关闭，当前是本地模式',
+    E_AS_NOT_ACKED: '已配置联网模型：先同意隐私告知再联网（小助手或设置页均可）',
     E_AS_NET_CONFIG: '联网配置不完整或不合法（检查地址/模型/密钥）',
     E_AS_NET_TIMEOUT: '联网超时，已用本地模式继续',
     E_AS_NET_RATE: '模型太忙（限流），已用本地模式继续',
@@ -2709,7 +2711,8 @@
 
   function llmNotReadyCode(cfg) {
     if (!aiConfigured(cfg)) { return E.NOT_CONFIGURED; }
-    if (Number(cfg.noticeAt) <= 0) { return E.NOT_CONFIGURED; }
+    /* 已配置但未同意隐私告知：分码提示真实缺口，不再混用「没配置」（2.26.9 迭代3） */
+    if (Number(cfg.noticeAt) <= 0) { return E.NOT_ACKED; }
     if (cfg.enabled !== true) { return E.AI_DISABLED; }
     return '';
   }
@@ -2770,9 +2773,9 @@
     if (!aiConfigured(cfg)) {
       return Promise.resolve({ ok: false, code: E.NOT_CONFIGURED });
     }
-    /* 测试连接同样是出站请求：没告知过（noticeAt=0）就不发（A28） */
+    /* 测试连接同样是出站请求：没告知过（noticeAt=0）就不发（A28）；分码见迭代3 */
     if (Number(cfg.noticeAt) <= 0) {
-      return Promise.resolve({ ok: false, code: E.NOT_CONFIGURED });
+      return Promise.resolve({ ok: false, code: E.NOT_ACKED });
     }
     var body;
     try {
@@ -3330,6 +3333,7 @@
     if (code === E.NET_RATE) { return 'rate'; }
     if (code === E.NET_BAD) { return 'bad'; }
     if (code === E.AI_DISABLED) { return 'disabled'; }
+    if (code === E.NOT_ACKED) { return 'privacy'; }
     if (code === E.NOT_CONFIGURED || code === E.NET_CONFIG) {
       var offline = false;
       try { offline = !!(global.navigator && global.navigator.onLine === false); } catch (error) { offline = false; }
@@ -3373,7 +3377,10 @@
     return new Promise(function (resolve) {
       var cfg = aiRead();
       if (!aiConfigured(cfg) || cfg.enabled !== true || Number(cfg.noticeAt) <= 0) {
-        resolve(localReply(text, state, ctx, cfg.enabled === true ? 'config' : 'disabled'));
+        /* 回落原因三分：关了=disabled、没配齐=config、配齐但未告知=privacy（迭代3） */
+        var gateReason = cfg.enabled !== true ? 'disabled'
+          : (!aiConfigured(cfg) ? 'config' : 'privacy');
+        resolve(localReply(text, state, ctx, gateReason));
         return;
       }
       var payload = {

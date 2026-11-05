@@ -19,6 +19,10 @@
  *   - 「测试连接」在 noticeAt=0 时提前说明真实缺口，不再误报「要填齐」；
  *   - llmRowValue 改用 getConfig 实际提供的 ready 字段判定四态。
  *
+ * 迭代3（2.26.9）：「已配置但未告知」分码 E_AS_NOT_ACKED（只增不改），
+ * reasonOf → privacy → assistant 文案「已配置在线模型：先同意隐私告知再联网」，
+ * 不再说「未启用在线模型」；ai-insights/settings 映射同步。用例 6 固化。
+ *
  * 运行：node tests/ai-config.test.js
  *
  * 加载方式：core-assistant.js 头部无加载时依赖（全懒取），node vm 沙箱直接执行，
@@ -112,7 +116,10 @@ vm.runInContext(
 );
 
 const llm = sandbox.XZB.Core.assistant.llm;
+const CORE_JS = fs.readFileSync(path.join(ROOT, 'js/modules/core-assistant.js'), 'utf8');
 const SETTINGS_JS = fs.readFileSync(path.join(ROOT, 'js/screens/settings.js'), 'utf8');
+const ASSISTANT_JS = fs.readFileSync(path.join(ROOT, 'js/screens/assistant.js'), 'utf8');
+const AI_INSIGHTS_JS = fs.readFileSync(path.join(ROOT, 'js/modules/ai-insights.js'), 'utf8');
 const AI_KEY_VALUE = 'xzb.ai.v1';
 
 /* 预置「用户已填齐三项并打开开关」的状态（设置页 apply() + toggle 的真实 patch 口径） */
@@ -142,9 +149,10 @@ regCase('1.2 ready()=false：设置主页四态判定落「未就绪」', functi
   checkEq(llm.ready(), false, 'ready()');
 });
 
-regCase('1.3 test() 返回 E_AS_NOT_CONFIGURED——UI 映射成「地址、模型、密钥要填齐」（误导源头）', async function () {
+/* 迭代3 起「已配置但未告知」分码 E_AS_NOT_ACKED，不再与「没配置」混用误导。 */
+regCase('1.3 test() 在已配置+未告知时返回 E_AS_NOT_ACKED（分码后如实点名缺口）', async function () {
   const res = await llm.test();
-  checkEq(res && res.code, 'E_AS_NOT_CONFIGURED', 'test().code');
+  checkEq(res && res.code, 'E_AS_NOT_ACKED', 'test().code');
   checkEq(res && res.ok, false, 'test().ok');
 });
 
@@ -166,7 +174,7 @@ regCase('2.2 setConfig({noticeAt:0}) 撤回后 ready()=false，test() 重新被�
   llm.setConfig({ noticeAt: 0 });
   checkEq(llm.ready(), false, 'ready()');
   const res = await llm.test();
-  checkEq(res && res.code, 'E_AS_NOT_CONFIGURED', 'test().code');
+  checkEq(res && res.code, 'E_AS_NOT_ACKED', 'test().code');
 });
 
 regCase('2.3 noticeAt 只认正数：负数/NaN/字符串数字之外的值回落 0', function () {
@@ -264,6 +272,35 @@ regCase('5.2 保存失败时，缺协议输入点明原因，其余保持原提�
   check(SETTINGS_JS.indexOf("addr.indexOf('://') === -1") >= 0, '应存在缺协议判定分支');
   check(SETTINGS_JS.indexOf('接口地址需以 http:// 或 https:// 开头') >= 0, '应有协议提示文案');
   check(SETTINGS_JS.indexOf('没保存：检查接口地址与模型名') >= 0, '其余失败应保持原提示');
+});
+
+/* ============================== 用例 6：迭代3 分码（E_AS_NOT_ACKED） ============================== */
+
+section('用例 6：E_AS_NOT_ACKED 分码与消费方映射（2.26.9 迭代3）');
+
+regCase('6.1 分码矩阵：未配置/已配置未告知/关开关 各归各码，chat 门同语义', async function () {
+  ls.removeItem(AI_KEY_VALUE);
+  let res = await llm.test();
+  checkEq(res && res.code, 'E_AS_NOT_CONFIGURED', '未配置 → NOT_CONFIGURED');
+  seedCompleteConfig();
+  res = await llm.test();
+  checkEq(res && res.code, 'E_AS_NOT_ACKED', '已配置+未告知 → NOT_ACKED');
+  const chatGate = await llm.chat([{ role: 'user', content: 'hi' }]);
+  checkEq(chatGate && chatGate.code, 'E_AS_NOT_ACKED', 'chat 门同码且不出网');
+  llm.setConfig({ noticeAt: Date.now() });
+  llm.setConfig({ enabled: false });
+  const chatGate2 = await llm.chat([{ role: 'user', content: 'hi' }]);
+  checkEq(chatGate2 && chatGate2.code, 'E_AS_AI_DISABLED', '配置齐+已告知+关开关 → AI_DISABLED');
+});
+
+regCase('6.2 消费方映射源码断言：reasonOf/assistant 渲染/ai-insights/settings', function () {
+  check(CORE_JS.indexOf("if (code === E.NOT_ACKED) { return 'privacy'; }") >= 0, 'reasonOf 应把 NOT_ACKED 映射 privacy');
+  check(CORE_JS.indexOf("gateReason = cfg.enabled !== true ? 'disabled'") >= 0, 'respondRemote 回落原因应三分');
+  check(ASSISTANT_JS.indexOf("privacy: '已配置在线模型：先同意隐私告知再联网'") >= 0, 'REASON_TEXT 应有 privacy 文案');
+  check(ASSISTANT_JS.indexOf("turn.reason === 'privacy'") >= 0, '渲染条件应包含 privacy');
+  check(AI_INSIGHTS_JS.indexOf("code === 'E_AS_NOT_ACKED'") >= 0, 'ai-insights 映射应含 NOT_ACKED');
+  check(SETTINGS_JS.indexOf("E_AS_NOT_ACKED: '已配置：先同意隐私告知，再测试连接'") >= 0, 'settings AI_ERR_TEXT 应含 NOT_ACKED');
+  check(CORE_JS.indexOf("NOT_CONFIGURED: 'E_AS_NOT_CONFIGURED'") >= 0 && CORE_JS.indexOf("E_AS_NOT_CONFIGURED: '还没配置联网模型，当前是本地模式'") >= 0, '既有码与文案应原样保留（只增不改）');
 });
 
 /* ============================== 汇总 ============================== */

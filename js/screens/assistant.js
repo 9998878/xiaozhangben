@@ -57,6 +57,7 @@
     rate: '服务繁忙（限流），已改用本地解析',
     config: '未启用在线模型，当前用本地解析',
     disabled: '未启用在线模型，当前用本地解析',
+    privacy: '已配置在线模型：先同意隐私告知再联网',
     bad: '返回内容无法识别，已改用本地解析',
     offline: '当前没有网络，已改用本地解析',
     none: ''
@@ -577,7 +578,7 @@
     var reasonLine = '';
     if (turn.mode === 'fallback') {
       reasonLine = REASON_TEXT[turn.reason] || '在线解析没有成功，已改用本地解析';
-    } else if (turn.mode === 'local' && (turn.reason === 'disabled' || turn.reason === 'config')) {
+    } else if (turn.mode === 'local' && (turn.reason === 'disabled' || turn.reason === 'config' || turn.reason === 'privacy')) {
       reasonLine = REASON_TEXT[turn.reason] || '未启用在线模型，当前用本地解析';
     }
     if (reasonLine) {

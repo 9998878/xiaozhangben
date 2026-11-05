@@ -1108,7 +1108,8 @@
         }
         if (code === 'E_AS_NET_TIMEOUT') { return { ok: false, reason: 'timeout' }; }
         if (code === 'E_AS_NET_RATE') { return { ok: false, reason: 'rate' }; }
-        if (code === 'E_AS_NOT_CONFIGURED' || code === 'E_AS_AI_DISABLED') { return { ok: false, reason: 'config' }; }
+        /* E_AS_NOT_ACKED（已配置未告知）也归 config 兜底：insights 页有自己的隐私卡前置，不扩 UI */
+        if (code === 'E_AS_NOT_CONFIGURED' || code === 'E_AS_AI_DISABLED' || code === 'E_AS_NOT_ACKED') { return { ok: false, reason: 'config' }; }
         return { ok: false, reason: 'bad' };
       }
 
