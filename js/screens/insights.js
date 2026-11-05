@@ -1918,7 +1918,7 @@
     holder.appendChild(iconNode('chart-line', 40));
     empty.appendChild(holder);
     empty.appendChild(el('p', { className: 'c-empty__title', text: '还没有账单' }));
-    empty.appendChild(el('p', { className: 'c-empty__desc', text: '记几笔后，这里会自动生成收支结构与变化解读。' }));
+    empty.appendChild(el('p', { className: 'c-empty__desc', text: '记几笔后，这里会自动生成收支结构、变化解读和 AI 建议。' }));
     /* 必须是真链接：button 上补 href 不会导航 */
     var cta = buttonNode('记一笔', { href: '#/add', className: 'c-btn c-btn--primary c-empty__action', icon: 'plus' });
     empty.appendChild(cta);
@@ -1931,7 +1931,7 @@
     card.appendChild(el('p', { className: 's-insights-empty__title', text: '该账期暂无记录' }));
     card.appendChild(el('p', {
       className: 's-insights-empty__text',
-      text: monthLabel(S.month) + ' 没有任何收支。可以换一个账期，或先记一笔。'
+      text: monthLabel(S.month) + ' 没有任何收支。可以换一个账期，或先记一笔；有账单后这里会自动生成收支结构、变化解读和 AI 建议。'
     }));
     var row = el('div', { className: 's-insights-empty__actions' });
     if (S.month !== currentMonth() || S.range !== 'month') {
