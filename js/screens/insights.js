@@ -1,9 +1,11 @@
 /* 小账本 2.0 · js/screens/insights.js
  * 账单解读（2.16.0）：把「看数据」升级为「理解数据」。
  * 结构：账期筛选 → 核心结论 → 收支摘要 → 消费结构（环图）→ 收支变化（六个月柱图）
- *       → 值得留意（本地规则）→ 行动建议。
+ *       → AI 月度解读（第 2 轮）→ 值得留意（本地规则）→ 行动建议。
  * 契约：XZB.screens.register('insights', { title, subtitle, render, destroy })
- * 依赖：XZB.core.{dates,money,stats}、XZB.ui.{icons,kit,charts,sheet}、XZB.app
+ * 依赖：XZB.core.{dates,money,stats}、XZB.core.aiInsights；
+ *       按需加载：XZB.core.assistant.llm（不在本屏 DEPS，首次点「生成解读」时 ensure）
+ *       XZB.ui.{icons,kit,charts,sheet}、XZB.app
  * 硬规则：不碰 IndexedDB / localStorage；只读 ctx.db；金额一律整数分；
  *         统计口径与统计屏一致（deleted / 账本 / 类型 / 金额 / 日期 五道过滤）；
  *         规则集中在本文件 RULES 常量里，结论只陈述事实，不做道德评判。
@@ -84,7 +86,15 @@
     dead: false,
     lastSig: null,
     suppressRestore: false,
-    sheetRestore: null
+    sheetRestore: null,
+    /* AI 月度解读（第 2 轮）：缓存跨 destroy 保留（防重复计费）；busy 跨渲染重建保持 */
+    aiCache: {},
+    aiBusy: false,
+    aiBusyMonth: '',
+    aiRetryHint: '',
+    /* core-assistant 按需加载态（不在本屏 DEPS 里） */
+    aiModuleLoading: false,
+    aiModuleError: false
   };
 
   /* ---------------- 基础工具 ---------------- */
@@ -1575,6 +1585,330 @@
     return box;
   }
 
+  /* ---------------- AI 月度解读（第 2 轮） ----------------
+   * 聚合与请求都封装在 XZB.core.aiInsights（buildMonthlyMetrics / requestAiInsights /
+   * buildFallbackInsights），本屏只负责：出卡片、防连点、缓存结果。
+   * 缓存键 = 账本 id + '|' + 月份，跨 destroy 保留（防重复计费）；请求在途态跨重渲染保持。
+   */
+
+  function aiModule() {
+    var core = XZB.core || null;
+    return core && core.aiInsights && typeof core.aiInsights.buildMonthlyMetrics === 'function'
+      ? core.aiInsights
+      : null;
+  }
+
+  function aiLlm() {
+    var core = XZB.core || null;
+    return core && core.assistant && core.assistant.llm && typeof core.assistant.llm.getConfig === 'function'
+      ? core.assistant.llm
+      : null;
+  }
+
+  /* core-assistant 不在本屏 DEPS 里：首次用到时按需拉取，成功/失败都重渲染一次，
+     让 aiCard 的常规分支（去设置 / 隐私告知 / 生成）接管。失败静默重渲染＝按钮回到可点态。 */
+  function aiEnsureAssistant() {
+    if (S.aiModuleLoading) { return; }
+    var chunks = XZB.chunks || null;
+    if (!chunks || typeof chunks.ensure !== 'function') { return; }
+    S.aiModuleLoading = true;
+    repaint(false);
+    chunks.ensure('core-assistant').then(function () {
+      S.aiModuleLoading = false;
+      if (!S.dead) { repaint(false); }
+    }, function () {
+      S.aiModuleLoading = false;
+      S.aiModuleError = true;
+      if (!S.dead) { repaint(false); }
+    });
+  }
+
+  /* LLM 通道尚未加载时的占位卡：只说明 + 一个按钮，不做任何网络请求 */
+  function aiLazyCard() {
+    var card = moduleCard('AI 月度解读', null, 's-insights-ai');
+    if (S.aiModuleLoading) {
+      card.appendChild(el('p', {
+        className: 's-insights-ai__hint',
+        'aria-live': 'polite',
+        text: '正在加载模型连接模块…'
+      }));
+      return card;
+    }
+    card.appendChild(el('p', {
+      className: 's-insights-ai__hint',
+      text: S.aiModuleError
+        ? '模型连接模块加载失败，请检查网络后重试（离线状态下无法使用 AI 解读）。'
+        : '让 AI 结合本月聚合数据，给出不超过 5 条「是什么问题 / 证据 / 下月改什么」。'
+    }));
+    card.appendChild(buttonNode('生成 AI 解读', {
+      className: 's-insights-tip__action',
+      icon: 'sparkles',
+      onClick: function () {
+        S.aiModuleError = false;
+        aiEnsureAssistant();
+      }
+    }));
+    return card;
+  }
+
+  /* 缓存失效指纹：笔数 + 收支合计，任一变动即视为账单已更新（防记账后仍看旧结论） */
+  function aiFp(metrics) {
+    var cf = metrics && metrics.cashflow ? metrics.cashflow : {};
+    var dq = metrics && metrics.dataQuality ? metrics.dataQuality : {};
+    return (Number(dq.txCount) || 0) + '|' + (Number(cf.incomeCents) || 0) + '|' + (Number(cf.expenseCents) || 0);
+  }
+
+  /* red 独占红，orange/yellow 共用警示色，info 不加修饰 */
+  function aiLevelClass(level) {
+    if (level === 'red') { return ' is-red'; }
+    if (level === 'orange' || level === 'yellow') { return ' is-warn'; }
+    return '';
+  }
+
+  function aiItemsNode(items) {
+    var list = el('ul', { className: 's-insights-ai__list' });
+    for (var i = 0; i < items.length; i += 1) {
+      (function (item) {
+        var li = el('li', { className: 's-insights-ai__item' + aiLevelClass(item.level) });
+        li.appendChild(el('p', {
+          className: 's-insights-ai__title',
+          text: item.category ? '【' + item.category + '】' + item.title : item.title
+        }));
+        var ev = Array.isArray(item.evidence) ? item.evidence : [];
+        if (ev.length) {
+          var facts = el('ul', { className: 's-insights-ai__facts' });
+          for (var k = 0; k < ev.length; k += 1) { facts.appendChild(el('li', { text: ev[k] })); }
+          li.appendChild(facts);
+        }
+        li.appendChild(el('p', { className: 's-insights-ai__suggestion', text: item.suggestion }));
+        list.appendChild(li);
+      }(items[i]));
+    }
+    return list;
+  }
+
+  /* AI 卡片：只在有数据且模块就绪时出现；不发多余请求，状态全落在 S.aiCache / S.aiBusy */
+  function aiCard(report) {
+    var ai = aiModule();
+    if (!ai || !report) { return null; }
+
+    /* 近 3/6 个月没有单月口径：只给引导，不发请求 */
+    if (report.range.key === '3m' || report.range.key === '6m') {
+      var rangeCard = moduleCard('AI 月度解读', '仅支持单月诊断', 's-insights-ai');
+      var rangeBody = el('div', { className: 's-insights-ai__body' });
+      rangeBody.appendChild(el('p', {
+        className: 's-insights-ai__hint',
+        text: 'AI 解读针对单月诊断，切到「本月」或「上月」查看。'
+      }));
+      rangeBody.appendChild(buttonNode('切到本月', {
+        className: 's-insights-tip__action',
+        icon: 'arrow-up',
+        onClick: function () { setRange('month'); }
+      }));
+      rangeCard.appendChild(rangeBody);
+      return rangeCard;
+    }
+
+    /* core-assistant（LLM 通道，172KB）不再随本屏预加载：没加载过就先给按钮，
+       点击时 ensure 再重渲染，由下面的常规分支接管「去设置 / 隐私告知 / 生成」。
+       收益：一级 Tab 首屏少拉 172KB；代价：首次使用多点一次。 */
+    var llm = aiLlm();
+    if (!llm) { return aiLazyCard(); }
+
+    var cfg = null;
+    try {
+      var got = llm.getConfig();
+      if (got && got.ok === true && got.cfg && typeof got.cfg === 'object') { cfg = got.cfg; }
+    } catch (error) { cfg = null; }
+    if (!cfg) { return null; }
+
+    var month = report.endMonth;
+
+    /* 未就绪分支前置：隐私说明与「去设置」用不到 metrics，不为它们做全量扫描（审查 P2-4） */
+    if (!cfg.ready) {
+      /* 配置齐全但从未告知过：给一次性隐私说明（noticeAt 全局，其他账期不再弹）。
+         聚合数据到点击时才现算：确认前零出站，确认后用最新账算 */
+      if (cfg.enabled && cfg.hasKey && cfg.baseURL && cfg.model && Number(cfg.noticeAt) <= 0) {
+        var privacyCard = moduleCard('AI 月度解读', null, 's-insights-ai');
+        privacyCard.appendChild(el('p', {
+          className: 's-insights-ai__hint',
+          text: '生成解读会把本月的收支合计、分类金额与占比等聚合数据发给所配置的大模型，用于生成结余、结构与预算建议；不包含逐笔明细、备注与照片。'
+        }));
+        privacyCard.appendChild(buttonNode('已知悉，生成解读', {
+          className: 's-insights-tip__action',
+          icon: 'sparkles',
+          onClick: function () {
+            var acked = llm.setConfig({ noticeAt: Date.now() });
+            if (!(acked && acked.ok === true)) { return; }
+            var nowScope = scopeOf(report.db);
+            var nowMetrics = ai.buildMonthlyMetrics(report.db, month, nowScope.bookId);
+            if (!nowMetrics) { return; }
+            /* 空账期只告知、不发起（终审 P3）：0 笔时任务书 §5.2 要求展示「还没有记录」空态
+               而不是生成按钮；这里直接重渲染，让常规流的 txCount 门接管，也不往 aiCache
+               写一条过期兜底 */
+            var nowDq = nowMetrics.dataQuality && typeof nowMetrics.dataQuality === 'object'
+              ? nowMetrics.dataQuality : {};
+            if (!(Number(nowDq.txCount) > 0)) { repaint(false); return; }
+            startAiInsights(month, nowMetrics, (nowScope.bookId || '') + '|' + month);
+          }
+        }));
+        return privacyCard;
+      }
+      /* 其余未就绪：引导去设置 */
+      var setupCard = moduleCard('AI 月度解读', null, 's-insights-ai');
+      setupCard.appendChild(el('p', {
+        className: 's-insights-ai__hint',
+        text: 'AI 解读需要在「设置 → 小助手与联网」里配置接口地址、模型与密钥后使用。'
+      }));
+      setupCard.appendChild(buttonNode('去设置', {
+        className: 's-insights-tip__action',
+        icon: 'arrow-up-right',
+        href: '#/settings'
+      }));
+      return setupCard;
+    }
+
+    var scope = scopeOf(report.db);
+    var metrics = ai.buildMonthlyMetrics(report.db, month, scope.bookId);
+    if (!metrics) { return null; }
+
+    var dq = metrics.dataQuality && typeof metrics.dataQuality === 'object' ? metrics.dataQuality : {};
+    if (!(Number(dq.txCount) > 0)) {
+      var emptyCard = moduleCard('AI 月度解读', null, 's-insights-ai');
+      emptyCard.appendChild(el('p', {
+        className: 's-insights-ai__hint',
+        text: monthLabel(month) + '还没有记录，先记几笔再来。'
+      }));
+      return emptyCard;
+    }
+
+    /* 账本前缀防串账本：同月不同账本互不共用缓存 */
+    var cacheKey = (scope.bookId || '') + '|' + month;
+
+    var card = moduleCard('AI 月度解读', null, 's-insights-ai');
+    if (S.aiBusy && S.aiBusyMonth === cacheKey) {
+      card.appendChild(el('p', {
+        className: 's-insights-ai__hint',
+        'aria-live': 'polite',
+        text: S.aiRetryHint || '正在分析本月账单…（约 15 秒）'
+      }));
+      return card;
+    }
+    var cached = S.aiCache[cacheKey];
+    if (cached && typeof cached === 'object') {
+      var items = Array.isArray(cached.items) ? cached.items : [];
+      /* 记账后没重新生成时，旧结论会原样留着：用指纹判过期并明确提示，不静默丢弃（省一次计费） */
+      var stale = !!cached.fp && cached.fp !== aiFp(metrics);
+      if (stale) {
+        card.appendChild(el('p', {
+          className: 's-insights-ai__hint',
+          text: '本月账单有变动，下面的结论基于生成时的数据，可能已过期。'
+        }));
+      }
+      if (items.length) {
+        card.appendChild(aiItemsNode(items));
+      } else if (cached.fallback === true) {
+        card.appendChild(el('p', {
+          className: 's-insights-ai__hint',
+          text: '本次没能联网生成，本地规则也没有发现需要提醒的问题。'
+        }));
+      } else {
+        card.appendChild(el('p', { className: 's-insights-ai__hint', text: 'AI 没有发现需要提醒的问题。' }));
+      }
+      card.appendChild(el('p', {
+        className: 's-insights-ai__meta',
+        /* 兜底落款带自查指引：覆盖任务书 §2.3「仍失败则提示换模型」的文案要求 */
+        text: cached.fallback === true
+          ? '本次由本地规则兜底生成，仅供参考；若多次失败，可在「设置 → 小助手与联网」检查密钥或换更快的模型。'
+          : '由 AI 生成，仅供参考。'
+      }));
+      card.appendChild(buttonNode('重新生成', {
+        className: 's-insights-tip__action',
+        icon: 'refresh',
+        onClick: function () { startAiInsights(month, metrics, cacheKey); }
+      }));
+      return card;
+    }
+    if (S.aiBusy) {
+      /* 其他账期在途：单飞保护会吞掉本次点击，直接说明而不是给一个没反应的按钮（审查 P2-2） */
+      card.appendChild(el('p', {
+        className: 's-insights-ai__hint',
+        'aria-live': 'polite',
+        text: 'AI 正在分析其他账期，请稍候再生成本月解读。'
+      }));
+      return card;
+    }
+    card.appendChild(el('p', {
+      className: 's-insights-ai__hint',
+      text: '让 AI 结合本月聚合数据，给出不超过 5 条「是什么问题 / 证据 / 下月改什么」。'
+    }));
+    card.appendChild(buttonNode('生成 AI 解读', {
+      className: 's-insights-tip__action',
+      icon: 'sparkles',
+      onClick: function () { startAiInsights(month, metrics, cacheKey); }
+    }));
+    return card;
+  }
+
+  function startAiInsights(month, metrics, cacheKey) {
+    if (S.aiBusy) { return; } /* 连点保护：一次只允许一个请求在途 */
+    S.aiBusy = true;
+    S.aiBusyMonth = cacheKey;
+    S.aiRetryHint = '';
+    delete S.aiCache[cacheKey];
+    repaint(false);
+    var ai = aiModule();
+    if (!ai || typeof ai.requestAiInsights !== 'function') {
+      settleAiInsights(month, metrics, cacheKey, null); /* 模块缺失也要落兜底，busy 不能挂死 */
+      return;
+    }
+    ai.requestAiInsights(metrics, {
+      onRetry: function () {
+        S.aiRetryHint = '网络较慢，正在重试…';
+        if (!S.dead) { repaint(false); }
+      }
+    }).then(function (res) {
+      settleAiInsights(month, metrics, cacheKey, res);
+    }).catch(function () {
+      settleAiInsights(month, metrics, cacheKey, null); /* 双保险：永不挂 loading */
+    });
+  }
+
+  /* 成功缓存 items；失败缓存本地兜底（fallback:true）；空账期（empty）不落缓存——
+     记账后回到本屏应看到「生成」按钮/空态，而不是一条过期的兜底（终审 P3）。
+     aiCache 不随 destroy 清空。 */
+  function settleAiInsights(month, metrics, cacheKey, res) {
+    var okRes = !!(res && res.ok === true);
+    var items = okRes && Array.isArray(res.items) ? res.items : [];
+    var fallback = false;
+    if (!okRes) {
+      var reason = (res && res.reason) || 'bad';
+      if (reason === 'empty') {
+        /* 守卫性分支：正常流进不来（点击前已验 txCount>0，隐私卡也已挡空账期），
+           只复位在途态不写缓存 */
+        S.aiBusy = false;
+        S.aiBusyMonth = '';
+        S.aiRetryHint = '';
+        if (!S.dead) { repaint(false); }
+        return;
+      }
+      var ai = aiModule();
+      items = (ai && typeof ai.buildFallbackInsights === 'function' && ai.buildFallbackInsights(metrics)) || [];
+      fallback = true;
+    }
+    S.aiCache[cacheKey] = {
+      items: items,
+      fallback: fallback,
+      reason: okRes ? '' : ((res && res.reason) || 'bad'),
+      fp: aiFp(metrics),
+      at: Date.now()
+    };
+    S.aiBusy = false;
+    S.aiBusyMonth = '';
+    S.aiRetryHint = '';
+    if (!S.dead) { repaint(false); }
+  }
+
   /* ---------------- 空 / 错误状态 ---------------- */
 
   function emptyAll() {
@@ -1842,6 +2176,8 @@
     S.contentEl.appendChild(summaryCard(report));
     S.contentEl.appendChild(structureCard(report));
     S.contentEl.appendChild(barsCard(report));
+    var aiNode = aiCard(report);
+    if (aiNode) { S.contentEl.appendChild(aiNode); }
     if (report.tips.length) { S.contentEl.appendChild(tipsCard(report)); }
     if (report.actions.length) { S.contentEl.appendChild(actionsCard(report)); }
     S.contentEl.appendChild(footNote(report));

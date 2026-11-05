@@ -8859,6 +8859,76 @@ textarea::selection {
   touch-action: manipulation;
 }
 
+/* ---------- AI 月度解读 ---------- */
+.s-insights-ai__hint {
+  margin: 0;
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+}
+
+.s-insights-ai__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.s-insights-ai__item {
+  padding: var(--sp-3);
+  border-radius: var(--r-lg);
+  border-left: 3px solid var(--c-text-3);
+  background: var(--c-bg-elev-2);
+}
+
+.s-insights-ai__item.is-red {
+  border-left-color: var(--c-danger);
+  background: var(--c-danger-soft);
+}
+
+.s-insights-ai__item.is-warn {
+  border-left-color: var(--c-warn);
+  background: var(--c-warn-soft);
+}
+
+.s-insights-ai__title {
+  margin: 0;
+  color: var(--c-text);
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  font-weight: var(--fw-semibold);
+}
+
+.s-insights-ai__facts {
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.s-insights-ai__facts li {
+  color: var(--c-text-2);
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-footnote);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-insights-ai__suggestion {
+  margin: var(--sp-1) 0 0;
+  color: var(--c-text);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: var(--fw-semibold);
+}
+
+.s-insights-ai__meta {
+  margin: var(--sp-2) 0 0;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-2);
+  line-height: var(--lh-caption-2);
+}
+
 /* ---------- 行动建议 ---------- */
 .s-insights-actions__list {
   display: flex;
@@ -13886,7 +13956,7 @@ textarea::selection {
     <p style="padding: 24px; font-size: 16px; line-height: 24px;">小账本需要启用 JavaScript 才能使用。</p>
   </noscript>
 
-  <!-- 加载顺序冻结：core → ui → 壳层 → router → app；壳层 25 条内联 + 15 个 lazy chunk 由 load-screen.js 加载 -->
+  <!-- 加载顺序冻结：core → ui → 壳层 → router → app；壳层 25 条内联 + 16 个 lazy chunk 由 load-screen.js 加载 -->
   <script>
 /* 小账本 2.0 · js/core/money.js · owner: dba（T01）
  * 契约锚点：CONTRACT §2.1（Cents）、§6.1、§8（金额错误码）。
@@ -31376,7 +31446,7 @@ textarea::selection {
 
 </script>
   <script>
-/* 小账本 2.0 · js/chunk-manifest.js · owner: frontend（T-02）：15 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
+/* 小账本 2.0 · js/chunk-manifest.js · owner: frontend（T-02）：16 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
 (function (global) {
   'use strict';
   var XZB = global.XZB || (global.XZB = {});
@@ -31385,10 +31455,11 @@ textarea::selection {
     ['home', 'screens/home', 'screens/home'], ['add', 'screens/add', 'screens/add'], ['ledger', 'screens/ledger', 'screens/ledger'], ['stats', 'screens/stats', 'screens/stats'],
     ['insights', 'screens/insights', 'screens/insights'], ['accounts', 'screens/accounts', 'screens/accounts'], ['books', 'screens/books', 'screens/books'], ['plan', 'screens/plan', 'screens/plan'],
     ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
-    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant']
+    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'],
+    ['ai-insights', 'modules/ai-insights', 'modules/ai-insights']
   ];
   /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
-  var DEPS = { add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant'] };
+  var DEPS = { add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts', 'ai-insights'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
@@ -31404,7 +31475,7 @@ textarea::selection {
     ROWS.forEach(function (r) { var f = path.join(dir, OUT + r[2] + '.js'); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, fs.readFileSync(path.join(__dirname, '..', '..', SRC + r[1] + '.js'))); });
     return outputFiles();
   }
-  /* 构建期静态校验（§2.5/B1′/B2）：15 个声明标签、产物存在、deps 双射、内联区无 lazy 屏前 5 行特征串；失败恒 throw */
+  /* 构建期静态校验（§2.5/B1′/B2）：16 个声明标签、产物存在、deps 双射、内联区无 lazy 屏前 5 行特征串；失败恒 throw */
   function checkSync(dir) {
     var fs = require('fs'), path = require('path'), root = path.join(__dirname, '..', '..'), out = path.resolve(dir || path.join(root, '手机版'));
     var html = fs.readFileSync(path.join(out, 'index.html'), 'utf8'), errs = [];
@@ -32471,7 +32542,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.26.6';
+  XZB.version = '2.26.7';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -34338,5 +34409,6 @@ textarea::selection {
   <script type="text/xzb-module" data-xzb-chunk="charts" src="js/modules/charts.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="nl" src="js/modules/nl.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="core-assistant" src="js/modules/core-assistant.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="ai-insights" src="js/modules/ai-insights.js"></script>
 </body>
 </html>

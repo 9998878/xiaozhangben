@@ -2400,7 +2400,9 @@
     return { ok: false, code: E.NET_CONFIG, retryable: false, status: 0, reason: 'offline' };
   }
 
-  function httpOnce(cfg, bodyStr) {
+  /* timeoutMs 可选：默认仍是 LLM_TIMEOUT_MS（6s，记账解析用）；AI 解读等长任务单独传值。
+     不改本参数的行为：respondRemote / llmPlan / llmTest 的调用形态与超时全部保持原样。 */
+  function httpOnce(cfg, bodyStr, timeoutMs) {
     return new Promise(function (resolve) {
       if (typeof fetch !== 'function') {
         resolve({ ok: false, code: E.NET_CONFIG, retryable: false, status: 0 });
@@ -2442,7 +2444,7 @@
           try { ctrl.abort(); } catch (error) { /* 已结束 */ }
         }
         end({ ok: false, code: E.NET_TIMEOUT, retryable: false, status: 0, reason: 'timeout' });
-      }, LLM_TIMEOUT_MS);
+      }, Number(timeoutMs) > 0 ? Number(timeoutMs) : LLM_TIMEOUT_MS);
 
       var request;
       try {
@@ -2748,6 +2750,42 @@
     }, function () {
       return { ok: false, code: E.NET_BAD };
     });
+  }
+
+  /* ---------- llm.chat：通用对话出口（AI 月度解读等长任务用） ----------
+   * 传输仍走 httpOnce，不复制 fetch；与 llmPlan 的差异只在：请求体由调用方的
+   * messages/opts 组装、超时与 max_tokens 可单独传。
+   * R-01/T06 密钥边界：原始密钥不出本文件，故调用方不传 cfg——内部 aiRead()。
+   * opts：{ timeoutMs, maxTokens, extraBody }；extraBody 顶层合并进请求体
+   * （如 enable_thinking:false）。返回与 httpOnce 同形，永不 reject。 */
+  function llmChat(messages, opts) {
+    var o = opts && typeof opts === 'object' ? opts : {};
+    var cfg = aiRead();
+    var gate = llmNotReadyCode(cfg);
+    if (gate) { return Promise.resolve({ ok: false, code: gate, retryable: false, status: 0 }); }
+    var list = Array.isArray(messages) ? messages : [];
+    if (!list.length) { return Promise.resolve({ ok: false, code: E.NET_BAD, retryable: false, status: 0 }); }
+    var body = {
+      model: cfg.model,
+      temperature: 0,
+      max_tokens: Number(o.maxTokens) > 0 ? Math.floor(Number(o.maxTokens)) : LLM_MAX_TOKENS,
+      response_format: { type: 'json_object' },
+      messages: list
+    };
+    var extra = o.extraBody;
+    if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
+      for (var k in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, k)) { body[k] = extra[k]; }
+      }
+    }
+    var bodyStr;
+    try {
+      bodyStr = JSON.stringify(body);
+    } catch (error) {
+      return Promise.resolve({ ok: false, code: E.NET_BAD, retryable: false, status: 0 });
+    }
+    var timeoutMs = Number(o.timeoutMs) > 0 ? Number(o.timeoutMs) : LLM_TIMEOUT_MS;
+    return httpOnce(cfg, bodyStr, timeoutMs);
   }
 
   /* ---------- 值域校验（V9~V14） ---------- */
@@ -3448,6 +3486,7 @@
       clearKey: llmClearKey,
       ready: llmReady,
       test: llmTest,
+      chat: llmChat,
       plan: llmPlan,
       buildPlan: buildPlan,
       respondRemote: respondRemote
