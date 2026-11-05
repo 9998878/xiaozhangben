@@ -589,7 +589,7 @@
         privacyJump.appendChild(el('button', {
           className: 's-assistant__opt', type: 'button',
           'aria-label': '去设置：同意隐私告知',
-          onclick: function () { gotoSettings(); }
+          onclick: function () { gotoSettings('#/settings/ai'); }
         }, ['去设置']));
         body.appendChild(privacyJump);
       }
@@ -639,12 +639,14 @@
     ]);
   }
 
-  function gotoSettings() {
+  /* target 缺省一级设置页；privacy chip 深链 AI 子页（2.26.9 迭代6） */
+  function gotoSettings(target) {
+    var hash = target || '#/settings';
     if (host && host.ctx && typeof host.ctx.go === 'function') {
-      host.ctx.go('#/settings');
+      host.ctx.go(hash);
       return;
     }
-    try { global.location.hash = '#/settings'; } catch (error) { /* 忽略 */ }
+    try { global.location.hash = hash; } catch (error) { /* 忽略 */ }
   }
 
   function noticeCard(turn) {

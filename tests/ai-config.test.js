@@ -305,7 +305,7 @@ regCase('6.2 消费方映射源码断言：reasonOf/assistant 渲染/ai-insights
 
 regCase('6.3 privacy 回落附「去设置」chip（迭代4）', function () {
   check(ASSISTANT_JS.indexOf("if (turn.reason === 'privacy') {") >= 0, '渲染应有 privacy 分支');
-  check(/privacyJump[\s\S]{0,300}gotoSettings\(\)/.test(ASSISTANT_JS), 'privacy 分支应调用 gotoSettings');
+  check(/privacyJump[\s\S]{0,300}gotoSettings\('/.test(ASSISTANT_JS), 'privacy 分支应调用 gotoSettings');
   check(ASSISTANT_JS.indexOf("'aria-label': '去设置：同意隐私告知'") >= 0, 'chip 应有无障碍标签');
   check(ASSISTANT_JS.indexOf("'去设置'"), 'chip 文案应为「去设置」');
 });
@@ -322,6 +322,13 @@ regCase('6.4 密钥超长/类型错归因 field:key，settings 提示细分（�
   check(SETTINGS_JS.indexOf('密钥太长（上限 300 字符）') >= 0, 'settings 应有密钥超长提示');
   check(CORE_JS.indexOf('AI_MAX_KEY = 300') >= 0 && SETTINGS_JS.indexOf('> 300') >= 0,
     '300 常量应与 AI_MAX_KEY 同值（同步锚点）');
+});
+
+regCase('6.5 privacy chip 深链 #/settings/ai（迭代6）', function () {
+  check(ASSISTANT_JS.indexOf('function gotoSettings(target)') >= 0, 'gotoSettings 应支持目标参数');
+  check(ASSISTANT_JS.indexOf("gotoSettings('#/settings/ai')") >= 0, 'privacy chip 应深链 AI 子页');
+  check(SETTINGS_JS.indexOf("'#/settings/ai'") >= 0, 'settings 子页路由应存在');
+  check(ASSISTANT_JS.indexOf("gotoSettings('#/settings');") < 0, '不应有调用点仍传一级页字面量');
 });
 
 /* ============================== 汇总 ============================== */
