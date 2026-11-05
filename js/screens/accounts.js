@@ -360,7 +360,7 @@
       return;
     }
 
-    root.appendChild(heroCard(db, alive, balances));
+    root.appendChild(heroCard(db, alive, archived, balances));
     root.appendChild(toolbar(ctx));
 
     var funds = alive.filter(function (acc) { return acc.type !== 'credit'; });
@@ -398,16 +398,19 @@
       '归档的账户不会出现在记账选择器里，历史流水仍然保留、仍可查看。'));
   }
 
-  function heroCard(db, alive, balances) {
+  function heroCard(db, alive, archived, balances) {
+    /* 净资产口径含归档账户（CONTRACT §6.2，core netWorthCents 同口径）：
+       归档信用卡的欠款不应从净资产里消失（2.26.9 迭代9） */
+    var all = alive.concat(archived);
     var netCents = 0;
     var fundCents = 0;
     var debtCents = 0;
     var i;
-    for (i = 0; i < alive.length; i += 1) {
-      var value = balances[alive[i].id];
+    for (i = 0; i < all.length; i += 1) {
+      var value = balances[all[i].id];
       var cents = typeof value === 'number' ? value : 0;
       netCents += cents;
-      if (alive[i].type === 'credit') {
+      if (all[i].type === 'credit') {
         if (cents < 0) { debtCents += -cents; }
         else { fundCents += cents; }
       } else {
@@ -418,7 +421,7 @@
     var card = dom.el('div', { className: 'c-card s-accounts-hero' });
     var head = dom.el('div', { className: 's-accounts-hero__head' });
     head.appendChild(t('span', 's-accounts-hero__label', '净资产'));
-    head.appendChild(t('span', 'c-badge c-badge--soft s-accounts-hero__count', alive.length + ' 个账户'));
+    head.appendChild(t('span', 'c-badge c-badge--soft s-accounts-hero__count', all.length + ' 个账户'));
     card.appendChild(head);
     card.appendChild(t('div', 's-accounts-hero__value u-tabular', fmt(netCents)));
     /* M11：资产 / 负债对比直接给出，不用心算 */

@@ -120,6 +120,7 @@ const CORE_JS = fs.readFileSync(path.join(ROOT, 'js/modules/core-assistant.js'),
 const SETTINGS_JS = fs.readFileSync(path.join(ROOT, 'js/screens/settings.js'), 'utf8');
 const ASSISTANT_JS = fs.readFileSync(path.join(ROOT, 'js/screens/assistant.js'), 'utf8');
 const AI_INSIGHTS_JS = fs.readFileSync(path.join(ROOT, 'js/modules/ai-insights.js'), 'utf8');
+const ACCOUNTS_JS = fs.readFileSync(path.join(ROOT, 'js/screens/accounts.js'), 'utf8');
 const AI_KEY_VALUE = 'xzb.ai.v1';
 
 /* 预置「用户已填齐三项并打开开关」的状态（设置页 apply() + toggle 的真实 patch 口径） */
@@ -329,6 +330,18 @@ regCase('6.5 privacy chip 深链 #/settings/ai（迭代6）', function () {
   check(ASSISTANT_JS.indexOf("gotoSettings('#/settings/ai')") >= 0, 'privacy chip 应深链 AI 子页');
   check(SETTINGS_JS.indexOf("'#/settings/ai'") >= 0, 'settings 子页路由应存在');
   check(ASSISTANT_JS.indexOf("gotoSettings('#/settings');") < 0, '不应有调用点仍传一级页字面量');
+});
+
+regCase('6.6 账户页净资产含归档账户（迭代9，CONTRACT §6.2 口径）', function () {
+  check(ACCOUNTS_JS.indexOf('function heroCard(db, alive, archived, balances)') >= 0,
+    'heroCard 应接收 archived 列表');
+  check(ACCOUNTS_JS.indexOf('var all = alive.concat(archived);') >= 0,
+    '求和应覆盖 alive+archived');
+  check(ACCOUNTS_JS.indexOf("all.length + ' 个账户'") >= 0, '徽标账户数应含归档');
+  check(ACCOUNTS_JS.indexOf('heroCard(db, alive, archived, balances)') >= 0,
+    'renderList 调用点应同步传 archived');
+  check(ACCOUNTS_JS.indexOf('root.appendChild(heroCard(db, alive, balances))') < 0,
+    '不应残留旧签名调用');
 });
 
 /* ============================== 汇总 ============================== */
