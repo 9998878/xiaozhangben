@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | 1 | `js/modules/nl.js` 日期解析 | 「上个月28号」「本月5号」「下个月1号」丢日号，只剩相对月 | 已修于 2.27.1，回归见 `tests/nl-date.test.js` |
 | 2 | `js/modules/nl.js` 日期解析 | 「明年1月5日」「去年12月25日」年份必错且无警告 | 已修于 2.27.1，回归见 `tests/nl-date.test.js` |
-| 3 | `index.html` `runWipe`/`clearPrefs` | 清空本机数据不删 `xzb.ai.v1`，密钥与地址残留 | 已修于 2.27.1：接 `llmClearKey()`，回归见 `tests/ai-config.test.js` |
+| 3 | `index.html` `runWipe`/`clearPrefs` | 清空本机数据不删 `xzb.ai.v1`，密钥与地址残留 | 已修于 2.27.1：接 `llmClearKey()`；回归见 `tests/ai-config.test.js` 用例 10 与 `tests/category-expansion.test.js` 用例 11 |
 | 4 | `js/screens/settings.js` 测试连接 | 三条件合并，`apply()` 的具体报错被通用文案覆盖 | 已修于 2.27.1，回归见 `tests/ai-config.test.js` |
 
 ## P2（未修，按主题）
@@ -49,4 +49,4 @@
 - 解读口径：信用卡取现既不算借款也不算还款；buffer 分子分母口径混合；`anomalies` 采集 note 无人消费；`aiFp` 指纹不含分类/预算；`gameTopup` 裸「游戏」误伤；加载文案「约 15 秒」实际最坏 90s。
 - UI：20s 等待无取消；排队话语离屏被吞；深链 `#/settings/ai` 与 `#/settings` 混用；`configComplete` 只查非空；`iconOk` 白名单空转；`home.js` 情境开关无 UI；「显示密钥」名不副实。
 - 解析边界：`午饭28打车15` 只记最后一笔；`1,2345` 坏千分位按 1234 收下；`EXTRA_ALIASES.ca_veg` 死条目，双词表已漂移。
-- 测试基建：20+ 条源码字符串断言易误红；两套 harness 无共享 helper；版本 stub 落后；用例 7.3 真睡 6.2s；无 CI（本仓库现已加 `scripts/test.js` + GitHub Actions）。
+- 测试基建：20+ 条源码字符串断言易误红；三套 harness 无共享 helper；用例 7.3 真睡 6.2s；CI 已补 GitHub Actions（跑 `scripts/test.js` + `scripts/check.js`）。

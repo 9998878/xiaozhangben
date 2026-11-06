@@ -12,7 +12,7 @@
 ## 地图
 
 - `index.html` — 整个应用：启动、hash 路由、账户/设置、IndexedDB schema；内嵌 chunk-manifest，首屏按需加载
-- `js/screens/` — 页面：home、bills、charts、settings、assistant、insights、accounts、add、books、ledger、plan、stats
+- `js/screens/` — 页面：home、ledger、stats、accounts、plan、add、settings、assistant、insights、books
 - `js/modules/` — 共用逻辑：core-assistant（LLM 传输与错误码）、ai-insights（月度指标与提示词）、nl（中文解析）、charts、keypad、icon-picker
 - `sw.js` — Service Worker，按 chunk-manifest 预缓存
 - `tests/` — 纯 node 断言，无框架；`scripts/` — 开发脚本
