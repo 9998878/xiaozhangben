@@ -1,4 +1,4 @@
-# 小账本 2.27.1
+# 小账本
 
 一款给 iPhone 用的**纯本地记账 PWA**：没有账号、没有服务器、数据只存在你这台手机的浏览器里，断网也能记账。
 
@@ -6,7 +6,7 @@
 
 手机用 Safari 打开这个地址 → 分享 → 「添加到主屏幕」，之后就和一个 App 一样，飞行模式下照样能记、能看统计。
 
-> 想接手开发或看当前进度？先读 [HANDOFF.md](HANDOFF.md)；每一轮改动的记录见 [agent.md](agent.md)。**任何修改都会记入 agent.md，并同步更新 HANDOFF.md。**
+> 接手开发：先读 [AGENTS.md](AGENTS.md)；跑 `node scripts/status.js` 看当前状态。架构与取舍见 [docs/architecture.md](docs/architecture.md)，已知问题见 [docs/known-issues.md](docs/known-issues.md)，发版清单见 [docs/release.md](docs/release.md)，版本历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 

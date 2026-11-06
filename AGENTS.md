@@ -1,40 +1,38 @@
-# AGENTS.md · 小账本（agent 30 秒开工规矩）
+# AGENTS.md
 
-> **L0 入口**：先读本文件，再读 [HANDOFF.md](HANDOFF.md)（完整接手说明）。
-> 冲突时以本文件 + `HANDOFF.md` 为准；本机工作区另有 `D:\小账本\做前必读\00-做前必读.md`。
+小账本：本地优先记账 PWA。无构建、无后端，数据存在浏览器 IndexedDB，`main` 分支直接发布到 GitHub Pages。源文件全在仓库根，没有 `src/`。
 
-## 唯一真源
+## 命令
 
-本仓库（`D:\小账本\xiaozhangben`）就是全部。**不要**新建副本 / 工作区 / draft / rewrite；归档 `D:\小账本\归档\` 只读，禁止拷回。
+- `node scripts/status.js` — 接手先跑：版本、分支、脏文件、测试、最近提交
+- `node scripts/test.js` — 跑 `tests/*.test.js`，必须全绿
+- `node scripts/check.js` — 提交前自检：版本三处、AGENTS 长度、文档指针、旧文档残留
+- 发布：push `main` 后 Pages 自动更新（约 1 分钟），清单见 `docs/release.md`
 
-## 开工 5 步
+## 地图
 
-1. 读 `HANDOFF.md` §1–§3、§6–§7
-2. 读 `agent.md` 顶部 10 行
-3. `git pull --ff-only origin main`；`git status` 干净再动手
-4. `node tests/ai-config.test.js` + `node tests/nl-date.test.js` + `node tests/category-expansion.test.js`（105 全绿）
-5. 开分支再改：`git switch -c fix/xxx`
+- `index.html` — 整个应用：启动、hash 路由、账户/设置、IndexedDB schema；内嵌 chunk-manifest，首屏按需加载
+- `js/screens/` — 页面：home、bills、charts、settings、assistant、insights、accounts、add、books、ledger、plan、stats
+- `js/modules/` — 共用逻辑：core-assistant（LLM 传输与错误码）、ai-insights（月度指标与提示词）、nl（中文解析）、charts、keypad、icon-picker
+- `sw.js` — Service Worker，按 chunk-manifest 预缓存
+- `tests/` — 纯 node 断言，无框架；`scripts/` — 开发脚本
+- `docs/` — 按需查：`architecture.md`、`known-issues.md`、`release.md`
+- `CHANGELOG.md` — 版本历史；`README.md` — 用户视角
 
-## 绝对禁止
+## 不变量（`scripts/check.js` 会红）
 
-- 新建项目目录 / 副本 / 工作区；把项目文件放进 `.zcode`、`.workbuddy`、桌面、文档、下载
-- 在仓库根新增过程稿（方案 / 报告 / 笔记 → `D:\小账本\文档\` 并登记）
-- 跳测试、只改不记、push 未验证代码、回滚别人未提交工作
-- 修改或拷回 `D:\小账本\归档\`
+1. 版本三处同步：`index.html` 的 `XZB.version`、`sw.js` 的 `CACHE_LABEL`/`CACHE_NAME`、`tests/category-expansion.test.js` 用例 7.1/7.2 的转义正则。换缓存名才会清旧缓存。
+2. 改应用行为，同批加/改测试并全绿；只改文档可跳过。
+3. 发布只从 `main` push；feature 分支合并后删除。
 
-## 根目录（`D:\小账本`）
+## 多 agent 并行
 
-允许：`xiaozhangben\`、`文档\`、`归档\`、`做前必读\` + `说明.md`、`进度.md`。工具生成的隐藏目录（`.zcode` 等）不保留，跑完即清；工具里的记录不算留痕。
+- 开工先 `git status`：别人未提交的改动不碰、不提交、不回滚。
+- 各自开 `agent/<名字>-<任务>` 分支；收尾只 `git add` 自己的文件。
+- 状态不明或冲突就停下报告，不要猜。
 
-## 改完必做（同一次提交）
+## 记录（不建过程文档）
 
-1. `agent.md` 顶部追加一行（时间 / 谁 / 一句话），只追加
-2. 同步 `HANDOFF.md` 受影响的每一句
-3. 刷新 `D:\小账本\进度.md`
-4. 提交信息 `release:` / `fix:` / `docs:` + 一句话
-5. 发版三处：`index.html` `XZB.version`；`sw.js` `CACHE_LABEL` + `CACHE_NAME`；`tests/category-expansion.test.js` 7.1/7.2 转义正则
-
-## 交付自检
-
-- 105 全绿；工作区 clean；`origin/main` 已更新；`agent.md` / `HANDOFF.md` / `进度.md` 已同步
-- 回复列出：改动文件、测试数、commit 哈希
+- commit message 用 `fix:`/`feat:`/`docs:`/`release:`，正文写「为什么」；末尾署名 `Agent: <名字>`。
+- 行为或版本变化写 `CHANGELOG.md`；设计取舍写 `docs/architecture.md`；已知问题只维护 `docs/known-issues.md`。
+- 状态以 `scripts/status.js` 和 git 为准，不另建进度文件。
