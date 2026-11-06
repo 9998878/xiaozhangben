@@ -12,7 +12,7 @@
 1. 读 `HANDOFF.md` §1–§3、§6–§7
 2. 读 `agent.md` 顶部 10 行
 3. `git pull --ff-only origin main`；`git status` 干净再动手
-4. `node tests/ai-config.test.js` + `node tests/category-expansion.test.js`（83 全绿）
+4. `node tests/ai-config.test.js` + `node tests/nl-date.test.js` + `node tests/category-expansion.test.js`（105 全绿）
 5. 开分支再改：`git switch -c fix/xxx`
 
 ## 绝对禁止
@@ -36,5 +36,5 @@
 
 ## 交付自检
 
-- 83 全绿；工作区 clean；`origin/main` 已更新；`agent.md` / `HANDOFF.md` / `进度.md` 已同步
+- 105 全绿；工作区 clean；`origin/main` 已更新；`agent.md` / `HANDOFF.md` / `进度.md` 已同步
 - 回复列出：改动文件、测试数、commit 哈希

@@ -31657,6 +31657,8 @@ textarea::selection {
       var msg = '';
       try { if (keyOf('prefsKey')) global.localStorage.removeItem(keyOf('prefsKey')); } catch (e) { msg = COPY.storage; }
       if (typeof opts.clearPrefs === 'function') try { opts.clearPrefs(); } catch (e) {}
+      /* AI 密钥（xzb.ai.v1）一并删除：设备转手后不得残留前任的端点配置与密钥（2.27.1） */
+      if (typeof opts.clearAiKey === 'function') try { opts.clearAiKey(); } catch (e) {}
       if (!del(keyOf('lockKey'))) msg = msg || COPY.storage;
       if (msg) throw fail('E_STORAGE', msg);
       try { if (keyOf('wipePendingKey')) global.localStorage.removeItem(keyOf('wipePendingKey')); } catch (e) {}
@@ -32801,7 +32803,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.27.0';
+  XZB.version = '2.27.1';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -32845,6 +32847,17 @@ textarea::selection {
       prefsKey: PREFS_KEY,
       wipePendingKey: WIPE_MARKER,
       clearPrefs: clearPrefs,
+      /* 清除 AI 密钥（xzb.ai.v1）：优先走 core-assistant 的 llm.clearKey()（整键删除，
+         AI_KEY 常量见 js/modules/core-assistant.js:36）；core-assistant 是懒加载 chunk
+         （DEPS：仅 assistant 屏加载），锁屏 wipe 时多半未加载，故带直接删除兜底。
+         失败不阻断闸门出口（与 clearPrefs 同语义）。（2.27.1） */
+      clearAiKey: function () {
+        try {
+          var llm = XZB.core && XZB.core.assistant && XZB.core.assistant.llm;
+          if (llm && typeof llm.clearKey === 'function') { llm.clearKey(); return; }
+        } catch (error) { /* 落到兜底 */ }
+        try { global.localStorage.removeItem('xzb.ai.v1'); } catch (error) { /* 不阻断出口 */ }
+      },
       /* ②③ 关库/删库只有 store.js 能做（L-o）；失败 reject ⇒ lock.js 停在可重试闸门 */
       wipeStore: function () {
         return store && typeof store.wipe === 'function' ? store.wipe() : Promise.resolve({ ok: false, code: 'E_WIPE' });

@@ -1,6 +1,6 @@
 # HANDOFF — 给任何接手者的说明
 
-> 一分钟读完就能开工。当前 **2.27.0**，`main` 分支即线上。
+> 一分钟读完就能开工。当前 **2.27.1**，`main` 分支即线上。
 > **硬性要求：任何修改都必须留痕**——历史进 [agent.md](agent.md)，现状同步到本文件（见 §6）。
 > **文档分级：先看 §3，不要什么文档都读。**
 
@@ -15,11 +15,12 @@
 
 ```bash
 git pull --ff-only origin main
-node tests/ai-config.test.js            # 31 项
-node tests/category-expansion.test.js   # 52 项
+node tests/ai-config.test.js            # 33 项
+node tests/nl-date.test.js              # 18 项（nl 日期解析回归，2.27.1 起）
+node tests/category-expansion.test.js   # 54 项
 ```
 
-本机 agent 先读工作区根 `D:\小账本\做前必读\00-做前必读.md`（工作区级规则 + 标准提示词）。83 项必须全绿再动手。读完 `AGENTS.md` + 本文件（L0）+ [agent.md](agent.md) 最近 10 行（L1）就够开工，**先别翻开其它文档**。
+本机 agent 先读工作区根 `D:\小账本\做前必读\00-做前必读.md`（工作区级规则 + 标准提示词）。105 项必须全绿再动手。读完 `AGENTS.md` + 本文件（L0）+ [agent.md](agent.md) 最近 10 行（L1）就够开工，**先别翻开其它文档**。
 
 ## 3. 文档分级（先看级别，别全读）
 
@@ -45,15 +46,15 @@ node tests/category-expansion.test.js   # 52 项
 | `js/screens/` | 10 个页面：home / add / ledger / stats / insights / accounts / books / plan / settings / assistant |
 | `js/modules/` | 6 个共用模块：core-assistant / ai-insights / nl / charts / keypad / icon-picker |
 | `sw.js` | Service Worker：预缓存 16 个 chunk，导航网络优先 3 秒、静态资源缓存优先；换缓存名才会清旧缓存 |
-| `tests/` | 两套契约测试（版本串、分类、AI 配置、schema 迁移） |
+| `tests/` | 三套契约测试（版本串、分类、AI 配置、nl 日期解析、schema 迁移） |
 | `icons/` `splash/` | PWA 图标与启动图 |
 | `DELIVERY-2.26.9-category-expansion.md` | 分类扩充那一版的交付说明与已知边界（L2） |
 
 ## 5. 发版流程（版本三处必须同步）
 
-1. `index.html` 搜 `XZB.version` 改版本号（当前 `'2.27.0'`）
+1. `index.html` 搜 `XZB.version` 改版本号（当前 `'2.27.1'`）
 2. `sw.js` 的 `CACHE_LABEL` 与 `CACHE_NAME` 一起改（缓存键换代，旧缓存才会清）
-3. `tests/category-expansion.test.js` 用例 7.1 / 7.2 —— 注意是**转义过的正则**（`2\.27\.0`），字符串替换会漏
+3. `tests/category-expansion.test.js` 用例 7.1 / 7.2 —— 注意是**转义过的正则**（`2\.27\.1`），字符串替换会漏
 
 漏改任何一处，测试直接红。然后：
 
@@ -86,14 +87,15 @@ git push origin main        # 约 100 秒后线上生效
 - 读文档守分级（§3）：不确认级别就不读，尤其 L3。
 - `归档\zxb-rewrite-zcode-2026-11-06` 是另起炉灶的重写版（74 测试全绿），仅存档，**不要合并**。
 
-## 8. 当前状态（2026-11-07 01:00）
+## 8. 当前状态（2026-11-07 01:10）
 
-- 线上版本 **2.27.0**（图标线条风格 v2：53 个分类图标改纯线条 + 22 个细分类图标键）
-- 测试 83/83 全绿；工作区干净；`main` = `origin/main`（即本文件所在提交）
+- 线上版本 **2.27.1**（AI 增强彻查批次 1：修 4 个 P1——nl 相对月+日号、明年/去年、清数据删 AI 密钥、测试连接报错覆盖；2.27.0 为图标线条风格 v2）
+- 测试 105/105 全绿（ai-config 33 + nl-date 18 + category-expansion 54）；工作区干净；`main` = `origin/main`（即本文件所在提交）
+- AI 增强彻查报告（`文档\AI增强彻查-问题与修改方案.md`，L3）的 4 个 P1 已全部修复；15 个 P2、约 25 个 P3 待按报告排批次（2.28.0 隐私口径 + 云端解析质量优先）
 - 留痕规则已生效（§6）：任何修改都要记录 `agent.md` 并同步本文件
 - 文档分级已生效（§3）：L0 `AGENTS.md` + 本文件 / L1 现状 / L2 专题 / L3 资料
 - 入口已加：仓库根 `AGENTS.md`（L0 30 秒版）与工作区根 `做前必读\00-做前必读.md`（唯一真源、禁止清单、根目录规矩、给外部 agent 的标准提示词）
-- 待办：真机抽查 2.27.0 图标（设置页候选 / 分类管理 / 外墙面）；以下遗留边界不阻塞使用：
+- 待办：真机抽查 2.27.1（设置页候选 / 分类管理 / 外墙面图标 + 记账日期解析手感）；以下遗留边界不阻塞使用：
   - LLM 分类词表上限 60，现 52 类只剩 8 个空位
   - `ca_aifee` 别名已打满 8 条上限
   - `home.js:435` 情境入口开关只有读取、没有 UI

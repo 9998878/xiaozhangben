@@ -939,6 +939,20 @@
       addDateMatch(list, dateMatch(s, e, m[0], addDaysStr(today, offsets[m[0]]), null, true, 'relative'));
     });
 
+    /* 上个月28号 / 本月5号 / 下个月1号：相对月词 + 日号组合整体吃掉（2.27.1）。
+     * 必须先于下面单独的相对月块执行：组合匹配先占区间，零散的「上个月」「28号」
+     * 匹配会被 addDateMatch 的重叠拒绝丢掉，日号不再被丢弃、也不残留备注。 */
+    eachMatch(work, /(上个月|上月|本月|这个月|下个月|下月)的?\s*(\d{1,2})[日号]/g, function (m, s, e) {
+      var word = m[1];
+      var base = today;
+      if (word === '上个月' || word === '上月') { base = addMonthsStr(today, -1); }
+      else if (word === '下个月' || word === '下月') { base = addMonthsStr(today, 1); }
+      var p = parseYmd(base);
+      var day = parseInt(m[2], 10);
+      var ok = isValidDateParts(p.y, p.m, day);
+      addDateMatch(list, dateMatch(s, e, m[0], ok ? formatYmd(p.y, p.m, day) : null, null, ok, 'month'));
+    });
+
     /* 本月 / 上个月 / 下个月 */
     eachMatch(work, /本月|这个月|上个月|上月|下个月|下月/g, function (m, s, e) {
       var d = today;
@@ -946,6 +960,17 @@
       if (word === '上个月' || word === '上月') { d = addMonthsStr(today, -1); }
       else if (word === '下个月' || word === '下月') { d = addMonthsStr(today, 1); }
       addDateMatch(list, dateMatch(s, e, m[0], d, null, true, 'month'));
+    });
+
+    /* 明年1月5日 / 去年12月25日：相对年 + 月日整体吃掉（2.27.1）。
+     * 必须先于下面 md 块执行：否则 md 固定用当前年，「明年/去年」被静默记错年份。 */
+    eachMatch(work, /(明年|去年)的?\s*(\d{1,2})月\s*(\d{1,2})[日号]/g, function (m, s, e) {
+      var p = parseYmd(today);
+      var y = p.y + (m[1] === '明年' ? 1 : -1);
+      var mo = parseInt(m[2], 10);
+      var day = parseInt(m[3], 10);
+      var ok = isValidDateParts(y, mo, day);
+      addDateMatch(list, dateMatch(s, e, m[0], ok ? formatYmd(y, mo, day) : null, null, ok, 'md'));
     });
 
     /* 3月5日 / 5号（当前年 / 当前月；非法日期不采纳但消耗区间） */
@@ -1086,7 +1111,7 @@
       time = date === ctx.today ? nowTimeOf(ctx) : '12:00';
     }
 
-    var futureAllowed = /(明天|明日|后天|下周|下个(?:周|星期|礼拜)|下个月|下月)/.test(work);
+    var futureAllowed = /(明天|明日|后天|下周|下个(?:周|星期|礼拜)|下个月|下月|明年)/.test(work);
     if (date > ctx.today && !futureAllowed) {
       pushWarning(warnings, '日期在今天之后');
     }

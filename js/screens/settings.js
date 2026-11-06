@@ -3658,10 +3658,13 @@
     testBtn.addEventListener('click', function () {
       if (busy) { return; }
       var api = llmApi();
-      if (!api || typeof api.test !== 'function' || !apply()) {
+      if (!api || typeof api.test !== 'function') {
         status.textContent = '地址、模型、密钥要填齐';
         return;
       }
+      /* apply() 失败时已把具体原因（如 https 混合内容、缺协议）写入 status，
+         直接返回即可，不得用通用文案覆盖——与「保存配置」按钮同口径（2.27.1）。 */
+      if (!apply()) { return; }
       /* A28：测试连接是出站请求，未同意隐私告知（noticeAt=0）不发。
          提前说明真实缺口，不再沿用「要填齐」的误导文案（2.26.9 修复）。 */
       if (Number((llmCfg() || {}).noticeAt) <= 0) {

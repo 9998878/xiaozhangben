@@ -1,0 +1,218 @@
+'use strict';
+/*
+ * tests/nl-date.test.js
+ * 自检脚本：nl.js 日期解析回归（2.27.1 修复两个 P1：
+ *   ① 「上个月28号 / 本月5号 / 下个月1号」相对月后的日号被丢弃，静默记成同日上月/今天/同日下月；
+ *   ② 「明年1月5日 / 去年12月25日」年份固定当前年，静默记错年份。）
+ *
+ * 运行：node tests/nl-date.test.js
+ *
+ * 加载方式：与 category-expansion.test.js 同款 node vm 沙箱——index.html 内联
+ * money / dates / schema 三块 + js/modules/nl.js 整文件，全部真实源码执行。
+ * 日期断言统一 today = '2026-11-06'（固定值，不读机器时钟）。
+ *
+ * 本脚本只读业务代码，不修改任何业务文件。
+ */
+
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const ROOT = path.resolve(__dirname, '..');
+const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+
+/* ============================== 极简测试骨架（与 category-expansion 同款） ============================== */
+
+let passCount = 0;
+let failCount = 0;
+let noteCount = 0;
+
+function section(title) {
+  console.log('\n===== ' + title + ' =====');
+}
+
+function test(name, fn) {
+  try {
+    fn();
+    passCount += 1;
+    console.log('  [PASS] ' + name);
+  } catch (e) {
+    failCount += 1;
+    console.log('  [FAIL] ' + name);
+    console.log('         -> ' + (e && e.message ? e.message : String(e)));
+  }
+}
+
+function note(msg) {
+  noteCount += 1;
+  console.log('  [NOTE] ' + msg);
+}
+
+function check(cond, label) {
+  if (!cond) { throw new Error(label); }
+}
+
+function checkEq(actual, expected, label) {
+  if (actual !== expected) {
+    throw new Error(label + '：期望 ' + JSON.stringify(expected) + '，实际 ' + JSON.stringify(actual));
+  }
+}
+
+/* ============================== 沙箱装配 ============================== */
+
+/* 提取 index.html 的内联 <script> 块（按块头注释里的文件名锚点识别）。 */
+function findInlineBlock(marker) {
+  const re = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(INDEX_HTML))) {
+    if (m[1].indexOf(marker) >= 0) { return m[1]; }
+  }
+  return null;
+}
+
+const CORE_MARKERS = ['js/core/money.js', 'js/core/dates.js', 'js/core/schema.js'];
+const sandbox = { console: console };
+vm.createContext(sandbox);
+
+for (const marker of CORE_MARKERS) {
+  const code = findInlineBlock(marker);
+  if (!code) { throw new Error('index.html 中找不到内联块：' + marker); }
+  vm.runInContext(code, sandbox, { filename: marker.replace('js/core/', 'inline:') });
+}
+
+const nlSrc = fs.readFileSync(path.join(ROOT, 'js/modules/nl.js'), 'utf8');
+vm.runInContext(nlSrc, sandbox, { filename: 'js/modules/nl.js' });
+
+const schema = sandbox.XZB.Core.schema;
+const nlApi = sandbox.XZB.Core.nl;
+if (!nlApi || typeof nlApi.parse !== 'function') {
+  throw new Error('沙箱内 XZB.Core.nl 未就绪');
+}
+
+/* nl.parse 最小 ctx（模板同 category-expansion.test.js buildNlCtx，today 固定为 2026-11-06） */
+function buildCtx() {
+  return {
+    today: '2026-11-06',
+    nowTime: '12:00',
+    accounts: [{
+      id: 'ac_cash', name: '现金', type: 'cash', icon: 'wallet', color: '#34C759',
+      openingBalanceCents: 0, limitCents: 0, billDay: null, dueDay: null,
+      archived: false, sort: 10, note: ''
+    }],
+    categories: schema.seedData().categories,
+    defaults: { type: 'expense' }
+  };
+}
+
+function parseDate(text) {
+  const result = nlApi.parse(text, buildCtx());
+  if (!result.ok) { throw new Error('parse(' + JSON.stringify(text) + ') 失败：' + result.code); }
+  return result;
+}
+
+function assertDate(text, expected, label) {
+  const r = parseDate(text);
+  checkEq(r.draft.date, expected, label + '（' + text + '）');
+  return r;
+}
+
+/* ============================== 用例 1：相对月 + 日号（2.27.1 P1 回归） ============================== */
+
+section('用例 1：相对月 + 日号组合（「上个月28号」类输入，修复前红）');
+
+test('1.1 「上个月28号午饭30」-> 2026-10-28，日号不残留备注、无日期警告', function () {
+  const r = assertDate('上个月28号午饭30', '2026-10-28', '相对月+日号应取上月28日');
+  check(r.warnings.indexOf('日期在今天之后') < 0, '不应有日期警告：' + JSON.stringify(r.warnings));
+  check(r.draft.note.indexOf('28号') < 0, '日号不应残留在备注：' + JSON.stringify(r.draft.note));
+});
+
+test('1.2 「本月5号早饭12」-> 2026-11-05', function () {
+  assertDate('本月5号早饭12', '2026-11-05', '本月+日号应取本月5日');
+});
+
+test('1.3 「下个月1号房租3500」-> 2026-12-01，且无「日期在今天之后」警告', function () {
+  const r = assertDate('下个月1号房租3500', '2026-12-01', '下个月+日号应取下月1日');
+  check(r.warnings.indexOf('日期在今天之后') < 0, '「下个月」不应触发未来警告：' + JSON.stringify(r.warnings));
+});
+
+test('1.4 「上个月的28号买水果40」-> 2026-10-28（「的」字变体）', function () {
+  assertDate('上个月的28号买水果40', '2026-10-28', '「上个月的28号」应取上月28日');
+});
+
+test('1.5 「上月30号加油260」-> 2026-10-30（两字「上月」变体）', function () {
+  assertDate('上月30号加油260', '2026-10-30', '「上月30号」应取上月30日');
+});
+
+test('1.6 「上个月31号还卡债2000」-> 2026-10-31（10月有31日，合法钳制边界）', function () {
+  assertDate('上个月31号还卡债2000', '2026-10-31', '上月31日应合法采纳');
+});
+
+/* ============================== 用例 2：明年 / 去年（2.27.1 P1 回归） ============================== */
+
+section('用例 2：明年 / 去年 + 月日（「明年1月5日」类输入，修复前红）');
+
+test('2.1 「明年1月5日交学费3000」-> 2027-01-05，无未来警告', function () {
+  const r = assertDate('明年1月5日交学费3000', '2027-01-05', '明年应取次年，非当前年');
+  check(r.warnings.indexOf('日期在今天之后') < 0, '「明年」不应触发未来警告：' + JSON.stringify(r.warnings));
+});
+
+test('2.2 「去年12月25日买礼物180」-> 2025-12-25，无警告', function () {
+  const r = assertDate('去年12月25日买礼物180', '2025-12-25', '去年应取上一年');
+  check(r.warnings.indexOf('日期在今天之后') < 0, '去年日期为过去，不应有警告：' + JSON.stringify(r.warnings));
+});
+
+test('2.3 「明年的3月1日还房贷4200」-> 2027-03-01（「的」字变体）', function () {
+  assertDate('明年的3月1日还房贷4200', '2027-03-01', '「明年的3月1日」应取次年3月1日');
+});
+
+test('2.4 「去年2月30日午饭20」非法日期不采纳，回落 ctx.today（与 md 现行为一致）', function () {
+  assertDate('去年2月30日午饭20', '2026-11-06', '2月30日非法，不应被采纳');
+});
+
+/* ============================== 用例 3：既有行为守护（修复不得破坏） ============================== */
+
+section('用例 3：既有日期行为守护');
+
+test('3.1 「12月28日聚餐200」-> 2026-12-28（md 防双计不回归）', function () {
+  assertDate('12月28日聚餐200', '2026-12-28', '绝对月日应保持原解析');
+});
+
+test('3.2 「3月5日午饭20」-> 2026-03-05（md 当前年）', function () {
+  assertDate('3月5日午饭20', '2026-03-05', 'md 应取当前年');
+});
+
+test('3.3 「28号买菜45」-> 2026-11-28（裸日号当前月）', function () {
+  assertDate('28号买菜45', '2026-11-28', '裸日号应取当前月');
+});
+
+test('3.4 「上个月买菜45」-> 2026-10-06（相对月单独出现，同日上月）', function () {
+  assertDate('上个月买菜45', '2026-10-06', '「上个月」单独出现保持同日上月');
+});
+
+test('3.5 「2026年10月28日出差180」-> 2026-10-28（完整年月日优先）', function () {
+  assertDate('2026年10月28日出差180', '2026-10-28', '完整年月日不受影响');
+});
+
+test('3.6 「2026-11-01 买书45」-> 2026-11-01（ISO 日期）', function () {
+  assertDate('2026-11-01 买书45', '2026-11-01', 'ISO 日期不受影响');
+});
+
+test('3.7 「明天买咖啡25」-> 2026-11-07（相对日）', function () {
+  assertDate('明天买咖啡25', '2026-11-07', '「明天」不受影响');
+});
+
+test('3.8 「下个月旅游预算800」-> 2026-12-06（相对月单独出现，同日下月）', function () {
+  assertDate('下个月旅游预算800', '2026-12-06', '「下个月」单独出现保持同日下月');
+});
+
+/* ============================== 汇总 ============================== */
+
+console.log('\n=========================================');
+console.log('通过 ' + passCount + ' / 失败 ' + failCount + ' / 观察项 ' + noteCount);
+if (failCount === 0) {
+  console.log('总结论：全绿 PASS');
+} else {
+  console.log('总结论：存在 FAIL，见上方 [FAIL] 明细');
+}
+console.log('=========================================');
+process.exit(failCount === 0 ? 0 : 1);

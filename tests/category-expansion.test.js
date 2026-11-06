@@ -154,7 +154,7 @@ if (!iconsBlock) { throw new Error('index.html 中找不到 icons 模块内联�
 vm.runInContext(iconsBlock, sandbox, { filename: 'inline:icons.js' });
 
 /* 模拟 app.js（加载链最后一环）把版本置为当前发布版本之后的最终状态。 */
-vm.runInContext("XZB.version = '2.26.13';", sandbox, { filename: 'inline:app-version-stub' });
+vm.runInContext("XZB.version = '2.27.1';", sandbox, { filename: 'inline:app-version-stub' });
 
 const nlSrc = fs.readFileSync(path.join(ROOT, 'js/modules/nl.js'), 'utf8');
 vm.runInContext(nlSrc, sandbox, { filename: 'js/modules/nl.js' });
@@ -623,21 +623,21 @@ test('6.5 index.html SYSTEM_CATEGORY_KEYS 字面量含 9 个新增 icon key', fu
 
 /* ============================== 用例 7：版本一致性 ============================== */
 
-section('用例 7：版本号 2.27.0 三处一致，无旧版本残留');
+section('用例 7：版本号 2.27.1 三处一致，无旧版本残留');
 
-test('7.1 index.html 含 XZB.version = \'2.27.0\'', function () {
-  check(/XZB\.version\s*=\s*'2\.27\.0'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.27.0\'');
+test('7.1 index.html 含 XZB.version = \'2.27.1\'', function () {
+  check(/XZB\.version\s*=\s*'2\.27\.1'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.27.1\'');
 });
 
-test('7.2 sw.js CACHE_NAME=\'xzb2-v2.27.0\' 且 CACHE_LABEL 含 2.27.0', function () {
-  check(/CACHE_NAME\s*=\s*'xzb2-v2\.27\.0'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.27.0');
+test('7.2 sw.js CACHE_NAME=\'xzb2-v2.27.1\' 且 CACHE_LABEL 含 2.27.1', function () {
+  check(/CACHE_NAME\s*=\s*'xzb2-v2\.27\.1'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.27.1');
   const m = /CACHE_LABEL\s*=\s*'([^']*)'/.exec(SW_JS);
   check(m, 'sw.js 找不到 CACHE_LABEL');
-  check(m[1].indexOf('2.27.0') >= 0, 'CACHE_LABEL 不含 2.27.0：' + m[1]);
+  check(m[1].indexOf('2.27.1') >= 0, 'CACHE_LABEL 不含 2.27.1：' + m[1]);
 });
 
 test('7.3 业务代码（.html/.js，排除 node_modules/.git）无旧版本号残留', function () {
-  const needle = '2.26.' + String.fromCharCode(56); // 旧版本号，避免本文件自匹配
+  const needle = '2.27.' + String.fromCharCode(48); // 上一发布版（版本号拼接，避免本文件自匹配）
   const offenders = [];
   const files = [];
   (function walk(dir) {
@@ -746,6 +746,30 @@ test('10.3 resolveCategory：小写别名命中、email 不误中（与 nl 同�
   checkEq(resolve('openai api 费', 'expense', cx).id, 'ca_aifee', 'openai');
   check(resolve('email 费', 'expense', cx).id !== 'ca_aifee',
     'email 不应误中，实际 ' + (resolve('email 费', 'expense', cx).id || '无'));
+});
+
+/* ============================== 用例 11（2.27.1）：清除本机数据删 AI 密钥 ============================== */
+
+section('用例 11（2.27.1）：「清除本机数据」必须连带删除 AI 密钥（xzb.ai.v1）');
+
+/* runWipe 在 lock 内联块里（function runWipe(writeMarker)），按花括号配对提升真实源码断言 */
+const runWipeSrc = liftFunction(INDEX_HTML, 'runWipe');
+if (!runWipeSrc) { throw new Error('index.html 中提取不到 runWipe 函数（声明形式变更需同步本用例）'); }
+
+test('11.1 runWipe 清理段在 clearPrefs 之后调用 opts.clearAiKey', function () {
+  const iPrefs = runWipeSrc.indexOf('opts.clearPrefs()');
+  const iAi = runWipeSrc.indexOf('opts.clearAiKey()');
+  check(iPrefs >= 0, 'runWipe 缺少 clearPrefs 调用（结构变更需同步本用例）');
+  check(iAi > iPrefs, 'runWipe 缺少 opts.clearAiKey() 调用，或未排在 clearPrefs 之后');
+});
+
+test('11.2 lock.configure 注入 clearAiKey：优先 llm.clearKey()，带 xzb.ai.v1 直接删除兜底', function () {
+  const iCfg = INDEX_HTML.indexOf('clearAiKey: function');
+  check(iCfg >= 0, 'XZB.lock.configure 未注入 clearAiKey');
+  check(INDEX_HTML.indexOf('llm.clearKey()', iCfg) >= 0,
+    'clearAiKey 应优先调 XZB.core.assistant.llm.clearKey()');
+  check(INDEX_HTML.indexOf("removeItem('xzb.ai.v1')", iCfg) >= 0,
+    'clearAiKey 缺少 localStorage.removeItem(\'xzb.ai.v1\') 兜底（core-assistant 为懒加载 chunk，锁屏 wipe 时未必已加载）');
 });
 
 /* ============================== 汇总 ============================== */

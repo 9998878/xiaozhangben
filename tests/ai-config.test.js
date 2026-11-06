@@ -489,6 +489,31 @@ regCase('9.5 分码的消费方：reasonOf/assistant/ai-insights/settings 都认
   check(SETTINGS_JS.indexOf("res.code === 'E_AS_NET_MIXED'") >= 0, 'settings apply() 缺少混合内容失败归因');
 });
 
+/* ============================== 用例 10：清除数据删密钥 + 测试连接报错（2.27.1） ============================== */
+
+section('用例 10：清除本机数据删 AI 密钥 + 测试连接报错不覆盖（2.27.1）');
+
+regCase('10.1 llm.clearKey()：整键删除 xzb.ai.v1，幂等，不波及其他键', function () {
+  seedCompleteConfig();
+  check(ls.getItem(AI_KEY_VALUE) !== null, '预置后 xzb.ai.v1 应存在');
+  ls.setItem('xzb.other.v1', 'keep');
+  const r = llm.clearKey();
+  checkEq(r && r.ok, true, 'clearKey 应返回 ok:true');
+  checkEq(ls.getItem(AI_KEY_VALUE), null, 'xzb.ai.v1 应被整键删除');
+  checkEq(llm.getConfig().cfg.hasKey, false, '清除后 hasKey 应为 false');
+  checkEq(ls.getItem('xzb.other.v1'), 'keep', '其他 localStorage 键不受影响');
+  const r2 = llm.clearKey();
+  checkEq(r2 && r2.ok, true, '重复清除应幂等');
+  ls.removeItem('xzb.other.v1');
+});
+
+regCase('10.2 测试连接三条件拆分：apply() 失败保留具体原因，不被「要填齐」覆盖（源码级）', function () {
+  check(SETTINGS_JS.indexOf("typeof api.test !== 'function' || !apply()") < 0,
+    '「api 缺失」与「apply() 失败」仍合并为一个条件，具体报错会被通用文案覆盖');
+  check(SETTINGS_JS.indexOf('if (!apply()) { return; }') >= 0,
+    '缺少「apply() 失败即返回（保留其写入的具体报错）」的拆分路径');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {
