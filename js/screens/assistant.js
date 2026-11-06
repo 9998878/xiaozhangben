@@ -682,8 +682,19 @@
     if (!turn || turn.noticeAnswer) { return; }
     var as = assistant();
     var llm = as && as.llm;
+    var saved = false;
     if (llm && typeof llm.setConfig === 'function') {
-      try { llm.setConfig({ noticeAt: Date.now() }); } catch (error) { /* 写不进去就按未同意处理 */ }
+      try {
+        var res = llm.setConfig({ noticeAt: Date.now() });
+        saved = !!(res && res.ok === true);
+      } catch (error) { saved = false; }
+    }
+    if (!saved) {
+      /* 2.28.0：告知没落盘就不能发请求，否则 respondRemote 重读 noticeAt=0 又会按隐私回落 */
+      turn.noticeAnswer = '隐私告知没有保存成功，这一句仍用本地解析；稍后可再试。';
+      paint();
+      sendLocal(String(turn.raw || ''), 'none');
+      return;
     }
     turn.noticeAnswer = '已同意联网，这一句用在线解析。';
     paint();

@@ -15,31 +15,22 @@
 
 ## P2（未修，按主题）
 
-### A. 隐私口径
+### A. 云端解析质量
 
-- `js/screens/insights.js` 告知文案称「不包含逐笔明细」，实际请求体含最多 10 条单笔记录（5 条大额异常支出 + 5 条一次性收入，各带日期、金额、分类名）。
-- `js/screens/insights.js` 屏底 footNote 写死「不联网」，与同屏联网 AI 卡矛盾；应按是否渲染 AI 卡分流文案。
-- 隐私文案三处互相矛盾：设置页说「只发当轮原话与账户名称」，实际还发分类清单；小助手告知卡又写「账户名称、分类名和统计口径」。
-- `js/screens/assistant.js` `acceptNotice` 忽略 `llm.setConfig` 返回值：落盘失败仍显示「已同意」并发请求。
-
-### B. 云端解析质量
-
-- `js/modules/core-assistant.js` `LLM_MAX_TOKENS` 为 800，撑不住系统提示允许的 20 笔批次；超过约 15 笔确定性失败并整批回落本地。
 - `js/modules/core-assistant.js` `mapNetError`：DNS 失败、拒连、CORS 全部映射 `E_NET_CONFIG`，配置正确的用户被误导去改配置。
 - `js/modules/core-assistant.js` 分类清单只发「id 名称」不发 kind，模型只能猜收支方向；收入类目（工资/奖金/理财）云端分类收益被吃掉。
 
-### C. 错误码与文案
+### B. 错误码与文案
 
-- `js/screens/settings.js` `AI_ERR_TEXT` 缺 `E_AS_NET_RATE`；`E_AS_NET_OFFLINE` 是死键，断网实际显示「配置不合法，检查地址与模型名」。
-- `js/modules/core-assistant.js` 5xx 映射成 `E_NET_RATE`（「服务繁忙/限流」），方向错误。
+- `js/screens/settings.js` `E_AS_NET_OFFLINE` 是死键：断网仍被归进 `E_AS_NET_CONFIG`，显示「配置不合法，检查地址与模型名」。
+- `js/modules/core-assistant.js` 5xx 仍映射成 `E_NET_RATE`（「服务繁忙/限流」），方向错误。
 
-### D. 词表与解析边界
+### C. 词表与解析边界
 
 - `js/modules/core-assistant.js` LLM 分类词表 60 上限静默截断，按种子序取前 60；用户新建分类从第 61 类起进不了云端提示词。
 - `index.html` `ca_aifee` 别名 8/8 已满：种子加到 9 条会让整库 `E_SCHEMA_INVALID` 加载失败；控制在 8 内则老库永远拿不到新别名。下次加词必须先做迁移。
-- `js/modules/nl.js`「打车十分快」「充电十分方便」被解析成 0.10 元支出：`rawNum === '十'` 的「十分」应直接跳过。
 
-### E. 助手交互
+### D. 助手交互
 
 - `js/screens/assistant.js`「只用本地解析这一句」实际让整个会话静默本地（`noticeDeclined` 置位后 `shouldNotice` 恒 false），与按钮文案不符。
 

@@ -697,6 +697,9 @@
           cents += jf.value;
         }
       } else if (unit === '分') {
+        /* 2.28.0：「十分快」「十分方便」是程度副词，不是 0.10 元；
+           只跳过「十+分」，避免继续往白名单里打地鼠。 */
+        if (rawNum === '十') { continue; }
         var afterFen = work.charAt(p + 1);
         if (afterFen === '钟' || afterFen === '之' || afterFen === '享' ||
             afterFen === '手' || afterFen === '数' || afterFen === '开' || afterFen === '别' ||

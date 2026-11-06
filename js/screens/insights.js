@@ -1580,7 +1580,7 @@
 
   function footNote(report) {
     var box = el('p', { className: 's-insights-foot' });
-    box.textContent = '解读由本地规则根据当前账本生成，不联网、不修改原始账单；' +
+    box.textContent = '解读由本地规则或你开启的在线模型生成，不修改原始账单；' +
       '统计范围为 ' + monthLabel(report.win.months[0]) + ' 至 ' + monthLabel(report.endMonth) + '。';
     return box;
   }
@@ -1732,7 +1732,7 @@
         var privacyCard = moduleCard('AI 月度解读', null, 's-insights-ai');
         privacyCard.appendChild(el('p', {
           className: 's-insights-ai__hint',
-          text: '生成解读会把本月的收支合计、分类金额与占比等聚合数据发给所配置的大模型，用于生成结余、结构与预算建议；不包含逐笔明细、备注与照片。'
+          text: '生成解读会把本月的收支合计、分类金额与占比等聚合数据，以及最多 10 笔大额或一次性收支（只含日期、金额、分类名称）发给所配置的大模型；不含备注、账号与照片。'
         }));
         privacyCard.appendChild(buttonNode('已知悉，生成解读', {
           className: 's-insights-tip__action',

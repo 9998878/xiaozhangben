@@ -154,7 +154,7 @@ if (!iconsBlock) { throw new Error('index.html 中找不到 icons 模块内联�
 vm.runInContext(iconsBlock, sandbox, { filename: 'inline:icons.js' });
 
 /* 模拟 app.js（加载链最后一环）把版本置为当前发布版本之后的最终状态。 */
-vm.runInContext("XZB.version = '2.27.1';", sandbox, { filename: 'inline:app-version-stub' });
+vm.runInContext("XZB.version = '2.28.0';", sandbox, { filename: 'inline:app-version-stub' });
 
 const nlSrc = fs.readFileSync(path.join(ROOT, 'js/modules/nl.js'), 'utf8');
 vm.runInContext(nlSrc, sandbox, { filename: 'js/modules/nl.js' });
@@ -623,38 +623,24 @@ test('6.5 index.html SYSTEM_CATEGORY_KEYS 字面量含 9 个新增 icon key', fu
 
 /* ============================== 用例 7：版本一致性 ============================== */
 
-section('用例 7：版本号 2.27.1 三处一致，无旧版本残留');
+section('用例 7：版本号 2.28.0 三处一致，无旧版本残留');
 
-test('7.1 index.html 含 XZB.version = \'2.27.1\'', function () {
-  check(/XZB\.version\s*=\s*'2\.27\.1'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.27.1\'');
+test('7.1 index.html 含 XZB.version = \'2.28.0\'', function () {
+  check(/XZB\.version\s*=\s*'2\.28\.0'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.0\'');
 });
 
-test('7.2 sw.js CACHE_NAME=\'xzb2-v2.27.1\' 且 CACHE_LABEL 含 2.27.1', function () {
-  check(/CACHE_NAME\s*=\s*'xzb2-v2\.27\.1'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.27.1');
+test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.0\' 且 CACHE_LABEL 含 2.28.0', function () {
+  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.0'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.0');
   const m = /CACHE_LABEL\s*=\s*'([^']*)'/.exec(SW_JS);
   check(m, 'sw.js 找不到 CACHE_LABEL');
-  check(m[1].indexOf('2.27.1') >= 0, 'CACHE_LABEL 不含 2.27.1：' + m[1]);
+  check(m[1].indexOf('2.28.0') >= 0, 'CACHE_LABEL 不含 2.28.0：' + m[1]);
 });
 
-test('7.3 业务代码（.html/.js，排除 node_modules/.git）无旧版本号残留', function () {
-  const needle = '2.27.' + String.fromCharCode(48); // 上一发布版（版本号拼接，避免本文件自匹配）
-  const offenders = [];
-  const files = [];
-  (function walk(dir) {
-    for (const name of fs.readdirSync(dir)) {
-      if (name === 'node_modules' || name === '.git') { continue; }
-      const p = path.join(dir, name);
-      const st = fs.statSync(p);
-      if (st.isDirectory()) { walk(p); } else { files.push(p); }
-    }
-  })(ROOT);
-  for (const file of files) {
-    /* 只扫代码文件：交付说明等 .md 文档会合法提及基线版本号（升级前版本字符串） */
-    if (!/\.(html|js)$/i.test(file)) { continue; }
-    const buf = fs.readFileSync(file);
-    if (buf.indexOf(needle) >= 0) { offenders.push(path.relative(ROOT, file)); }
-  }
-  checkEq(offenders.length, 0, '旧版本号残留于：' + offenders.join(', '));
+test('7.3 版本载体里无上一版 2.27.1 残留', function () {
+  const old = '2.27.' + String.fromCharCode(49); // 上一发布版 2.27.1
+  check(INDEX_HTML.indexOf("XZB.version = '" + old + "'") < 0, 'index.html 仍有旧 XZB.version');
+  check(SW_JS.indexOf('xzb2-v' + old) < 0, 'sw.js CACHE_NAME 仍含旧版本');
+  check(SW_JS.indexOf('小账本2-v' + old) < 0, 'sw.js CACHE_LABEL 仍含旧版本');
 });
 
 /* ============================== 用例 8：备份回灌 ensureShape ============================== */

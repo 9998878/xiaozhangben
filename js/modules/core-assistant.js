@@ -52,7 +52,9 @@
   var LLM_RETRY_AFTER_CAP = 1500;
   var LLM_MAX_RAW = 512;
   var LLM_MAX_BODY = 4096;
-  var LLM_MAX_TOKENS = 800;
+  /* 2.28.0：800 承载不了 20 笔批次的 JSON 信封，长批次会 finish_reason=length
+     被误判成 E_NET_BAD 并整批回落本地；对齐 AI 解读的 1500。 */
+  var LLM_MAX_TOKENS = 1500;
   var LLM_MAX_ACCOUNTS = 12;
   var LLM_MAX_CATEGORIES = 60;
   var LLM_NAME_MAX = 24;

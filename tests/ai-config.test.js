@@ -514,6 +514,28 @@ regCase('10.2 测试连接三条件拆分：apply() 失败保留具体原因，�
     '缺少「apply() 失败即返回（保留其写入的具体报错）」的拆分路径');
 });
 
+/* ============================== 用例 11：2.28.0 输出预算与隐私文案 ============================== */
+
+section('用例 11：令牌预算、告知落盘与隐私文案（2.28.0）');
+
+regCase('11.1 20 笔批次的输出预算 >= 1500', function () {
+  const m = /var LLM_MAX_TOKENS = (\d+);/.exec(CORE_JS);
+  check(m && Number(m[1]) >= 1500, 'LLM_MAX_TOKENS 应 >= 1500，实际 ' + (m ? m[1] : '未找到'));
+});
+
+regCase('11.2 acceptNotice 写入隐私告知失败时不发在线请求', function () {
+  check(ASSISTANT_JS.indexOf('隐私告知没有保存成功') >= 0, 'acceptNotice 未处理 setConfig 失败');
+  check(ASSISTANT_JS.indexOf('saved = !!(res && res.ok === true)') >= 0, 'acceptNotice 未检查 setConfig 返回值');
+});
+
+regCase('11.3 设置页 429 限流有独立文案', function () {
+  check(SETTINGS_JS.indexOf('E_AS_NET_RATE: ') >= 0, 'AI_ERR_TEXT 缺 E_AS_NET_RATE');
+});
+
+regCase('11.4 设置页隐私文案写明会发分类名称', function () {
+  check(SETTINGS_JS.indexOf('当轮原话、账户名称与分类名称') >= 0, '隐私文案遗漏分类名称');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {

@@ -3287,7 +3287,7 @@
     var privacyBody = h('div', { className: 'c-card__body' });
     privacyBody.appendChild(t('h2', 'c-card__title', '隐私'));
     privacyBody.appendChild(t('p', 's-settings-about__p s-settings-about__p--strong',
-      '账目默认只存在这台设备上，无账号、无服务器；开启在线模型后只把当轮原话与账户名称发给你配置的模型服务。'));
+      '账目默认只存在这台设备上，无账号、无服务器；开启在线模型后只把当轮原话、账户名称与分类名称发给你配置的模型服务。'));
     var guarantees = h('ul', { className: 's-settings-about__list' });
     var items = [
       '不主动上传任何账目；仅在开启在线模型时发送当轮原话',
@@ -3349,7 +3349,7 @@
       })
     ];
     /* R-11 / D-05：原句在「可选联网」后为假，已改为如实口径（与 renderAbout 隐私卡同源）。 */
-    return group('支持与关于', rows, '账目默认只存在这台设备上，无账号、无服务器；开启在线模型后只把当轮原话与账户名称发给你配置的模型服务。');
+    return group('支持与关于', rows, '账目默认只存在这台设备上，无账号、无服务器；开启在线模型后只把当轮原话、账户名称与分类名称发给你配置的模型服务。');
   }
 
   /* ---------------- 索引胶囊（SPEC P2-1 / DESIGN §4.2） ---------------- */
@@ -3470,6 +3470,7 @@
     E_AS_NOT_CONFIGURED: '地址、模型、密钥要填齐', E_AS_NOT_ACKED: '已配置：先同意隐私告知，再测试连接',
     E_AS_NET_CONFIG: '配置不合法，检查地址与模型名',
     E_AS_NET_TIMEOUT: '连接超时，检查网络或地址', E_AS_NET_BAD: '返回内容看不懂，换一个模型试试',
+    E_AS_NET_RATE: '模型太忙（限流），稍后再试',
     E_AS_NET_OFFLINE: '当前没有网络',
     E_AS_NET_MIXED: '网站是 https，地址要以 https:// 开头'
   };
@@ -3619,7 +3620,7 @@
         var res = null;
         try { res = api.setConfig({ enabled: next }); } catch (error) { res = null; }
         if (!res || res.ok !== true) { toast(ctx, '保存失败，请重试', { type: 'danger' }); return false; }
-        status.textContent = next ? '已开启：会把当轮原话发给你配置的模型服务' : '已关闭：全部在本机解析';
+        status.textContent = next ? '已开启：会把当轮原话、账户与分类名称发给你配置的模型服务' : '已关闭：全部在本机解析';
         return true;
       }
     }));
@@ -3630,7 +3631,7 @@
        同意即写 noticeAt，与 assistant.js acceptNotice / insights.js 的口径一致。 */
     list.appendChild(switchRow(ctx, {
       icon: 'shield', title: '同意隐私告知',
-      sub: '知悉并同意：开启后，当轮原话与账户名称会发送给你配置的模型服务；密钥只存在本机',
+      sub: '知悉并同意：开启后，当轮原话、账户名称与分类名称会发送给你配置的模型服务；密钥只存在本机',
       checked: Number(cfg.noticeAt) > 0,
       onChange: function (next) {
         var api = llmApi();
@@ -3700,7 +3701,7 @@
     /* R-11 / D-05：只写事实，不暗示加密或绝对安全。 */
     wrap.appendChild(h('p', {
       className: 's-settings-group__note',
-      text: '密钥只存在本机；只有开启在线模型时，才会把当轮原话与账户名称发给你的模型服务。'
+      text: '密钥只存在本机；只有开启在线模型时，才会把当轮原话、账户名称与分类名称发给你的模型服务。'
     }));
     return wrap;
   }
