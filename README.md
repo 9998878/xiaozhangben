@@ -6,7 +6,7 @@
 
 手机用 Safari 打开这个地址 → 分享 → 「添加到主屏幕」，之后就和一个 App 一样，飞行模式下照样能记、能看统计。
 
-> 想接手开发或看当前进度？先读 [HANDOFF.md](HANDOFF.md)；每一轮改动的记录见 [agent.md](agent.md)。
+> 想接手开发或看当前进度？先读 [HANDOFF.md](HANDOFF.md)；每一轮改动的记录见 [agent.md](agent.md)。**任何修改都会记入 agent.md，并同步更新 HANDOFF.md。**
 
 ---
 
