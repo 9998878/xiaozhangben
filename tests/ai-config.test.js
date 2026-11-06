@@ -391,6 +391,21 @@ regCase('7.4 软提示不再谎称「本地模式」：8s 起提示且文案换�
   check(Number(sandbox.XZB.Core.assistant.LLM_SOFT_MS) >= 8000, 'LLM_SOFT_MS 应 >= 8000（20s 硬超时下 5s 就喊回落会误导）');
 });
 
+/* ============================== 用例 8：在线模型子页二次进入（2.26.12） ============================== */
+
+section('用例 8：在线模型子页二次进入不再白屏（2.26.12）');
+
+regCase('8.1 渲染不再拿 document.contains 判存活：热路径同步构建 + 冷路径只判 parentNode', function () {
+  check(SETTINGS_JS.indexOf('if (!alive(page)) { return; }') < 0,
+    '仍残留 alive(page) 存活门：chunk 已热时回调早于 DOM 挂载，二次进入必白屏');
+  check(SETTINGS_JS.indexOf('if (!page.parentNode) { return; }') >= 0,
+    '冷路径缺少 parentNode 存活判定');
+  check(SETTINGS_JS.indexOf('var readyNow = llmApi();') >= 0,
+    '缺少「已加载则同步构建」的热路径');
+  check(/var readyNow = llmApi\(\);\s*\n\s*if \(readyNow\) \{\s*\n\s*page\.appendChild\(buildAiForm\(ctx\)\);/.test(SETTINGS_JS),
+    '热路径未直接构建表单（仍会走异步，存在误判窗口）');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {

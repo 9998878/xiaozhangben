@@ -3487,14 +3487,26 @@
   function renderAiSettings(root, ctx) {
     deferTitle(ctx, '在线模型');
     var page = h('div', { className: 's-settings-page' });
-    var note = h('p', { className: 's-settings-note', text: '正在加载联网配置…' });
-    page.appendChild(note);
     root.appendChild(page);
     function fail() {
-      if (alive(note)) { note.textContent = '联网模块没加载起来，稍后重新进入本页再试。'; }
+      if (note && note.parentNode) { note.textContent = '联网模块没加载起来，稍后重新进入本页再试。'; }
     }
+    /* 2.26.12：已加载就直接同步构建。
+       这里曾用 `if (!alive(page)) return;` 做「本次渲染是否还有效」的门，但 alive() 走
+       document.contains()，而路由是「先建好 screen 树、swapDom 时才挂进 #app」。
+       首次进入要等 chunk 网络加载，回调落在挂载之后 → 判 true；第二次进入 chunk 已热，
+       ensureAssistantCore() 同步 resolve，回调落在挂载之前 → 判 false，被当成「已销毁」
+       直接 return，页面永远停在「正在加载联网配置…」（用户主诉：连续点两次在线模型就打不开）。
+       现在：热路径同步渲染，冷路径只判「本页是否还挂在自己的父节点上」，不再用 contains。 */
+    var readyNow = llmApi();
+    if (readyNow) {
+      page.appendChild(buildAiForm(ctx));
+      return;
+    }
+    var note = h('p', { className: 's-settings-note', text: '正在加载联网配置…' });
+    page.appendChild(note);
     ensureAssistantCore().then(function (ready) {
-      if (!alive(page)) { return; }
+      if (!page.parentNode) { return; }
       if (!ready || !llmApi()) { fail(); return; }
       if (note.parentNode) { note.parentNode.removeChild(note); }
       page.appendChild(buildAiForm(ctx));
