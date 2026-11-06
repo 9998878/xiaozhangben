@@ -154,7 +154,7 @@ if (!iconsBlock) { throw new Error('index.html 中找不到 icons 模块内联�
 vm.runInContext(iconsBlock, sandbox, { filename: 'inline:icons.js' });
 
 /* 模拟 app.js（加载链最后一环）把版本置为当前发布版本之后的最终状态。 */
-vm.runInContext("XZB.version = '2.26.10';", sandbox, { filename: 'inline:app-version-stub' });
+vm.runInContext("XZB.version = '2.26.11';", sandbox, { filename: 'inline:app-version-stub' });
 
 const nlSrc = fs.readFileSync(path.join(ROOT, 'js/modules/nl.js'), 'utf8');
 vm.runInContext(nlSrc, sandbox, { filename: 'js/modules/nl.js' });
@@ -623,17 +623,17 @@ test('6.5 index.html SYSTEM_CATEGORY_KEYS 字面量含 9 个新增 icon key', fu
 
 /* ============================== 用例 7：版本一致性 ============================== */
 
-section('用例 7：版本号 2.26.10 三处一致，无旧版本残留');
+section('用例 7：版本号 2.26.11 三处一致，无旧版本残留');
 
-test('7.1 index.html 含 XZB.version = \'2.26.10\'', function () {
-  check(/XZB\.version\s*=\s*'2\.26\.10'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.26.10\'');
+test('7.1 index.html 含 XZB.version = \'2.26.11\'', function () {
+  check(/XZB\.version\s*=\s*'2\.26\.11'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.26.11\'');
 });
 
-test('7.2 sw.js CACHE_NAME=\'xzb2-v2.26.10\' 且 CACHE_LABEL 含 2.26.10', function () {
-  check(/CACHE_NAME\s*=\s*'xzb2-v2\.26\.10'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.26.10');
+test('7.2 sw.js CACHE_NAME=\'xzb2-v2.26.11\' 且 CACHE_LABEL 含 2.26.11', function () {
+  check(/CACHE_NAME\s*=\s*'xzb2-v2\.26\.11'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.26.11');
   const m = /CACHE_LABEL\s*=\s*'([^']*)'/.exec(SW_JS);
   check(m, 'sw.js 找不到 CACHE_LABEL');
-  check(m[1].indexOf('2.26.10') >= 0, 'CACHE_LABEL 不含 2.26.10：' + m[1]);
+  check(m[1].indexOf('2.26.11') >= 0, 'CACHE_LABEL 不含 2.26.11：' + m[1]);
 });
 
 test('7.3 业务代码（.html/.js，排除 node_modules/.git）无旧版本号残留', function () {

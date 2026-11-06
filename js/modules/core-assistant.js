@@ -40,8 +40,13 @@
   var AI_MAX_MODEL = 100;
   var AI_MAX_KEY = 300;
   var LLM_TIMEOUT_MS = 6000;
-  var LLM_SOFT_MS = 5000;
-  var LLM_BUDGET_MS = 8000;
+  /* 2.26.11：记账解析（llmPlan）不再共用 6s。6s 只是「测试连接」这类 16 token 探测
+     的合理上限；真实解析要带系统提示词 + 最多 60 条分类清单，云端 qwen 一类模型常在
+     6-10s 才吐完第一个字，共用一个 6s 会把「正在生成」误判成失败并静默回落本地
+     （用户主诉：测试连接能过，小助手还是本地——回落总发生在第 5-6 秒）。 */
+  var LLM_PLAN_TIMEOUT_MS = 20000;
+  var LLM_SOFT_MS = 8000;
+  var LLM_BUDGET_MS = 24000;
   var LLM_RETRY = 0;
   var LLM_BACKOFF_MS = 600;
   var LLM_RETRY_AFTER_CAP = 1500;
@@ -2447,8 +2452,9 @@
     return { ok: false, code: E.NET_CONFIG, retryable: false, status: 0, reason: 'offline' };
   }
 
-  /* timeoutMs 可选：默认仍是 LLM_TIMEOUT_MS（6s，记账解析用）；AI 解读等长任务单独传值。
-     不改本参数的行为：respondRemote / llmPlan / llmTest 的调用形态与超时全部保持原样。 */
+  /* timeoutMs 可选：默认 LLM_TIMEOUT_MS（6s，测试连接等短探测用）。
+     记账解析（llmPlan）显式传 LLM_PLAN_TIMEOUT_MS（20s，2.26.11），AI 解读等长任务
+     也各自传值；不传时行为与旧版一致。 */
   function httpOnce(cfg, bodyStr, timeoutMs) {
     return new Promise(function (resolve) {
       if (typeof fetch !== 'function') {
@@ -2744,7 +2750,7 @@
     var started = Date.now();
     var attempt = 0;
     function run() {
-      return httpOnce(cfg, fit.body).then(function (res) {
+      return httpOnce(cfg, fit.body, LLM_PLAN_TIMEOUT_MS).then(function (res) {
         if (res && res.ok) {
           var parsed = readEnvelope(res.json);
           if (!parsed.ok) {
@@ -3373,7 +3379,7 @@
   }
 
   /* respondRemote(text, state, cx) → Promise<{state, reply, mode:'online'|'local-fallback', reason}>
-   * 软 5s 提示由界面消费 LLM_SOFT_MS；这里只负责硬 6s 兜底与回落，永不 reject。 */
+   * 软提示（LLM_SOFT_MS，2.26.11 起 8s）由界面消费；这里只负责硬 20s 兜底与回落，永不 reject。 */
   function respondRemote(text, state, cx) {
     var ctx = safeCx(cx);
     return new Promise(function (resolve) {
@@ -3479,6 +3485,7 @@
     DRAFT_KEY: DRAFT_KEY,
     AI_KEY: AI_KEY,
     LLM_TIMEOUT_MS: LLM_TIMEOUT_MS,
+    LLM_PLAN_TIMEOUT_MS: LLM_PLAN_TIMEOUT_MS,
     LLM_SOFT_MS: LLM_SOFT_MS,
     LLM_BUDGET_MS: LLM_BUDGET_MS,
     LLM_RETRY: LLM_RETRY,

@@ -484,7 +484,7 @@
       el('p', { className: 's-assistant__text s-assistant__text--dim', text: typing.label || '正在解析…' })
     ]);
     if (typing.soft) {
-      body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: '正在用本地模式…' }));
+      body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: '模型响应较慢，继续等…' }));
     }
     return el('div', { className: 's-assistant__row s-assistant__row--bot', 'aria-live': 'polite' }, [
       el('div', { className: 's-assistant__avatar', 'aria-hidden': 'true' }, [icon('sparkles', 16)]),
@@ -1113,7 +1113,8 @@
     paint();
     scrollToEnd(true);
 
-    /* 200ms 后才把「正在解析…」画出来；5s 时追加「正在用本地模式…」（R-04 软提示） */
+    /* 200ms 后才把「正在解析…」画出来；8s 时追加「模型响应较慢，继续等…」（R-04 软提示）
+       2.26.11：软提示从 5s 挪到 8s——解析硬超时已是 20s，5s 就喊「本地模式」会误导。 */
     later(function () {
       if (token !== session.token) { return; }
       session.typing = { label: '正在解析…', soft: false };
@@ -1121,7 +1122,7 @@
       scrollToEnd(false);
     }, TYPING_DELAY);
 
-    var softMs = Number(as.LLM_SOFT_MS) || 5000;
+    var softMs = Number(as.LLM_SOFT_MS) || 8000;
     later(function () {
       if (token !== session.token || !session.typing) { return; }
       session.typing.soft = true;

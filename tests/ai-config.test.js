@@ -344,6 +344,53 @@ regCase('6.6 账户页净资产含归档账户（迭代9，CONTRACT §6.2 口径
     '不应残留旧签名调用');
 });
 
+/* ============================== 用例 7：解析超时预算（2.26.11） ============================== */
+
+section('用例 7：记账解析超时预算——6s 门误杀云端慢响应（2.26.11）');
+
+regCase('7.1 常量分层：测试连接仍 6s，记账解析 20s', function () {
+  const AS = sandbox.XZB.Core.assistant;
+  checkEq(AS.LLM_TIMEOUT_MS, 6000, 'LLM_TIMEOUT_MS（测试连接等短探测）');
+  check(Number(AS.LLM_PLAN_TIMEOUT_MS) >= 15000,
+    'LLM_PLAN_TIMEOUT_MS 应 >= 15000，实际 ' + AS.LLM_PLAN_TIMEOUT_MS);
+});
+
+regCase('7.2 源码：llmPlan 把 LLM_PLAN_TIMEOUT_MS 显式传给 httpOnce（防回退到默认 6s）', function () {
+  check(CORE_JS.indexOf('httpOnce(cfg, fit.body, LLM_PLAN_TIMEOUT_MS)') >= 0,
+    'llmPlan 未显式传解析超时，仍会吃默认 6s');
+});
+
+regCase('7.3 行为：响应在 6.2s 才回来（超过旧 6s 门）时 llmPlan 仍成功', async function () {
+  seedCompleteConfig();
+  llm.setConfig({ noticeAt: Date.now() });
+  const originalFetch = sandbox.fetch;
+  const payload = {
+    choices: [{
+      finish_reason: 'stop',
+      message: { content: '{"intent":"need_clarify","clarify":{"question":"记多少？","options":[]}}' }
+    }]
+  };
+  sandbox.fetch = function () {
+    return new Promise(function (resolve) {
+      setTimeout(function () {
+        resolve({ status: 200, text: function () { return Promise.resolve(JSON.stringify(payload)); } });
+      }, 6200);
+    });
+  };
+  try {
+    const res = await llm.plan({ raw: '午饭', today: '2026-11-06', bookId: 'b1', accounts: [], categories: [] });
+    checkEq(res && res.ok, true, 'plan().ok（旧 6s 门会在此超时并被回落本地）');
+  } finally {
+    sandbox.fetch = originalFetch;
+  }
+});
+
+regCase('7.4 软提示不再谎称「本地模式」：8s 起提示且文案换掉', function () {
+  check(ASSISTANT_JS.indexOf('正在用本地模式…') < 0, '仍残留「正在用本地模式…」软提示');
+  check(ASSISTANT_JS.indexOf('模型响应较慢') >= 0, '缺少「模型响应较慢」软提示');
+  check(Number(sandbox.XZB.Core.assistant.LLM_SOFT_MS) >= 8000, 'LLM_SOFT_MS 应 >= 8000（20s 硬超时下 5s 就喊回落会误导）');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {
