@@ -154,7 +154,7 @@ if (!iconsBlock) { throw new Error('index.html 中找不到 icons 模块内联�
 vm.runInContext(iconsBlock, sandbox, { filename: 'inline:icons.js' });
 
 /* 模拟 app.js（加载链最后一环）把版本置为当前发布版本之后的最终状态。 */
-vm.runInContext("XZB.version = '2.28.0';", sandbox, { filename: 'inline:app-version-stub' });
+vm.runInContext("XZB.version = '2.28.1';", sandbox, { filename: 'inline:app-version-stub' });
 
 const nlSrc = fs.readFileSync(path.join(ROOT, 'js/modules/nl.js'), 'utf8');
 vm.runInContext(nlSrc, sandbox, { filename: 'js/modules/nl.js' });
@@ -623,17 +623,17 @@ test('6.5 index.html SYSTEM_CATEGORY_KEYS 字面量含 9 个新增 icon key', fu
 
 /* ============================== 用例 7：版本一致性 ============================== */
 
-section('用例 7：版本号 2.28.0 三处一致，无旧版本残留');
+section('用例 7：版本号 2.28.1 三处一致，无旧版本残留');
 
-test('7.1 index.html 含 XZB.version = \'2.28.0\'', function () {
-  check(/XZB\.version\s*=\s*'2\.28\.0'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.0\'');
+test('7.1 index.html 含 XZB.version = \'2.28.1\'', function () {
+  check(/XZB\.version\s*=\s*'2\.28\.1'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.1\'');
 });
 
-test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.0\' 且 CACHE_LABEL 含 2.28.0', function () {
-  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.0'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.0');
+test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.1\' 且 CACHE_LABEL 含 2.28.1', function () {
+  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.1'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.1');
   const m = /CACHE_LABEL\s*=\s*'([^']*)'/.exec(SW_JS);
   check(m, 'sw.js 找不到 CACHE_LABEL');
-  check(m[1].indexOf('2.28.0') >= 0, 'CACHE_LABEL 不含 2.28.0：' + m[1]);
+  check(m[1].indexOf('2.28.1') >= 0, 'CACHE_LABEL 不含 2.28.1：' + m[1]);
 });
 
 test('7.3 版本载体里无上一版 2.27.1 残留', function () {
@@ -756,6 +756,111 @@ test('11.2 lock.configure 注入 clearAiKey：优先 llm.clearKey()，带 xzb.ai
     'clearAiKey 应优先调 XZB.core.assistant.llm.clearKey()');
   check(INDEX_HTML.indexOf("removeItem('xzb.ai.v1')", iCfg) >= 0,
     'clearAiKey 缺少 localStorage.removeItem(\'xzb.ai.v1\') 兜底（core-assistant 为懒加载 chunk，锁屏 wipe 时未必已加载）');
+});
+
+/* ============================== 用例 12（2.28.1）：云端词表 kind 标注与系统保底排序 ============================== */
+
+section('用例 12（2.28.1）：云端词表——pairText 标注收支方向、categoryPairs 系统保底排序');
+
+/* pairText 是纯函数（core-assistant.js 内），提升真实源码进沙箱执行 */
+vm.runInContext(liftFunction(caSrc, 'pairText'), sandbox, { filename: 'lift:pairText' });
+
+test('12.1 pairText(list, true) 输出「id 名称 [收入|支出]」，不带 withKind 保持原样', function () {
+  const out = sandbox.pairText([
+    { id: 'ca_salary', name: '工资', kind: 'income' },
+    { id: 'ca_food', name: '吃饭', kind: 'expense' },
+    { id: 'ca_x', name: '怪', kind: 'weird' }
+  ], true);
+  checkEq(out, 'ca_salary 工资 [收入]\nca_food 吃饭 [支出]\nca_x 怪 [支出]', 'kind 标注（非 income 一律支出）');
+  const plain = sandbox.pairText([{ id: 'ac_cash', name: '现金' }]);
+  checkEq(plain, 'ac_cash 现金', '账户清单不带 kind');
+});
+
+test('12.2 系统提示词占位符声明 kind 标注，systemText 只给分类开 withKind（源码级）', function () {
+  check(caSrc.indexOf('分类清单（id 名称 [收入|支出]）：<CATEGORIES>') >= 0, '占位符未声明 kind 标注');
+  check(caSrc.indexOf('pairText(cats, true)') >= 0, 'systemText 未给分类清单开 withKind');
+  check(caSrc.indexOf('pairText(accts)') >= 0 && caSrc.indexOf('pairText(accts, true)') < 0,
+    '账户清单应保持不带 kind');
+});
+
+/* categoryPairs 依赖 short + LLM_MAX_CATEGORIES + LLM_NAME_MAX：一并提升/抠值（数值从源码取，不硬编码） */
+vm.runInContext(liftFunction(caSrc, 'short'), sandbox, { filename: 'lift:short' });
+const mMaxCat = /var LLM_MAX_CATEGORIES = (\d+)/.exec(caSrc);
+const mNameMax = /var LLM_NAME_MAX = (\d+)/.exec(caSrc);
+if (!mMaxCat || !mNameMax) { throw new Error('core-assistant.js 中找不到 LLM_MAX_CATEGORIES / LLM_NAME_MAX 定义'); }
+vm.runInContext('var LLM_MAX_CATEGORIES = ' + mMaxCat[1] + '; var LLM_NAME_MAX = ' + mNameMax[1] + ';',
+  sandbox, { filename: 'lift:llm-constants' });
+vm.runInContext(liftFunction(caSrc, 'categoryPairs'), sandbox, { filename: 'lift:categoryPairs' });
+
+test('12.3 categoryPairs：system 全保底，用户分类按 sort 升序补足，截断不再先砍用户分类', function () {
+  const cats = [];
+  for (let i = 0; i < 55; i++) { cats.push({ id: 'ca_sys' + i, name: '系统' + i, kind: 'expense', system: true, sort: 10 + i * 10 }); }
+  for (let u = 0; u < 10; u++) { cats.push({ id: 'ca_user' + u, name: '自定义' + u, kind: 'expense', system: false, sort: 900 + u * 10 }); }
+  const out = sandbox.categoryPairs(cats);
+  checkEq(out.length, mMaxCat[1] | 0, '输出受上限约束');
+  const ids = out.map(function (x) { return x.id; });
+  for (let i = 0; i < 55; i++) {
+    check(ids.indexOf('ca_sys' + i) >= 0, '系统分类 ca_sys' + i + ' 必须保底（旧实现会被截断丢尾）');
+  }
+  const users = ids.filter(function (id) { return id.indexOf('ca_user') === 0; });
+  checkEq(users.length, 5, '用户分类只进 sort 最小的 5 个');
+  checkEq(users[0], 'ca_user0', '用户分类按 sort 升序');
+  checkEq(users[4], 'ca_user4', '用户分类按 sort 升序');
+  checkEq(out[0].kind, 'expense', 'kind 字段随 pair 保留（供 pairText 标注）');
+});
+
+/* ============================== 用例 13（2.28.1）：种子别名窄升级（ca_aifee 双向陷阱解除） ============================== */
+
+section('用例 13（2.28.1）：种子别名窄升级——同 id 老库回填缺失别名、不越 8 条上限');
+
+test('13.1 老库 ca_aifee 缺「Gemini」：判定需同步，sync 后补齐、整库校验过、判定回落 false', function () {
+  const db = schema.createDb(FIXED_AT);
+  const aifee = db.categories.find(function (c) { return c.id === 'ca_aifee'; });
+  aifee.aliases = aifee.aliases.filter(function (a) { return a !== 'Gemini'; });
+  checkEq(aifee.aliases.length, 7, '装置：ca_aifee 7 条');
+  checkEq(sandbox.catalogNeedsSync(db), true, '缺种子别名应判定需要同步（旧实现恒 false）');
+  schema.syncCategoryCatalog(db);
+  const after = db.categories.find(function (c) { return c.id === 'ca_aifee'; });
+  checkEq(after.aliases.length, 8, '回填到 8 条');
+  check(after.aliases.indexOf('Gemini') >= 0, 'Gemini 应被回填');
+  checkEq(schema.validateDb(db).ok, true, '回填后整库校验通过');
+  checkEq(sandbox.catalogNeedsSync(db), false, '补齐后不再判定需要同步');
+});
+
+test('13.2 幂等：回填后再同步一次，分类零变化', function () {
+  const db = schema.createDb(FIXED_AT);
+  const aifee = db.categories.find(function (c) { return c.id === 'ca_aifee'; });
+  aifee.aliases = aifee.aliases.filter(function (a) { return a !== 'Gemini'; });
+  schema.syncCategoryCatalog(db);
+  const snap = JSON.stringify(db.categories);
+  schema.syncCategoryCatalog(db);
+  checkEq(JSON.stringify(db.categories), snap, '二次同步不得有任何变化');
+});
+
+test('13.3 上限封顶：7 条（缺 2 个种子词、含 1 用户词）只补 1 条，用户词优先保留，满员后不再触发', function () {
+  const db = schema.createDb(FIXED_AT);
+  const aifee = db.categories.find(function (c) { return c.id === 'ca_aifee'; });
+  aifee.aliases = aifee.aliases.filter(function (a) { return a !== 'Gemini' && a !== 'Claude'; }).concat(['用户自留词']);
+  checkEq(aifee.aliases.length, 7, '装置：7 条（缺 Claude/Gemini、多用户词）');
+  checkEq(sandbox.catalogNeedsSync(db), true, '有空位且缺词 → 需同步');
+  schema.syncCategoryCatalog(db);
+  const after = db.categories.find(function (c) { return c.id === 'ca_aifee'; });
+  checkEq(after.aliases.length, 8, '封顶 8 条');
+  check(after.aliases.indexOf('用户自留词') >= 0, '用户自有别名优先保留');
+  check(after.aliases.indexOf('Claude') >= 0, '按种子顺序只回填到有空位的第一个（Claude）');
+  check(after.aliases.indexOf('Gemini') < 0, '没有空位，Gemini 不回填');
+  checkEq(sandbox.catalogNeedsSync(db), false, '满员后不再触发（避免每次启动空转同步）');
+});
+
+test('13.4 摘除词不复活：老库残留「书」+ 缺「学费」，同步后「书」仍被摘、种子词正常补', function () {
+  const db = schema.createDb(FIXED_AT);
+  const study = db.categories.find(function (c) { return c.id === 'ca_study'; });
+  checkEq(JSON.stringify(study.aliases), JSON.stringify(['课程', '培训', '学费']), '种子现状锚点');
+  study.aliases = ['课程', '书']; /* 缺 培训/学费，且残留已摘除的「书」 */
+  schema.syncCategoryCatalog(db);
+  const after = db.categories.find(function (c) { return c.id === 'ca_study'; });
+  checkEq(JSON.stringify(after.aliases), JSON.stringify(['课程', '培训', '学费']), '摘 1 补 2：与种子对齐且「书」不复活');
+  checkEq(schema.validateDb(db).ok, true, '整库校验通过');
 });
 
 /* ============================== 汇总 ============================== */

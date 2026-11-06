@@ -83,6 +83,9 @@
     NET_TIMEOUT: 'E_AS_NET_TIMEOUT',
     NET_RATE: 'E_AS_NET_RATE',
     NET_BAD: 'E_AS_NET_BAD',
+    /* 2.28.1：断网必须有独立码——settings 的 E_AS_NET_OFFLINE 文案一直是死键，
+       断网时用户看到的是「配置不合法」，会被带去反复删改本来正确的配置 */
+    NET_OFFLINE: 'E_AS_NET_OFFLINE',
     /* 2.26.13：https 页面里配 http:// 接口地址，浏览器按混合内容直接拦，必须点名 */
     MIXED: 'E_AS_NET_MIXED'
   };
@@ -109,6 +112,7 @@
     E_AS_NET_TIMEOUT: '联网超时，已用本地模式继续',
     E_AS_NET_RATE: '模型太忙（限流），已用本地模式继续',
     E_AS_NET_BAD: '模型返回的内容看不懂，已用本地模式继续',
+    E_AS_NET_OFFLINE: '当前没有网络，已用本地模式继续',
     E_AS_NET_MIXED: '网站是 https，接口地址不能填 http://（浏览器会当作混合内容拦掉），请换成 https:// 地址'
   };
 
@@ -2478,10 +2482,11 @@
 
   function mapStatus(status, res) {
     if (status === 429) {
-      return { ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res) };
+      return { ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res), reason: 'rate' };
     }
     if (status >= 500) {
-      return { ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res) };
+      /* 5xx 是服务端故障，不是「限流」：文案方向不同（2.28.1），码保持 NET_RATE（同为可重试） */
+      return { ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res), reason: 'server' };
     }
     /* 401/403/404/405/400 等：地址、模型或密钥配错，重试无意义 */
     return { ok: false, code: E.NET_CONFIG, retryable: false, status: status };
@@ -2493,13 +2498,14 @@
     }
     try {
       if (global.navigator && global.navigator.onLine === false) {
-        return { ok: false, code: E.NET_CONFIG, retryable: false, status: 0, reason: 'offline' };
+        return { ok: false, code: E.NET_OFFLINE, retryable: false, status: 0, reason: 'offline' };
       }
     } catch (error2) {
       /* navigator 不可用就算了 */
     }
-    /* 断网与 CORS 同形：都按配置/网络问题回落本地 */
-    return { ok: false, code: E.NET_CONFIG, retryable: false, status: 0, reason: 'offline' };
+    /* DNS 失败/拒连/CORS：fetch 抛错但 onLine 为 true——不能归「配置不合法」误导用户删配置，
+       也不能谎报「没有网络」（2.28.1 拆出独立 reason 'net'，code 保持 NET_CONFIG 仍归配置兜底桶） */
+    return { ok: false, code: E.NET_CONFIG, retryable: false, status: 0, reason: 'net' };
   }
 
   /* timeoutMs 可选：默认 LLM_TIMEOUT_MS（6s，测试连接等短探测用）。
@@ -2676,17 +2682,23 @@
       '今天：<TODAY>',
       '账本：<BOOK>',
       '账户清单（id 名称）：<ACCOUNTS>',
-      '分类清单（id 名称）：<CATEGORIES>'
+      '分类清单（id 名称 [收入|支出]）：<CATEGORIES>'
     ];
   }
 
-  function pairText(list) {
+  /* withKind：分类清单序列化时标注收支方向——categoryPairs 已构造 kind，但旧版在这里
+     丢掉了，模型只能靠名字猜收支，收入类目（工资/奖金/理财）的云端分类收益被吃掉（2.28.1） */
+  function pairText(list, withKind) {
     var out = [];
     var i;
     for (i = 0; i < list.length; i += 1) {
       var one = list[i];
       if (!one || !one.id) { continue; }
-      out.push(String(one.id) + ' ' + String(one.name || ''));
+      if (withKind) {
+        out.push(String(one.id) + ' ' + String(one.name || '') + (one.kind === 'income' ? ' [收入]' : ' [支出]'));
+      } else {
+        out.push(String(one.id) + ' ' + String(one.name || ''));
+      }
     }
     return out.join('\n');
   }
@@ -2710,8 +2722,23 @@
     var out = [];
     var i;
     var src = Array.isArray(list) ? list : [];
-    for (i = 0; i < src.length && out.length < LLM_MAX_CATEGORIES; i += 1) {
-      var one = src[i];
+    /* 保底排序（2.28.1）：截断前先稳定重排——system 分类全部保底（保持原序），
+       其余按 sort 升序（无 sort 回落原序）。旧实现按数组序截断，而用户自建分类
+       追加在数组尾部，60 上限一到先被砍的永远是用户自己的分类。
+       fitBody 的对半砍也吃到同一顺序：被裁的仍然是尾部的低优先分类。 */
+    var order = [];
+    for (i = 0; i < src.length; i += 1) { order.push({ one: src[i], idx: i }); }
+    order.sort(function (a, b) {
+      var sa = a.one && a.one.system === true ? 0 : 1;
+      var sb = b.one && b.one.system === true ? 0 : 1;
+      if (sa !== sb) { return sa - sb; }
+      var ta = a.one && typeof a.one.sort === 'number' ? a.one.sort : null;
+      var tb = b.one && typeof b.one.sort === 'number' ? b.one.sort : null;
+      if (ta !== null && tb !== null && ta !== tb) { return ta - tb; }
+      return a.idx - b.idx;
+    });
+    for (i = 0; i < order.length && out.length < LLM_MAX_CATEGORIES; i += 1) {
+      var one = order[i].one;
       if (!one || typeof one !== 'object') { continue; }
       var id = short(String(one.id || ''), 40);
       var name = short(String(one.name || ''), LLM_NAME_MAX);
@@ -2726,7 +2753,7 @@
       .replace('<TODAY>', today)
       .replace('<BOOK>', bookId)
       .replace('<ACCOUNTS>', pairText(accts))
-      .replace('<CATEGORIES>', pairText(cats));
+      .replace('<CATEGORIES>', pairText(cats, true));
   }
 
   function buildBody(cfg, raw, accts, cats, today, bookId) {
@@ -2853,7 +2880,8 @@
     }
     return httpOnce(cfg, body).then(function (res) {
       if (!res || !res.ok) {
-        return { ok: false, code: (res && res.code) || E.NET_BAD };
+        /* reason 透传：5xx（server）与 429（rate）同码不同因，设置页文案要能区分（2.28.1） */
+        return { ok: false, code: (res && res.code) || E.NET_BAD, reason: res && res.reason };
       }
       return { ok: true, ms: Date.now() - started };
     }, function () {
@@ -3392,6 +3420,9 @@
   /* ---------- 失败 → 本地模式（绝不静默） ---------- */
 
   function reasonOf(code, res) {
+    /* httpOnce 层已标好的细分原因（'net'/'server'/'offline'/'timeout'/'mixed'）优先直通：
+       5xx 与 429 同码不同因，只有 res.reason 能区分（2.28.1） */
+    if (res && typeof res.reason === 'string' && res.reason) { return res.reason; }
     if (code === E.NET_TIMEOUT) { return 'timeout'; }
     if (code === E.NET_RATE) { return 'rate'; }
     if (code === E.NET_BAD) { return 'bad'; }

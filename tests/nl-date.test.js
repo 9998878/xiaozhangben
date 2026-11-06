@@ -221,6 +221,67 @@ test('4.2 「充电十分方便」不产生金额', function () {
   checkEq(r.code, 'E_NL_NO_AMOUNT', '错误码应为 E_NL_NO_AMOUNT');
 });
 
+/* ============================== 用例 5：parseAmount 单位矩阵（2.28.1，测试缺口 #8） ============================== */
+
+section('用例 5：parseAmount 单位边界（元/块/毛/角/分/万/千/百/两/千分位/¥/负号）');
+
+function amountOf(text) {
+  const r = nlApi.parseAmount(text);
+  if (!r || r.ok !== true) { throw new Error('parseAmount(' + JSON.stringify(text) + ') 失败：' + JSON.stringify(r)); }
+  return r;
+}
+
+function amountFail(text) {
+  const r = nlApi.parseAmount(text);
+  check(r && r.ok === false, 'parseAmount(' + JSON.stringify(text) + ') 应失败，实际 ' + JSON.stringify(r));
+}
+
+test('5.1 裸数字与元/块/圆：12=1200 分，12.5元=1250，¥35=3500', function () {
+  checkEq(amountOf('12').cents, 1200, '裸数字按元');
+  checkEq(amountOf('12.5元').cents, 1250, '小数元');
+  checkEq(amountOf('¥35').cents, 3500, '¥ 前缀');
+});
+
+test('5.2 块尾数：12块5=1250 分（12.5 元）', function () {
+  checkEq(amountOf('12块5').cents, 1250, '「块+尾数」口语');
+});
+
+test('5.3 毛/角：5毛=50，3角=30，3毛5=35', function () {
+  checkEq(amountOf('5毛').cents, 50, '毛=1/10 元');
+  checkEq(amountOf('3角').cents, 30, '角=1/10 元');
+  checkEq(amountOf('3毛5').cents, 35, '毛+尾分');
+});
+
+test('5.4 分：5分=5，50分=50（不乘 100）', function () {
+  checkEq(amountOf('5分').cents, 5, '5 分就是 5 分');
+  checkEq(amountOf('50分').cents, 50, '50 分就是 50 分');
+});
+
+test('5.5 万/千/百：12万=12000000，1万2=1200000，3千5=350000，5百=50000', function () {
+  checkEq(amountOf('12万').cents, 12000000, '12 万元');
+  checkEq(amountOf('1万2').cents, 1200000, '口语省位 1万2');
+  checkEq(amountOf('3千5').cents, 350000, '口语省位 3千5');
+  checkEq(amountOf('5百').cents, 50000, '5 百元');
+});
+
+test('5.6 中文数字与「两」：三十五=3500，两块=200', function () {
+  checkEq(amountOf('三十五').cents, 3500, '中文数字');
+  checkEq(amountOf('两块').cents, 200, '两=2');
+});
+
+test('5.7 千分位：1,234=123400（好千分位照常收）', function () {
+  checkEq(amountOf('1,234').cents, 123400, '严格千分位');
+});
+
+test('5.8 负号与超上限必须失败：-5 → 拒收；11 位整数 → 超过 MAX_CENTS 拒收', function () {
+  amountFail('-5');
+  amountFail('99999999999');
+});
+
+test('5.9 「十分」豁免回归：打车十分快 无金额（2.28.0 修复在 parseAmount 层仍成立）', function () {
+  amountFail('打车十分快');
+});
+
 /* ============================== 汇总 ============================== */
 
 console.log('\n=========================================');

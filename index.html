@@ -15909,13 +15909,50 @@ textarea::selection {
    * 用户可能已手工创建过与种子同名的自定义分类（如「书籍」），validateCategory
    * 对同 kind 同 name（不同 id）报 E_CATEGORY_DUP，直接追加会让整库判坏、
    * 启动/导入失败。同名时保留用户自己的分类、跳过该种子。 */
+  /* 2.28.1 种子别名窄升级：同 id 的既有系统分类回填种子新增的缺失别名。
+     解开 known-issues 的 ca_aifee 双向陷阱——旧实现同 id 直接跳过，种子加词后
+     老库永远拿不到；而把种子加到 9 条又会被 validateCategory 判坏整库。约束：
+     用户自有别名优先、类内去重、以 LIMITS.aliases 封顶（回填永不突破校验上限）、
+     SEED_ALIAS_REMOVALS 摘除过的旧默认别名不回填（upgradeSeedCategoryAliases
+     紧随其后还会再摘一次，这里不添就少一次反复）。 */
+  function mergeMissingSeedAliases(target, seed) {
+    if (!isObj(target) || !isObj(seed) || !Array.isArray(seed.aliases) || seed.aliases.length === 0) { return; }
+    var current = Array.isArray(target.aliases) ? target.aliases : [];
+    var seen = Object.create(null);
+    var kept = [];
+    for (var i = 0; i < current.length; i++) {
+      var alias = typeof current[i] === 'string' ? current[i] : '';
+      if (alias === '' || seen[alias]) { continue; }
+      seen[alias] = true;
+      kept.push(alias);
+    }
+    var rule = SEED_ALIAS_REMOVALS[seed.id] || null;
+    var added = false;
+    for (i = 0; i < seed.aliases.length && kept.length < LIMITS.aliases; i++) {
+      var seedAlias = typeof seed.aliases[i] === 'string' ? seed.aliases[i] : '';
+      if (seedAlias === '' || seen[seedAlias] || (rule && rule[seedAlias])) { continue; }
+      seen[seedAlias] = true;
+      kept.push(seedAlias);
+      added = true;
+    }
+    if (added) { target.aliases = kept; }
+  }
+
+  /* 2.28.1 导出给 store 块的 catalogNeedsSync 用：该别名是否属于已被摘除的旧默认别名 */
+  function isRemovedSeedAlias(categoryId, alias) {
+    if (typeof categoryId !== 'string' || typeof alias !== 'string') { return false; }
+    var rule = SEED_ALIAS_REMOVALS[categoryId];
+    return !!(rule && rule[alias]);
+  }
+
   function mergeSeedCategories(list, seeds) {
     var existingIds = Object.create(null);
     var existingNames = Object.create(null);
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
       if (!isObj(item)) { continue; }
-      if (typeof item.id === 'string' && item.id !== '') { existingIds[item.id] = true; }
+      /* 存引用而非布尔：同 id 命中时要做别名回填（2.28.1） */
+      if (typeof item.id === 'string' && item.id !== '') { existingIds[item.id] = item; }
       if (typeof item.kind === 'string' && typeof item.name === 'string') {
         existingNames[item.kind + '|' + item.name] = true;
       }
@@ -15923,7 +15960,10 @@ textarea::selection {
     for (var j = 0; j < seeds.length; j++) {
       var seed = seeds[j];
       if (!isObj(seed) || typeof seed.id !== 'string') { continue; }
-      if (existingIds[seed.id]) { continue; }
+      if (existingIds[seed.id]) {
+        mergeMissingSeedAliases(existingIds[seed.id], seed);
+        continue;
+      }
       if (existingNames[seed.kind + '|' + seed.name]) { continue; }
       list.push(seed);
     }
@@ -16345,6 +16385,8 @@ textarea::selection {
     ensureShape: ensureShape,
     syncCategoryCatalog: syncCategoryCatalog,
     applyCategoryDelete: applyCategoryDelete,
+    isRemovedSeedAlias: isRemovedSeedAlias,
+    aliasesLimit: LIMITS.aliases,
 
     seedData: seedData,
     defaultSettings: defaultSettings,
@@ -16976,16 +17018,34 @@ textarea::selection {
 
   /* 2.26.9 同 Schema 分类目录同步判定：seedData 里有、而库里没有的系统分类 id
    * 即视为需要补齐。系统分类「删除」只是 hidden=true 软删（applyCategoryDelete），
-   * 实体仍在数组里，因此按 id 判存在不会复活用户删掉的分类。 */
+   * 实体仍在数组里，因此按 id 判存在不会复活用户删掉的分类。
+   * 2.28.1 追加：系统分类缺种子别名也算需要同步——否则种子加词后老库 id 齐全、
+   * 本判定恒 false，mergeSeedCategories 的别名回填（schema 块）永远没有执行机会。
+   * 只对 system 分类生效；已摘除的旧默认别名不算缺失；别名已满（=上限）不再触发，
+   * 避免「想补但补不进」的库每次启动都空转同步。 */
   function catalogNeedsSync(db) {
     if (!isObject(db) || !Array.isArray(db.categories)) { return false; }
     var seeds = schema.seedData().categories;
     for (var i = 0; i < seeds.length; i++) {
-      var found = false;
+      var seed = seeds[i];
+      var found = null;
       for (var j = 0; j < db.categories.length; j++) {
-        if (isObject(db.categories[j]) && db.categories[j].id === seeds[i].id) { found = true; break; }
+        if (isObject(db.categories[j]) && db.categories[j].id === seed.id) { found = db.categories[j]; break; }
       }
       if (!found) { return true; }
+      if (!isObject(seed) || seed.system !== true || found.system !== true) { continue; }
+      if (!Array.isArray(seed.aliases) || seed.aliases.length === 0) { continue; }
+      if (!Array.isArray(found.aliases) || found.aliases.length >= schema.aliasesLimit) { continue; }
+      for (var k = 0; k < seed.aliases.length; k++) {
+        var alias = seed.aliases[k];
+        if (typeof alias !== 'string' || alias === '') { continue; }
+        if (schema.isRemovedSeedAlias(seed.id, alias)) { continue; }
+        var has = false;
+        for (var m = 0; m < found.aliases.length; m++) {
+          if (found.aliases[m] === alias) { has = true; break; }
+        }
+        if (!has) { return true; }
+      }
     }
     return false;
   }
@@ -32803,7 +32863,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.28.0';
+  XZB.version = '2.28.1';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};

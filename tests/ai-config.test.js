@@ -536,6 +536,130 @@ regCase('11.4 设置页隐私文案写明会发分类名称', function () {
   check(SETTINGS_JS.indexOf('当轮原话、账户名称与分类名称') >= 0, '隐私文案遗漏分类名称');
 });
 
+/* ============================== 用例 12：按句生效与隐私文案残余（2.28.1 源码级） ============================== */
+
+section('用例 12：「只用本地」按句生效与隐私文案收尾（2.28.1 源码级）');
+
+regCase('12.1 「只用本地解析这一句」按句生效：不再存在会话级 noticeDeclined', function () {
+  check(ASSISTANT_JS.indexOf('session.noticeDeclined') < 0,
+    'assistant.js 仍读写 session.noticeDeclined（会话级静默与「这一句」承诺矛盾）');
+  check(ASSISTANT_JS.indexOf('只用本地解析这一句') >= 0, '按钮文案锚点（aria-label，结构变更需同步本用例）');
+});
+
+regCase('12.2 告知卡与设置页写明分类名称、删掉无出域对应的「统计口径」', function () {
+  check(ASSISTANT_JS.indexOf('会把你说的话、账户名称与分类名称发送给你配置的模型服务') >= 0,
+    'NOTICE_BODY 应写明分类名称');
+  check(ASSISTANT_JS.indexOf('每次只发送这一句话、账户名称、分类名，不发账目明细。') >= 0,
+    'NOTICE_DETAIL 应删掉「统计口径」');
+  check(SETTINGS_JS.indexOf('你说的话会与账户名称、分类名称一起发送') >= 0,
+    '设置页「小助手与联网」分组说明应补分类名称');
+});
+
+/* ============================== 用例 13：httpOnce 异常矩阵与密钥不出域（2.28.1） ============================== */
+
+section('用例 13：httpOnce 异常矩阵与密钥不出域（经 llm.chat + fetch 桩）');
+
+const KEY_SENTINEL = 'sk-test-1234567890';
+
+function ackCompleteConfig() {
+  seedCompleteConfig();
+  const r = llm.setConfig({ noticeAt: Date.now() });
+  if (!(r && r.ok === true)) { throw new Error('预置告知写入失败'); }
+}
+
+/* 换 fetch 桩与 onLine 状态（用后还原）；onLine 只认 true/false，其余不动 navigator */
+async function withNet(stub, navigatorOnLine, fn) {
+  const prevFetch = sandbox.fetch;
+  const prevNav = sandbox.navigator;
+  sandbox.fetch = stub;
+  if (navigatorOnLine === true || navigatorOnLine === false) {
+    sandbox.navigator = { onLine: navigatorOnLine };
+  }
+  try { return await fn(); }
+  finally {
+    sandbox.fetch = prevFetch;
+    if (prevNav === undefined) { delete sandbox.navigator; } else { sandbox.navigator = prevNav; }
+  }
+}
+
+const CHAT_MSGS = [{ role: 'user', content: 'hi' }];
+
+regCase('13.1 密钥不出域：key 只在 Authorization 头，URL/body/配置视图均无明文', async function () {
+  ackCompleteConfig();
+  let seen = null;
+  const res = await withNet(function (url, options) {
+    seen = { url: url, options: options };
+    return Promise.resolve({ status: 200, text: function () { return Promise.resolve('{"ok":true}'); } });
+  }, true, function () {
+    return llm.chat(CHAT_MSGS, { timeoutMs: 500 });
+  });
+  checkEq(res && res.ok, true, '请求应成功返回');
+  checkEq(seen.url, 'https://api.example.com/v1/chat/completions', 'URL = baseURL + /chat/completions');
+  checkEq(seen.options.headers.Authorization, 'Bearer ' + KEY_SENTINEL, 'key 只出现在 Authorization 头');
+  check(seen.options.body.indexOf(KEY_SENTINEL) < 0, '请求体不得含明文 key');
+  const view = JSON.stringify(llm.getConfig());
+  check(view.indexOf(KEY_SENTINEL) < 0, 'getConfig() 视图不得含明文 key（只有掩码）');
+  check(view.indexOf('••••') >= 0, '视图应含掩码');
+});
+
+regCase('13.2 400 → E_AS_NET_CONFIG（不可重试）', async function () {
+  ackCompleteConfig();
+  const res = await withNet(function () { return Promise.resolve({ status: 400 }); }, true,
+    function () { return llm.chat(CHAT_MSGS, {}); });
+  checkEq(res.code, 'E_AS_NET_CONFIG', '400 归配置');
+  checkEq(res.retryable, false, '400 不可重试');
+});
+
+regCase('13.3 429 → E_AS_NET_RATE，reason=rate，可重试', async function () {
+  ackCompleteConfig();
+  const res = await withNet(function () { return Promise.resolve({ status: 429 }); }, true,
+    function () { return llm.chat(CHAT_MSGS, {}); });
+  checkEq(res.code, 'E_AS_NET_RATE', '429 归限流');
+  checkEq(res.reason, 'rate', 'reason=rate');
+  checkEq(res.retryable, true, '限流可重试');
+});
+
+regCase('13.4 5xx → E_AS_NET_RATE 但 reason=server（服务端故障 ≠ 限流，2.28.1）', async function () {
+  ackCompleteConfig();
+  const res = await withNet(function () { return Promise.resolve({ status: 503 }); }, true,
+    function () { return llm.chat(CHAT_MSGS, {}); });
+  checkEq(res.code, 'E_AS_NET_RATE', '码与限流同桶（同为可重试网络错误）');
+  checkEq(res.reason, 'server', 'reason 必须是 server');
+  checkEq(res.retryable, true, '可重试');
+});
+
+regCase('13.5 200 + 非 JSON body → E_AS_NET_BAD', async function () {
+  ackCompleteConfig();
+  const res = await withNet(function () {
+    return Promise.resolve({ status: 200, text: function () { return Promise.resolve('这不是 JSON'); } });
+  }, true, function () { return llm.chat(CHAT_MSGS, {}); });
+  checkEq(res.code, 'E_AS_NET_BAD', '非法 body 归 NET_BAD');
+});
+
+regCase('13.6 fetch 抛错（DNS/拒连/CORS）且 onLine=true → E_AS_NET_CONFIG + reason=net', async function () {
+  ackCompleteConfig();
+  const res = await withNet(function () { return Promise.reject(new TypeError('Failed to fetch')); }, true,
+    function () { return llm.chat(CHAT_MSGS, {}); });
+  checkEq(res.code, 'E_AS_NET_CONFIG', '码仍归配置兜底桶');
+  checkEq(res.reason, 'net', 'reason 必须是 net（与「没配置」区分开）');
+});
+
+regCase('13.7 断网（onLine=false）→ E_AS_NET_OFFLINE + reason=offline（死键激活，2.28.1）', async function () {
+  ackCompleteConfig();
+  const res = await withNet(function () { return Promise.reject(new TypeError('Failed to fetch')); }, false,
+    function () { return llm.chat(CHAT_MSGS, {}); });
+  checkEq(res.code, 'E_AS_NET_OFFLINE', '断网应归独立码');
+  checkEq(res.reason, 'offline', 'reason=offline');
+});
+
+regCase('13.8 真超时（timeoutMs=1 + 永不 resolve）→ E_AS_NET_TIMEOUT', async function () {
+  ackCompleteConfig();
+  const res = await withNet(function () { return new Promise(function () {}); }, true,
+    function () { return llm.chat(CHAT_MSGS, { timeoutMs: 1 }); });
+  checkEq(res.code, 'E_AS_NET_TIMEOUT', '超时归 NET_TIMEOUT');
+  checkEq(res.reason, 'timeout', 'reason=timeout');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {

@@ -41,10 +41,12 @@
   var SUBTITLE_IDLE = '离线可用 · 联网时由你配置的模型解析';
   var SUBTITLE_LOCAL = '本地模式';
 
-  /* 首次联网告知（R-11）：两句事实，必须原样出现，不做营销化改写 */
+  /* 首次联网告知（R-11）：两句事实，必须原样出现，不做营销化改写。
+     2.28.1：与实际出域对齐——出站 payload 含分类清单（id+名称），必须写明分类名称；
+     「统计口径」在 payload 中并无对应字段，删掉。 */
   var NOTICE_HEAD = '联网解析前先跟你说清楚：';
-  var NOTICE_BODY = '会把你说的话与账户名称发给你配置的模型服务';
-  var NOTICE_DETAIL = '每次只发送这一句话、账户名称、分类名和统计口径，不发账目明细。';
+  var NOTICE_BODY = '会把你说的话、账户名称与分类名称发送给你配置的模型服务';
+  var NOTICE_DETAIL = '每次只发送这一句话、账户名称、分类名，不发账目明细。';
   var NOTICE_TAIL = '可在「我的」里关闭（小助手与联网）';
   var NOTICE_ASK = '现在要联网解析这一句吗？';
 
@@ -55,6 +57,8 @@
   var REASON_TEXT = {
     timeout: '网络超时，已改用本地解析',
     rate: '服务繁忙（限流），已改用本地解析',
+    server: '模型服务出错，已改用本地解析',
+    net: '在线服务连不上，已改用本地解析',
     config: '未启用在线模型，当前用本地解析',
     disabled: '未启用在线模型，当前用本地解析',
     privacy: '已配置在线模型：先同意隐私告知再联网',
@@ -205,9 +209,10 @@
     return !!(cfg && Number(cfg.noticeAt) > 0);
   }
 
-  /* 该不该在这一次提交前先弹告知卡：只有「用户真的填好了模型、并且打开了开关」才问 */
+  /* 该不该在这一次提交前先弹告知卡：只有「用户真的填好了模型、并且打开了开关」才问。
+     2.28.1：「只用本地」改回按句生效——旧版把拒绝记成会话级（noticeDeclined），
+     之后每句既不询问也不说明，与按钮文案「只用本地解析这一句」自相矛盾。 */
   function shouldNotice(cfg) {
-    if (session.noticeDeclined) { return false; }
     if (!cfg) { return false; }
     if (cfg.enabled !== true) { return false; }
     if (!hasCredentials(cfg)) { return false; }
@@ -235,7 +240,6 @@
     queue: [],
     typing: null,
     timers: [],
-    noticeDeclined: false,
     undoEntry: null,
     undoUntil: 0
   };
@@ -703,7 +707,8 @@
 
   function declineNotice(turn) {
     if (!turn || turn.noticeAnswer) { return; }
-    session.noticeDeclined = true;
+    /* 2.28.1：只作用于这一句（turn.noticeAnswer 已挡住本句重复询问）。
+       下一句若仍「已配置未告知」，告知卡照常再问——按句生效，不再会话级静默。 */
     turn.noticeAnswer = '这次只用本地解析；想开联网随时去「我的 › 小助手与联网」。';
     paint();
     sendLocal(String(turn.raw || ''), 'none');

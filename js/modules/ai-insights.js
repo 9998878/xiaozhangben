@@ -1110,8 +1110,12 @@
         if (code === 'E_AS_NET_RATE') { return { ok: false, reason: 'rate' }; }
         /* E_AS_NOT_ACKED（已配置未告知）也归 config 兜底：insights 页有自己的隐私卡前置，不扩 UI。
            E_AS_NET_MIXED（https 页面配了 http://）同属配置问题，归 config 而非 bad（2.26.13） */
+        /* E_AS_NOT_ACKED（已配置未告知）也归 config 兜底：insights 页有自己的隐私卡前置，不扩 UI。
+           E_AS_NET_MIXED（https 页面配了 http://）同属配置问题，归 config 而非 bad（2.26.13）。
+           E_AS_NET_CONFIG（401/403/404 等，mapStatus 归配置）与 E_AS_NET_OFFLINE（断网，2.28.1）
+           同理归 config——落 bad 会让用户以为「返回内容无法识别」（2.28.1 修复） */
         if (code === 'E_AS_NOT_CONFIGURED' || code === 'E_AS_AI_DISABLED' || code === 'E_AS_NOT_ACKED'
-          || code === 'E_AS_NET_MIXED') { return { ok: false, reason: 'config' }; }
+          || code === 'E_AS_NET_MIXED' || code === 'E_AS_NET_CONFIG' || code === 'E_AS_NET_OFFLINE') { return { ok: false, reason: 'config' }; }
         return { ok: false, reason: 'bad' };
       }
 
