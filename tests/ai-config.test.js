@@ -406,6 +406,89 @@ regCase('8.1 渲染不再拿 document.contains 判存活：热路径同步构建
     '热路径未直接构建表单（仍会走异步，存在误判窗口）');
 });
 
+/* ============================== 用例 9：https 页面里的 http:// 接口地址（2.26.13） ============================== */
+
+section('用例 9：混合内容预检——https 页面不许填 http://（2.26.13）');
+
+/* 切换页面协议：aiMixedBlock 读 global.location.protocol，沙箱 global 就是 sandbox 本身。
+   用例跑完恢复原状，避免污染其它用例（默认沙箱没有 location，等价于「协议未知」）。 */
+async function withPageProtocol(protocol, fn) {
+  const had = Object.prototype.hasOwnProperty.call(sandbox, 'location');
+  const prev = sandbox.location;
+  sandbox.location = { protocol: protocol };
+  try {
+    return await fn();
+  } finally {
+    if (had) { sandbox.location = prev; } else { delete sandbox.location; }
+  }
+}
+
+regCase('9.1 https 页面保存 http:// 地址：回 E_AS_NET_MIXED 且原配置不被覆盖', async function () {
+  await withPageProtocol('https:', function () {
+    seedCompleteConfig();
+    const before = llm.getConfig().cfg.baseURL;
+    const r = llm.setConfig({ baseURL: 'http://api.example.com/v1' });
+    checkEq(r && r.ok, false, 'setConfig().ok');
+    checkEq(r && r.code, 'E_AS_NET_MIXED', 'setConfig().code');
+    checkEq(r && r.field, 'baseURL', 'setConfig().field');
+    checkEq(llm.getConfig().cfg.baseURL, before, '被拒的地址不应写进存储');
+  });
+});
+
+regCase('9.2 回环地址豁免：https 页面填 http://127.0.0.1 / http://localhost 仍可保存', async function () {
+  await withPageProtocol('https:', function () {
+    seedCompleteConfig();
+    const r1 = llm.setConfig({ baseURL: 'http://127.0.0.1:11434/v1' });
+    checkEq(r1 && r1.ok, true, '127.0.0.1 应放行（本地模型反代）');
+    checkEq(llm.getConfig().cfg.baseURL, 'http://127.0.0.1:11434/v1', '127.0.0.1 地址应落盘');
+    const r2 = llm.setConfig({ baseURL: 'http://localhost:8080/v1' });
+    checkEq(r2 && r2.ok, true, 'localhost 应放行');
+  });
+});
+
+regCase('9.3 旧配置里的 http:// 地址：test()/plan() 直接回 E_AS_NET_MIXED 且不出网', async function () {
+  await withPageProtocol('https:', async function () {
+    seedCompleteConfig();
+    llm.setConfig({ noticeAt: Date.now() });
+    /* 绕过 setConfig 的门直接写盘：模拟旧版本遗留或别处同步来的配置 */
+    const raw = JSON.parse(ls.getItem(AI_KEY_VALUE));
+    raw.baseURL = 'http://api.example.com/v1';
+    ls.setItem(AI_KEY_VALUE, JSON.stringify(raw));
+    checkEq(llm.getConfig().cfg.baseURL, 'http://api.example.com/v1', '前置：http 地址已在配置里');
+    let calls = 0;
+    const originalFetch = sandbox.fetch;
+    sandbox.fetch = function () { calls += 1; return Promise.reject(new Error('mixed: should not fetch')); };
+    try {
+      const res = await llm.test();
+      checkEq(res && res.ok, false, 'test().ok');
+      checkEq(res && res.code, 'E_AS_NET_MIXED', 'test().code');
+      const plan = await llm.plan({ raw: '午饭 35', today: '2026-11-06', bookId: 'b1', accounts: [], categories: [] });
+      checkEq(plan && plan.code, 'E_AS_NET_MIXED', 'plan().code');
+      checkEq(calls, 0, '混合内容必须在出网前拦下，实际 fetch 被调 ' + calls + ' 次');
+    } finally {
+      sandbox.fetch = originalFetch;
+    }
+  });
+});
+
+regCase('9.4 本地 http 页面（dev server）照旧可填 http://：只在 https 页面拦', async function () {
+  await withPageProtocol('http:', function () {
+    seedCompleteConfig();
+    const r = llm.setConfig({ baseURL: 'http://api.example.com/v1' });
+    checkEq(r && r.ok, true, 'http 页面应放行');
+    checkEq(llm.getConfig().cfg.baseURL, 'http://api.example.com/v1', '应正常落盘');
+  });
+});
+
+regCase('9.5 分码的消费方：reasonOf/assistant/ai-insights/settings 都认得 E_AS_NET_MIXED', function () {
+  check(CORE_JS.indexOf("MIXED: 'E_AS_NET_MIXED'") >= 0, 'core E 表缺少 MIXED');
+  check(CORE_JS.indexOf("if (code === E.MIXED) { return 'mixed'; }") >= 0, 'reasonOf 未把 MIXED 归 mixed');
+  check(ASSISTANT_JS.indexOf('mixed: ') >= 0, 'assistant REASON_TEXT 缺少 mixed 文案');
+  check(AI_INSIGHTS_JS.indexOf("code === 'E_AS_NET_MIXED'") >= 0, 'ai-insights 未把 MIXED 归 config');
+  check(SETTINGS_JS.indexOf('E_AS_NET_MIXED: ') >= 0, 'settings AI_ERR_TEXT 缺少 E_AS_NET_MIXED');
+  check(SETTINGS_JS.indexOf("res.code === 'E_AS_NET_MIXED'") >= 0, 'settings apply() 缺少混合内容失败归因');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {

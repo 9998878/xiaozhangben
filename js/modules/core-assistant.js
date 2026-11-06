@@ -80,7 +80,9 @@
     NET_CONFIG: 'E_AS_NET_CONFIG',
     NET_TIMEOUT: 'E_AS_NET_TIMEOUT',
     NET_RATE: 'E_AS_NET_RATE',
-    NET_BAD: 'E_AS_NET_BAD'
+    NET_BAD: 'E_AS_NET_BAD',
+    /* 2.26.13：https 页面里配 http:// 接口地址，浏览器按混合内容直接拦，必须点名 */
+    MIXED: 'E_AS_NET_MIXED'
   };
 
   var M = {
@@ -104,7 +106,8 @@
     E_AS_NET_CONFIG: '联网配置不完整或不合法（检查地址/模型/密钥）',
     E_AS_NET_TIMEOUT: '联网超时，已用本地模式继续',
     E_AS_NET_RATE: '模型太忙（限流），已用本地模式继续',
-    E_AS_NET_BAD: '模型返回的内容看不懂，已用本地模式继续'
+    E_AS_NET_BAD: '模型返回的内容看不懂，已用本地模式继续',
+    E_AS_NET_MIXED: '网站是 https，接口地址不能填 http://（浏览器会当作混合内容拦掉），请换成 https:// 地址'
   };
 
   var TYPE_TEXT = { expense: '支出', income: '收入', transfer: '转账' };
@@ -2259,6 +2262,49 @@
     return s;
   }
 
+  /* 混合内容预检（2.26.13）：https 页面里 fetch 一个 http:// 地址，浏览器按混合内容
+     直接拦掉，控制台只留一条 ERR_* 记录，界面上的报错与真实原因无关。设置页因此提前
+     拦下并点名，免得用户对着「配置不合法」反复换密钥。
+     回环地址（localhost / 127.x / [::1]）按「潜在可信源」豁免，浏览器不拦，
+     本地跑 Ollama 这类反代仍可用。返回 '' 表示这条路走得通。 */
+  function aiHostOf(url) {
+    var s = String(url || '');
+    var cut = s.indexOf('://');
+    if (cut < 0) { return ''; }
+    var rest = s.slice(cut + 3);
+    var stop = rest.search(/[\/?#]/);
+    if (stop >= 0) { rest = rest.slice(0, stop); }
+    var at = rest.lastIndexOf('@');
+    if (at >= 0) { rest = rest.slice(at + 1); }
+    if (rest.charAt(0) === '[') {
+      var close = rest.indexOf(']');
+      return close > 0 ? rest.slice(0, close + 1) : rest;
+    }
+    var colon = rest.indexOf(':');
+    return colon >= 0 ? rest.slice(0, colon) : rest;
+  }
+
+  function aiLoopbackHost(host) {
+    var h = String(host || '').toLowerCase();
+    if (h === 'localhost' || h === '::1' || h === '[::1]') { return true; }
+    return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
+  }
+
+  function aiMixedBlock(url) {
+    var s = String(url || '').toLowerCase();
+    var cut = s.indexOf('://');
+    if (cut < 0 || s.slice(0, cut) !== 'http') { return ''; }
+    var page = '';
+    try {
+      page = String((global.location && global.location.protocol) || '').toLowerCase();
+    } catch (error) {
+      page = '';
+    }
+    if (page !== 'https:') { return ''; }
+    if (aiLoopbackHost(aiHostOf(s))) { return ''; }
+    return E.MIXED;
+  }
+
   /* 读取：缺键 / 损坏 JSON / 超长 / 形状不对 一律回落安全默认值，绝不抛 */
   function aiRead() {
     var cfg = aiDefault();
@@ -2357,6 +2403,8 @@
       if (wantURL) {
         var normalized = aiNormalizeURL(wantURL);
         if (!normalized) { return { ok: false, code: E.NET_CONFIG, field: 'baseURL' }; }
+        /* 保存前就拦：https 页面填 http:// 注定发不出去，让它落盘只会让「测试连接」报错更难懂 */
+        if (aiMixedBlock(normalized)) { return { ok: false, code: E.MIXED, field: 'baseURL' }; }
         cfg.baseURL = normalized;
       } else {
         cfg.baseURL = '';
@@ -2457,6 +2505,11 @@
      也各自传值；不传时行为与旧版一致。 */
   function httpOnce(cfg, bodyStr, timeoutMs) {
     return new Promise(function (resolve) {
+      /* 混合内容预检放最前：这种请求浏览器根本发不出去，别浪费时间等超时 */
+      if (aiMixedBlock(cfg && cfg.baseURL)) {
+        resolve({ ok: false, code: E.MIXED, retryable: false, status: 0, reason: 'mixed' });
+        return;
+      }
       if (typeof fetch !== 'function') {
         resolve({ ok: false, code: E.NET_CONFIG, retryable: false, status: 0 });
         return;
@@ -3342,6 +3395,8 @@
     if (code === E.NET_BAD) { return 'bad'; }
     if (code === E.AI_DISABLED) { return 'disabled'; }
     if (code === E.NOT_ACKED) { return 'privacy'; }
+    /* 2.26.13：https 页面配了 http:// 地址，报「返回内容无法识别」会把用户带偏 */
+    if (code === E.MIXED) { return 'mixed'; }
     if (code === E.NOT_CONFIGURED || code === E.NET_CONFIG) {
       var offline = false;
       try { offline = !!(global.navigator && global.navigator.onLine === false); } catch (error) { offline = false; }

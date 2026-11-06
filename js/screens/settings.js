@@ -3470,7 +3470,8 @@
     E_AS_NOT_CONFIGURED: '地址、模型、密钥要填齐', E_AS_NOT_ACKED: '已配置：先同意隐私告知，再测试连接',
     E_AS_NET_CONFIG: '配置不合法，检查地址与模型名',
     E_AS_NET_TIMEOUT: '连接超时，检查网络或地址', E_AS_NET_BAD: '返回内容看不懂，换一个模型试试',
-    E_AS_NET_OFFLINE: '当前没有网络'
+    E_AS_NET_OFFLINE: '当前没有网络',
+    E_AS_NET_MIXED: '网站是 https，地址要以 https:// 开头'
   };
 
   function aiStatusText(result) {
@@ -3569,7 +3570,9 @@
         /* 失败归因：缺协议 → 密钥超长（300 与 core-assistant AI_MAX_KEY 一致）→ 兜底（2.26.9） */
         var addr = String(inputs.baseURL.value || '').trim();
         var failMsg = '没保存：检查接口地址与模型名';
-        if (addr && addr.indexOf('://') === -1) {
+        if (res && res.code === 'E_AS_NET_MIXED') {
+          failMsg = '没保存：网站是 https，接口地址要换成 https:// 开头';
+        } else if (addr && addr.indexOf('://') === -1) {
           failMsg = '没保存：接口地址需以 http:// 或 https:// 开头';
         } else if (typed && typed.indexOf('••••') !== 0 && typed.length > 300) {
           failMsg = '没保存：密钥太长（上限 300 字符）';
