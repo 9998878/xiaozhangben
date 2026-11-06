@@ -26780,6 +26780,84 @@ textarea::selection {
    *   META[key] = { key, label, group, keywords, custom }
    * 分组 / 中文名 / 搜索词只活在这里，数据库仍然只存 icon 字符串。
    * 与已存在的 key 重名的一律跳过 —— 这是「自定义候选 ∩ 系统分类 = 0」的运行时兜底。 */
+/* ---- 图标 v2：分类图标线条化（生成脚本 tools/icon-v2 输出，勿手改） ---- */
+  PATHS['ai'] = '<rect x="6.4" y="6.4" width="11.2" height="11.2" rx="2.4"/><path d="M10 2.8v3.6M14 2.8v3.6M10 17.6v3.6M14 17.6v3.6M2.8 10h3.6M2.8 14h3.6M17.6 10h3.6M17.6 14h3.6"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>';
+  PATHS['baby'] = '<path d="M9.4 8.6h5.2v4.8a3.4 3.4 0 0 1-3.4 3.4h-1.8a3.4 3.4 0 0 1-3.4-3.4V8.6Z"/><path d="M10.6 8.6V6.8h2.8v1.8"/><path d="M10.2 6.8V4.8h3.6v2"/><path d="M9.4 11.2h5.2"/>';
+  PATHS['bag'] = '<path d="M5.4 9.6h13.2l-1.2 10.4H6.6Z"/><path d="M9.0 9.6V7.6a3 3 0 0 1 6 0v2"/>';
+  PATHS['beauty'] = '<path d="M9.6 9.4h4.8v10.2H9.6Z"/><path d="M10.4 9.4V5.2h3.2v4.2"/><path d="M10.4 6.4h3.2"/>';
+  PATHS['bolt'] = '<path d="M13.4 2.8 5.8 13.6h5l-1 7.6 7.6-10.8h-5Z" fill="currentColor" stroke="none"/>';
+  PATHS['bonus'] = '<circle cx="12" cy="10" r="6.2"/><path d="M12 6.8v6.4M10 8.2h3.2M10 11.8h3.2"/><path d="M8.6 15.4 7.4 20.6l4.6-2.4 4.6 2.4-1.2-5.2"/>';
+  PATHS['book'] = '<path d="M6.4 4.4h9.4a2 2 0 0 1 2 2v13.2H8.4a2 2 0 0 1-2-2Z"/><path d="M6.4 15.6h11.4"/><path d="M9.4 4.4v7.2l2.2-1.6 2.2 1.6V4.4"/>';
+  PATHS['box'] = '<path d="M3.8 8.2 12 4.2l8.2 4v8L12 20.2l-8.2-4Z"/><path d="M3.8 8.2 12 12.2l8.2-4M12 12.2v8"/>';
+  PATHS['breakfast'] = '<path d="M6.6 9.4h9.6v6.2a3.2 3.2 0 0 1-3.2 3.2h-3.2a3.2 3.2 0 0 1-3.2-3.2Z"/><path d="M16.2 11.4h1.8a2.6 2.6 0 0 1 0 5.2h-1.8"/>';
+  PATHS['briefcase'] = '<rect x="3.6" y="7.6" width="16.8" height="11.2" rx="2.2"/><path d="M9 7.6V5.8a1.8 1.8 0 0 1 1.8-1.8h2.4A1.8 1.8 0 0 1 15 5.8v1.8"/><path d="M3.6 12.4h16.8"/>';
+  PATHS['broadband'] = '<circle cx="12" cy="18.6" r="1.2" fill="currentColor" stroke="none"/><path d="M8.82 15.42a4.5 4.5 0 0 1 6.36 0"/><path d="M5.92 12.52a8.6 8.6 0 0 1 12.16 0"/><path d="M3.02 9.62a12.7 12.7 0 0 1 17.96 0"/>';
+  PATHS['bus'] = '<rect x="3.8" y="4.8" width="16.4" height="11.6" rx="2.4"/><path d="M3.8 8.6h16.4"/><path d="M12.8 8.6v7.8"/><circle cx="7.6" cy="17.4" r="1.4"/><circle cx="16.4" cy="17.4" r="1.4"/>';
+  PATHS['cap'] = '<path d="M2.8 9.6 12 5.2l9.2 4.4-9.2 4.4Z"/><path d="M6.4 11.4v4.2c0 1.6 2.5 2.8 5.6 2.8s5.6-1.2 5.6-2.8v-4.2"/><path d="M21.2 9.6v5.2"/>';
+  PATHS['car'] = '<path d="M3.6 16.4v-3.2c0-.9.7-1.6 1.6-1.6h1.3l1.5-2.9c.3-.5.8-.8 1.4-.8h5.2c.6 0 1.1.3 1.4.8l1.5 2.9h1.3c.9 0 1.6.7 1.6 1.6v3.2"/><path d="M3.6 16.4h16.8"/><path d="M6.3 16.4a2.2 2.2 0 0 1 4.4 0"/><path d="M13.3 16.4a2.2 2.2 0 0 1 4.4 0"/>';
+  PATHS['car-service'] = '<path d="M14.6 4.4 19 8.8l-2 2-4.4-4.4Z"/><path d="M14.8 8.6 5.2 18.2a1.7 1.7 0 0 1 2.4 2.4"/><path d="M12.6 6.4 10.4 8.6"/>';
+  PATHS['car-wash'] = '<path d="M3.2 16.2v-1.8c0-.8.6-1.4 1.4-1.4h1.6l1.3-2.6c.3-.6.9-1 1.5-1h6.4c.6 0 1.2.4 1.5 1l1.3 2.6h1.6c.8 0 1.4.6 1.4 1.4v1.8H18.9a2.2 2.2 0 0 1-4.4 0H9.5a2.2 2.2 0 0 1-4.4 0Z"/><circle cx="11" cy="5" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.4" cy="4.4" r="1" fill="currentColor" stroke="none"/>';
+  PATHS['carrot'] = '<path d="M9.4 9.2h5.2l-2.2 10.4a.8.8 0 0 1-1.6 0Z"/><path d="M12 9.2V3.8"/><path d="M10.1 9.2 7.9 5.6"/><path d="M13.9 9.2 16.1 5.6"/>';
+  PATHS['chat'] = '<path d="M4.4 6.6h15.2v9.2H12l-4.4 3.4v-3.4H4.4Z"/><path d="M8.2 10.4h.01M12 10.4h.01M15.8 10.4h.01"/>';
+  PATHS['checkup'] = '<rect x="4.2" y="3" width="15.6" height="18" rx="2.8"/><path d="M8.2 12.6h1.6l1.4-3.2 2 6.4 1.4-3.2h1.2"/>';
+  PATHS['clinic'] = '<path d="M6.6 3.8v4.6a5 5 0 0 0 5 5 5 5 0 0 0 5-5V3.8"/><path d="M11.6 13.4v1.2a4 4 0 0 0 4 4h1.2"/><circle cx="18.6" cy="18.6" r="2.4"/>';
+  PATHS['coins'] = '<ellipse cx="12" cy="7.6" rx="6.4" ry="2.6"/><path d="M5.6 7.6v4c0 1.4 2.9 2.6 6.4 2.6s6.4-1.2 6.4-2.6v-4"/><path d="M5.6 11.6v4c0 1.4 2.9 2.6 6.4 2.6s6.4-1.2 6.4-2.6v-4"/>';
+  PATHS['daily'] = '<path d="M9.2 9h5.6v9.2a2 2 0 0 1-2 2h-1.6a2 2 0 0 1-2-2Z"/><path d="M10.4 9V6.6h3.2V9"/><path d="M12 6.6V4.2h2.6"/><path d="M9.2 13.2h5.6"/>';
+  PATHS['dentist'] = '<path d="M12 4.6c2.2 0 3.2 1.2 4.4 1.2 1.4 0 2.2 1 2.2 2.6 0 2.4-1 4-1.6 6.4-.4 1.6-.6 4.6-2 4.6-1 0-1.2-1.6-1.6-3.4-.3-1.4-.6-2-1.4-2s-1.1.6-1.4 2c-.4 1.8-.6 3.4-1.6 3.4-1.4 0-1.6-3-2-4.6C6.4 12.2 5.4 10.6 5.4 8.2 5.4 6.6 6.2 5.8 7.6 5.8 8.8 5.8 9.8 4.6 12 4.6Z"/>';
+  PATHS['dots'] = '<circle cx="6" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.35" fill="currentColor" stroke="none"/>';
+  PATHS['elder'] = '<path d="M8.8 20.2V8.4a3.4 3.4 0 0 1 6.8 0v1.4"/><path d="M6.4 20.2h4.8"/>';
+  PATHS['ellipsis'] = '<circle cx="6" cy="12" r="1.45" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.45" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.45" fill="currentColor" stroke="none"/>';
+  PATHS['envelope'] = '<rect x="3.4" y="6" width="17.2" height="12" rx="2.2"/><path d="M3.8 7.4 12 13l8.2-5.6"/>';
+  PATHS['ev-charge'] = '<rect x="6.5" y="6.8" width="11" height="12" rx="2.8"/><path d="M9.4 6.8V4M14.6 6.8V4"/><path d="M12 18.8v2.2"/><path d="M12.6 9.8 9.9 13.4h1.8l-.3 2.4 2.7-3.6h-1.8Z" fill="currentColor" stroke="none"/>';
+  PATHS['family'] = '<path d="M3.6 10.6 12 3.6l8.4 7"/><path d="M5.4 9.2v10.4h13.2V9.2"/><circle cx="9.8" cy="11.2" r="1.2" fill="currentColor" stroke="none"/><circle cx="14.2" cy="11.2" r="1.2" fill="currentColor" stroke="none"/><circle cx="9.8" cy="15.6" r="1.2" fill="currentColor" stroke="none"/><circle cx="14.2" cy="15.6" r="1.2" fill="currentColor" stroke="none"/>';
+  PATHS['file'] = '<path d="M6.2 3.6h7.2l4.4 4.4v12.4H6.2Z"/><path d="M13.4 3.6V8h4.4"/><path d="M9.2 12.4h5.6M9.2 16h3.8"/>';
+  PATHS['food'] = '<path d="M4.6 10.8h14.8c0 3.6-3.3 6.6-7.4 6.6S4.6 14.4 4.6 10.8Z"/><path d="M3.2 10.8h17.6"/><path d="M9.4 4.2c-.9 1.1-.9 2.1.1 3.2"/><path d="M13.6 3.6c-.9 1.1-.9 2.1.1 3.2"/>';
+  PATHS['fruit'] = '<path d="M12 8.2c3.4 0 6.2 2.6 6.2 6.2 0 3.4-2.6 6-6.2 6s-6.2-2.6-6.2-6c0-3.6 2.8-6.2 6.2-6.2Z"/><path d="M12 8.2V5.4"/><path d="M12 6.6c1.6-.4 2.8-1.4 3-3-1.6.2-2.8 1.2-3 3Z"/>';
+  PATHS['fun'] = '<circle cx="12" cy="8.6" r="5"/><path d="M12 13.6v3.4"/><path d="M10.7 19.6c.7.8 1.9.8 2.6 0"/>';
+  PATHS['gamepad'] = '<path d="M8.4 8.2h7.2c2.6 0 4.4 2 4.6 4.6l.3 3.4c.1 1.4-1 2.4-2.3 2.2-1-.2-1.9-1-2.6-2l-.9-1.4h-5.4l-.9 1.4c-.7 1-1.6 1.8-2.6 2-1.3.2-2.4-.8-2.3-2.2l.3-3.4c.2-2.6 2-4.6 4.6-4.6Z"/><path d="M9.2 11.4v2.4M8 12.6h2.4"/><circle cx="15.2" cy="12.6" r="1" fill="currentColor" stroke="none"/>';
+  PATHS['gift'] = '<path d="M4.6 9.4h14.8v3.2H4.6Z"/><path d="M6.2 12.6v7.6h11.6v-7.6"/><path d="M12 9.4v10.8"/><path d="M12 9.4C10.4 5.8 7.2 5.4 7.2 7.6c0 1.8 2.6 1.8 4.8 1.8Z"/><path d="M12 9.4c1.6-3.6 4.8-4 4.8-1.8 0 1.8-2.6 1.8-4.8 1.8Z"/>';
+  PATHS['glass'] = '<path d="M7.4 4.4h9.2l-1 7.2a3.6 3.6 0 0 1-7.2 0Z"/><path d="M12 15.4v5M8.6 20.4h6.8"/>';
+  PATHS['hammer'] = '<g transform="rotate(-38 12 12)"><rect x="8.6" y="3.6" width="6.8" height="4.4" rx="1.4"/><path d="M12 8v12.4"/></g>';
+  PATHS['health'] = '<circle cx="12" cy="12" r="8.4"/><path d="M12 8.2v7.6M8.2 12h7.6"/>';
+  PATHS['heart'] = '<path d="M12 20.2S3.8 15 3.8 9.4A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 8.2 2.2c0 5.6-8.2 10.8-8.2 10.8Z"/>';
+  PATHS['house'] = '<path d="M4 10.8 12 4l8 6.8"/><path d="M6.2 9.6v10.4h11.6V9.6"/><path d="M10.2 20v-5h3.6v5"/>';
+  PATHS['insurance'] = '<path d="M12 3 19.4 5.8V12c0 4.2-3 7.2-7.4 8.6C7.6 19.2 4.6 16.2 4.6 12V5.8Z"/><path d="M8.9 12 11.2 14.3 15.4 10.1"/>';
+  PATHS['invest'] = '<path d="M3.6 19.4h16.8"/><path d="M5.6 15.6 10 10.4l3.2 2.6 5.2-6.2"/><path d="M15.2 6.8h3.4v3.4"/>';
+  PATHS['kit'] = '<rect x="3.6" y="7.8" width="16.8" height="11" rx="2.2"/><path d="M9 7.8V5.6h6v2.2"/><path d="M12 10.6v5.4M9.3 13.3h5.4"/>';
+  PATHS['loan'] = '<path d="M3 9.6 12 4.6l9 5"/><path d="M4.8 9.8v7.6M9.6 9.8v7.6M14.4 9.8v7.6M19.2 9.8v7.6"/><path d="M3 19.4h18"/>';
+  PATHS['medicine'] = '<path d="M6.4 9.6h11.2a2.4 2.4 0 0 1 0 4.8H6.4a2.4 2.4 0 0 1 0-4.8Z"/><path d="M12 9.6h5.6a2.4 2.4 0 0 1 0 4.8H12Z" fill="currentColor" stroke="none"/>';
+  PATHS['online-shopping'] = '<path d="M5.6 8.6h11.2l-1 10H6.6Z"/><path d="M8.8 8.6V6.9a2.4 2.4 0 0 1 4.8 0v1.7"/><path d="M15.6 14.6v5.6l1.3-1.5h2l-3.3-4.1Z" fill="currentColor" stroke="none"/>';
+  PATHS['package'] = '<rect x="4.2" y="7.6" width="15.6" height="12" rx="1.8"/><path d="M4.2 11.2h15.6"/><path d="M12 7.6v12"/>';
+  PATHS['parttime'] = '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.2 2"/>';
+  PATHS['pet'] = '<path d="M8.4 20.2c-1.6 0-2.6-1.2-2.4-2.8.2-1.4 1.4-2.6 2.6-3.4 1-.7 2.2-1 3.4-1s2.4.3 3.4 1c1.2.8 2.4 2 2.6 3.4.2 1.6-.8 2.8-2.4 2.8Z"/><circle cx="7.4" cy="8.6" r="1.9"/><circle cx="12" cy="6.6" r="1.9"/><circle cx="16.6" cy="8.6" r="1.9"/>';
+  PATHS['phone'] = '<rect x="7.2" y="3" width="9.6" height="18" rx="2.6"/><path d="M10.6 5.8h2.8"/><path d="M11 18.4h2"/>';
+  PATHS['plane'] = '<path d="M20.4 4.2 3.6 10.8l6.6 2.4 2.2 6.6Z"/><path d="M20.4 4.2 10.2 13.2"/>';
+  PATHS['plug'] = '<path d="M4.4 14.6v-2.2a7.6 7.6 0 0 1 15.2 0v2.2"/><rect x="3.2" y="13.6" width="3.8" height="6.2" rx="1.7"/><rect x="17" y="13.6" width="3.8" height="6.2" rx="1.7"/>';
+  PATHS['recharge'] = '<rect x="7.2" y="3" width="9.6" height="18" rx="2.6"/><path d="M13.4 7.6 10.4 11.6h2.2l-1.4 3.4 3.4-3.9h-2.1Z" fill="currentColor" stroke="none"/><path d="M10.9 17.8h2.2"/>';
+  PATHS['redpacket'] = '<path d="M4.8 4.8h14.4v14.4H4.8Z"/><path d="M4.8 4.8c2.4 2.2 4.4 3.4 7.2 3.4s4.8-1.2 7.2-3.4"/><circle cx="12" cy="13.4" r="2.2"/>';
+  PATHS['rent'] = '<circle cx="8.2" cy="8.4" r="3.6"/><path d="M10.8 11 19.4 19.6"/><path d="M15.4 15.6l2.2 2.2"/><path d="M17.6 13.4l2.2 2.2"/>';
+  PATHS['salary'] = '<rect x="3" y="6.4" width="18" height="11.2" rx="2"/><circle cx="12" cy="12" r="2.8"/><path d="M6.4 9.4h.01M17.6 14.6h.01"/>';
+  PATHS['scissors'] = '<circle cx="6.4" cy="17.6" r="2.6"/><circle cx="17.6" cy="17.6" r="2.6"/><path d="M8.4 15.6 17.4 4.4M15.6 15.6 6.6 4.4"/>';
+  PATHS['secondhand'] = '<path d="M4.6 8.8h12.2"/><path d="M14.6 6.6 16.8 8.8 14.6 11"/><path d="M19.4 15.2H7.2"/><path d="M9.4 13 7.2 15.2 9.4 17.4"/>';
+  PATHS['settings'] = '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v2.8M12 18.6v2.8M2.6 12h2.8M18.6 12h2.8M5.3 5.3l2 2M16.7 16.7l2 2M18.7 5.3l-2 2M7.3 16.7l-2 2"/>';
+  PATHS['shirt'] = '<path d="M8.4 4.6 4.2 7.2l1.8 3.6 2.2-1v9.6h7.6V9.8l2.2 1 1.8-3.6-4.2-2.6"/><path d="M9.4 4.6c0 1.6 1.2 2.6 2.6 2.6s2.6-1 2.6-2.6"/>';
+  PATHS['shower'] = '<path d="M6.4 9.2h11.2l-2.8 3.6H9.2Z"/><path d="M12 9.2V6.2a3 3 0 0 0-3-3H7.6"/><path d="M9.6 16.2v1.6M12 17v1.6M14.4 16.2v1.6"/>';
+  PATHS['snack'] = '<circle cx="12" cy="12" r="8.2"/><circle cx="9.6" cy="9.8" r="1.2" fill="currentColor" stroke="none"/><circle cx="14.4" cy="9.8" r="1.2" fill="currentColor" stroke="none"/><circle cx="9.6" cy="14.4" r="1.2" fill="currentColor" stroke="none"/><circle cx="14.4" cy="14.4" r="1.2" fill="currentColor" stroke="none"/>';
+  PATHS['sofa'] = '<path d="M5.2 11.2V8.6a2 2 0 0 1 2-2h9.6a2 2 0 0 1 2 2v2.6"/><path d="M3.6 11.2a1.8 1.8 0 0 1 3.6 0v4.2h9.6v-4.2a1.8 1.8 0 0 1 3.6 0v6.2H3.6Z"/><path d="M6.4 17.4v2M17.6 17.4v2"/>';
+  PATHS['software'] = '<path d="M6.9 18.4h10.2a4.3 4.3 0 0 0 .5-8.6 5.6 5.6 0 0 0-10.7-1.6A3.9 3.9 0 0 0 6.9 18.4Z"/><path d="M12 15.4V9.6"/><path d="M9.8 11.8 12 9.6l2.2 2.2"/>';
+  PATHS['sport'] = '<path d="M4.4 10.4v3.2M7.2 8.8v6.4"/><path d="M19.6 10.4v3.2M16.8 8.8v6.4"/><path d="M7.2 12h9.6"/>';
+  PATHS['stationery'] = '<g transform="rotate(45 12 12)"><path d="M9.4 17.2V5.6a1.2 1.2 0 0 1 1.2-1.2h2.8a1.2 1.2 0 0 1 1.2 1.2v11.6L12 20Z"/><path d="M9.4 8.6h5.2"/></g>';
+  PATHS['subscription'] = '<path d="M4.4 17.4 3.6 8.2l5.3 3.9L12 5.6l3.1 6.5 5.3-3.9-.8 9.2Z"/>';
+  PATHS['supermarket'] = '<path d="M3.2 4.4h2.6l2.4 8.8h10l2.4-6.6H6.6"/><circle cx="9.4" cy="18.8" r="1.6"/><circle cx="17.2" cy="18.8" r="1.6"/>';
+  PATHS['takeout'] = '<path d="M5.0 10.6h14l-1 9.6H6Z"/><path d="M5.4 14.4h13.2"/><path d="M9.2 6.8c.9-.9-.7-1.9.2-2.8"/><path d="M14.4 6.8c.9-.9-.7-1.9.2-2.8"/>';
+  PATHS['ticket'] = '<path d="M3.8 8.4V6.6h16.4v1.8a2.4 2.4 0 0 0 0 4.8v1.8H3.8v-1.8a2.4 2.4 0 0 0 0-4.8Z"/><path d="M9.4 6.6v1.6M9.4 11.4v1.6M9.4 16.2v.8"/>';
+  PATHS['topup'] = '<rect x="7.2" y="3" width="9.6" height="18" rx="2.6"/><path d="M13.4 7.6 10.4 11.6h2.2l-1.4 3.4 3.4-3.9h-2.1Z" fill="currentColor" stroke="none"/><path d="M10.9 17.8h2.2"/>';
+  PATHS['tuition'] = '<path d="M2.8 9.6 12 5.2l9.2 4.4-9.2 4.4Z"/><path d="M6.4 11.4v4.2c0 1.6 2.5 2.8 5.6 2.8s5.6-1.2 5.6-2.8v-4.2"/><path d="M21.2 9.6v5.2"/>';
+  PATHS['utility-bill'] = '<path d="M7 4.6s3.6 4.6 3.6 7.4a3.6 3.6 0 0 1-7.2 0C3.4 9.2 7 4.6 7 4.6Z"/><path d="M19.6 5.4 14.8 12h2.6l-3 6.6 4.8-6.6h-2.6Z" fill="currentColor" stroke="none"/>';
+  PATHS['washer'] = '<rect x="5" y="3.6" width="14" height="16.8" rx="2.4"/><path d="M5 7.6h14"/><circle cx="12" cy="14.2" r="3.6"/><circle cx="8.6" cy="5.6" r=".8" fill="currentColor" stroke="none"/>';
+  PATHS['wrench'] = '<path d="M15.8 4.2a4.6 4.6 0 0 0-4.2 6.4L4.4 17.8a1.9 1.9 0 0 0 2.7 2.7l7.2-7.2a4.6 4.6 0 0 0 5.5-6.3l-2.7 2.7-1.6-1.6Z"/>';
+/* ---- 图标 v2 结束 ---- */
+
   var META = Object.create(null);
   var CUSTOM_KEYS = [];
 
@@ -26812,7 +26890,9 @@ textarea::selection {
     'gamepad', 'wrench', 'washer', 'family', 'salary', 'bonus', 'invest', 'parttime',
     'redpacket', 'coins', 'kit', 'cap', 'box', 'dots',
     /* 2.26.9 分类扩充：新分类用到的图标也进设置页候选 */
-    'envelope', 'package', 'recharge', 'shower', 'scissors', 'bolt', 'ai', 'file', 'settings'
+    'envelope', 'package', 'recharge', 'shower', 'scissors', 'bolt', 'ai', 'file', 'settings',
+    /* 2.27 细分类图标（外卖/早餐/超市…） */
+    'takeout', 'breakfast', 'supermarket', 'online-shopping', 'secondhand', 'rent', 'utility-bill', 'broadband', 'ev-charge', 'car-service', 'car-wash', 'medicine', 'clinic', 'dentist', 'checkup', 'tuition', 'stationery', 'subscription', 'insurance', 'loan', 'topup', 'software'
   ];
 
   /* 系统分类图标的中文名：设置页的 aria-label 和候选格标签都从这里来，
@@ -26829,7 +26909,29 @@ textarea::selection {
     cap: '学习', box: '其他',
     /* 2.26.9 分类扩充新增候选（标签跟着主要用途走，同 hammer:'维修' 惯例） */
     envelope: '礼金', package: '快递', recharge: '充值', shower: '洗澡',
-    scissors: '理发', bolt: '电费', ai: 'AI', file: '资料', settings: '设置'
+    scissors: '理发', bolt: '电费', ai: 'AI', file: '资料', settings: '设置',
+    'takeout': '外卖',
+    'breakfast': '早餐',
+    'supermarket': '超市',
+    'online-shopping': '网购',
+    'secondhand': '二手交易',
+    'rent': '房租',
+    'utility-bill': '水电燃',
+    'broadband': '宽带',
+    'ev-charge': '汽车充电',
+    'car-service': '汽车保养',
+    'car-wash': '洗车',
+    'medicine': '药品',
+    'clinic': '门诊',
+    'dentist': '牙科',
+    'checkup': '体检',
+    'tuition': '学费课程',
+    'stationery': '文具',
+    'subscription': '会员订阅',
+    'insurance': '保险',
+    'loan': '贷款还贷',
+    'topup': '话费充值',
+    'software': '云服务'
   };
 
   (function registerSystemMeta() {
