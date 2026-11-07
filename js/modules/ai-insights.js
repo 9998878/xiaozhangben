@@ -114,7 +114,9 @@
     { key: 'milkTea', label: '奶茶', patterns: ['奶茶'] },
     { key: 'takeout', label: '外卖', patterns: ['外卖'] },
     { key: 'taxi', label: '打车', patterns: ['打车'] },
-    { key: 'gameTopup', label: '游戏充值', patterns: ['游戏充值', '游戏'], pinCategoryId: 'ca_game' },
+    /* 2.28.2：删掉裸「游戏」——「买游戏光盘」会被误伤进充值聚类；ca_game 分类本身仍由
+       pinCategoryId 兜底命中 */
+    { key: 'gameTopup', label: '游戏充值', patterns: ['游戏充值'], pinCategoryId: 'ca_game' },
     { key: 'live', label: '直播', patterns: ['直播'] },
     { key: 'blindbox', label: '盲盒', patterns: ['盲盒'] }
   ];
@@ -358,7 +360,10 @@
 
       var mk = date.slice(0, 7);
       var bucket = (mk === mKey) ? cur : (mk === prev1 ? p1 : (mk === prev2 ? p2 : null));
-      if (mk === mKey) { txCount += 1; datesSeen[date] = 1; }
+      /* 2.28.2：txCount 不计 transfer——与屏级空账期门对齐。纯转账月 txCount=0，
+         requestAiInsights 的 'empty' 守卫才能挡住，不会对没有收支的月份发 LLM 请求 */
+      if (mk === mKey && type !== TYPE_TRANSFER) { txCount += 1; }
+      if (mk === mKey) { datesSeen[date] = 1; }
 
       if (earliestMonth === '' || mk < earliestMonth) { earliestMonth = mk; }
 
@@ -398,6 +403,10 @@
         var toAcc = typeof tx.toAccountId === 'string' ? tx.toAccountId : '';
         if (accIndex[toAcc] && accIndex[toAcc].type === 'credit') {
           bucket.repaymentCents += amount;
+        } else if (fromIsCredit) {
+          /* 2.28.2：信用卡取现（credit → 非 credit）是新增透支——「以贷养贷」的典型
+             动作，旧版既不算借款也不算还款，恰好被放过 */
+          bucket.creditSpendCents += amount;
         }
       }
     }
@@ -570,10 +579,11 @@
     anomalyHits.sort(function (a, b) { return b.cents - a.cents; });
     var anomalies = [];
     for (i = 0; i < anomalyHits.length && anomalies.length < ANOMALY_MAX; i++) {
+      /* 2.28.2：不再带 note——全程无消费方（出站层 toInsightPayload 也只留
+         date/amount/categoryName），聚合层多收一笔备注是多余的隐私面 */
       anomalies.push({
         date: anomalyHits[i].date,
         cents: anomalyHits[i].cents,
-        note: anomalyHits[i].note,
         categoryName: categoryNameOf(catIndex, anomalyHits[i].categoryId)
       });
     }
@@ -726,6 +736,7 @@
     '规则 4：优先级：红旗（疑似以贷养贷/结余为负/必要支出未覆盖/应急缓冲不足且有突发大额）＞ 连续 2–3 个月超支 ＞ 结构问题（享受占比过高、发展过低、固定支出过重）＞ 高频小额上涨、订阅闲置 ＞ 一次性收支说明。',
     '规则 5：数据不足降级：未分类占比 > 20 或缺记天数 > 5 时，只输出 1 条数据质量警告，另最多补 2 条高置信结论。',
     '规则 6：金额单位是元（保留 2 位小数）；优先用环比、占比、连续月数作证据，避免绝对阈值。',
+    '规则 6.5：字段值为 null 表示数据不足或该项不适用（如缺上月数据、储蓄率无法计算），不要当成 0 解读，也不要臆造数值填充。',
     '规则 7：level 含义：red 当月必须处理；orange 需要调整；yellow 提示留意；info 一般说明。'
   ];
 

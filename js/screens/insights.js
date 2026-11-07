@@ -1651,11 +1651,26 @@
     return card;
   }
 
-  /* 缓存失效指纹：笔数 + 收支合计，任一变动即视为账单已更新（防记账后仍看旧结论） */
+  /* 缓存失效指纹：笔数 + 收支合计 + 必要支出 + 预算超支概况，任一变动即视为账单/口径已更新
+     （防记账后仍看旧结论）。2.28.2 补预算与必要支出——旧指纹只含笔数与收支，
+     改分类预算不会触发「结论可能已过期」 */
   function aiFp(metrics) {
     var cf = metrics && metrics.cashflow ? metrics.cashflow : {};
     var dq = metrics && metrics.dataQuality ? metrics.dataQuality : {};
-    return (Number(dq.txCount) || 0) + '|' + (Number(cf.incomeCents) || 0) + '|' + (Number(cf.expenseCents) || 0);
+    var ne = metrics && metrics.necessary ? metrics.necessary : {};
+    var over = metrics && metrics.budget && Array.isArray(metrics.budget.overCategories)
+      ? metrics.budget.overCategories : [];
+    var parts = [
+      String(Number(dq.txCount) || 0),
+      String(Number(cf.incomeCents) || 0),
+      String(Number(cf.expenseCents) || 0),
+      String(Number(ne.totalCents) || 0)
+    ];
+    for (var i = 0; i < over.length; i++) {
+      var o = over[i] || {};
+      parts.push((typeof o.name === 'string' ? o.name : '') + ':' + String(Number(o.limitCents) || 0) + ':' + String(Number(o.spentCents) || 0));
+    }
+    return parts.join('|');
   }
 
   /* red 独占红，orange/yellow 共用警示色，info 不加修饰 */
@@ -1763,7 +1778,7 @@
       setupCard.appendChild(buttonNode('去设置', {
         className: 's-insights-tip__action',
         icon: 'arrow-up-right',
-        href: '#/settings'
+        href: '#/settings/ai'
       }));
       return setupCard;
     }
@@ -1773,11 +1788,13 @@
     if (!metrics) { return null; }
 
     var dq = metrics.dataQuality && typeof metrics.dataQuality === 'object' ? metrics.dataQuality : {};
+    /* 2.28.2 起此分支可达：txCount 已不计 transfer，纯转账月会走到这里出「空卡」，
+       而不是对没有收支的月份发 LLM 请求（旧版 txCount 含转账，此分支看似死代码） */
     if (!(Number(dq.txCount) > 0)) {
       var emptyCard = moduleCard('AI 月度解读', null, 's-insights-ai');
       emptyCard.appendChild(el('p', {
         className: 's-insights-ai__hint',
-        text: monthLabel(month) + '还没有记录，先记几笔再来。'
+        text: monthLabel(month) + '还没有收支记录，先记几笔再来。'
       }));
       return emptyCard;
     }
@@ -1790,7 +1807,7 @@
       card.appendChild(el('p', {
         className: 's-insights-ai__hint',
         'aria-live': 'polite',
-        text: S.aiRetryHint || '正在分析本月账单…（约 15 秒）'
+        text: S.aiRetryHint || '正在分析本月账单…（最坏可能要一两分钟，可先去别处）'
       }));
       return card;
     }

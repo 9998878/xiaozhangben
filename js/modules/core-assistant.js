@@ -47,6 +47,8 @@
   var LLM_PLAN_TIMEOUT_MS = 20000;
   var LLM_SOFT_MS = 8000;
   var LLM_BUDGET_MS = 24000;
+  /* 重试脚手架保留但 LLM_RETRY=0（关闭）：可重试错误的重试已上移到 httpOnce（400 剥可选字段）
+     与调用方（ai-insights 超时/限流各重试一次）。这里只是兜底入口，勿当死代码删除。 */
   var LLM_RETRY = 0;
   var LLM_BACKOFF_MS = 600;
   var LLM_RETRY_AFTER_CAP = 1500;
@@ -417,7 +419,8 @@
     ca_salary: ['工资', '薪水', '奖金'],
     ca_daily: ['日用', '纸巾', '洗衣液'],
     ca_snack: ['奶茶', '甜品', '蛋糕'],
-    ca_veg: ['买菜', '菜市场'],
+    /* 2.28.2：ca_veg 是 ca_veggie（蔬菜）改名前的残留——死键让 买菜/菜市场 永远路由失败 */
+    ca_veggie: ['买菜', '菜市场'],
     /* 2.26.9 扩充分类：与种子/nl 词表同步（礼物/随礼已从 ca_social 摘除归新分类） */
     ca_books: ['书籍', '买书', '图书', '小说', '漫画', '纸质书', '电子书'],
     ca_gift_money: ['礼金', '随礼', '份子钱', '喜宴', '红包支出'],
@@ -2264,7 +2267,8 @@
     var rest = s.slice(cut + 3);
     if (!rest || rest.charAt(0) === '/') { return ''; }
     while (s.length && s.charAt(s.length - 1) === '/') { s = s.slice(0, -1); }
-    if (s.length < 12) { return ''; }
+    /* 最短 11 字符：http://a.io 这类合法短域名恰好 11 字符，旧值 12 会误拒（2.28.2） */
+    if (s.length < 11) { return ''; }
     return s;
   }
 
@@ -2292,7 +2296,9 @@
 
   function aiLoopbackHost(host) {
     var h = String(host || '').toLowerCase();
-    if (h === 'localhost' || h === '::1' || h === '[::1]') { return true; }
+    /* 2.28.2：补 localhost.（FQDN 带尾点）与 IPv6 映射形 [::ffff:127.x.x.x]（aiHostOf 保留方括号） */
+    if (h === 'localhost' || h === 'localhost.' || h === '::1' || h === '[::1]') { return true; }
+    if (h.indexOf('[::ffff:127.') === 0 || h.indexOf('::ffff:127.') === 0) { return true; }
     return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
   }
 
@@ -2465,6 +2471,9 @@
   function endpointOf(base) {
     var s = String(base || '');
     while (s.length && s.charAt(s.length - 1) === '/') { s = s.slice(0, -1); }
+    /* 2.28.2：粘贴完整端点 URL 不再双拼 /chat/completions——双拼 404 曾被归「地址错」，
+       用户会去改一个本来正确的地址 */
+    if (/\/chat\/completions$/i.test(s)) { return s; }
     return s + '/chat/completions';
   }
 
@@ -2488,7 +2497,11 @@
       /* 5xx 是服务端故障，不是「限流」：文案方向不同（2.28.1），码保持 NET_RATE（同为可重试） */
       return { ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res), reason: 'server' };
     }
-    /* 401/403/404/405/400 等：地址、模型或密钥配错，重试无意义 */
+    /* 2.28.2：401/403 是密钥/权限问题，与「地址/模型名配错」方向不同，细分 reason 供文案点名 */
+    if (status === 401 || status === 403) {
+      return { ok: false, code: E.NET_CONFIG, retryable: false, status: status, reason: 'auth' };
+    }
+    /* 404/405/400 等：地址、模型或密钥配错，重试无意义 */
     return { ok: false, code: E.NET_CONFIG, retryable: false, status: status };
   }
 
@@ -2508,6 +2521,22 @@
     return { ok: false, code: E.NET_CONFIG, retryable: false, status: 0, reason: 'net' };
   }
 
+  /* 2.28.2：部分端点不认 response_format / enable_thinking 这类可选字段，会整请求 400，
+     旧版对所有 400 一律归「配置不合法」，用户怎么改配置都没用。剥掉可选字段重发一次，
+     仍 400 才按原结果返回。返回 '' 表示没有可剥字段（无需重试）。 */
+  function stripOptionalBody(bodyStr) {
+    try {
+      var b = JSON.parse(bodyStr);
+      if (!b || typeof b !== 'object' || Array.isArray(b)) { return ''; }
+      var touched = false;
+      if ('response_format' in b) { delete b.response_format; touched = true; }
+      if ('enable_thinking' in b) { delete b.enable_thinking; touched = true; }
+      return touched ? JSON.stringify(b) : '';
+    } catch (error) {
+      return '';
+    }
+  }
+
   /* timeoutMs 可选：默认 LLM_TIMEOUT_MS（6s，测试连接等短探测用）。
      记账解析（llmPlan）显式传 LLM_PLAN_TIMEOUT_MS（20s，2.26.11），AI 解读等长任务
      也各自传值；不传时行为与旧版一致。 */
@@ -2525,6 +2554,7 @@
       var done = false;
       var timer = null;
       var ctrl = null;
+      var compatTried = false; /* 400 剥可选字段重试：最多一次，防循环 */
       function end(res) {
         if (done) { return; }
         done = true;
@@ -2534,25 +2564,6 @@
         }
         resolve(res);
       }
-      var options = {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + cfg.key
-        },
-        body: bodyStr,
-        credentials: 'omit',
-        cache: 'no-store',
-        mode: 'cors'
-      };
-      if (typeof AbortController === 'function') {
-        try {
-          ctrl = new AbortController();
-          options.signal = ctrl.signal;
-        } catch (error) {
-          ctrl = null;
-        }
-      }
       timer = setTimeout(function () {
         if (ctrl && typeof ctrl.abort === 'function') {
           try { ctrl.abort(); } catch (error) { /* 已结束 */ }
@@ -2560,46 +2571,76 @@
         end({ ok: false, code: E.NET_TIMEOUT, retryable: false, status: 0, reason: 'timeout' });
       }, Number(timeoutMs) > 0 ? Number(timeoutMs) : LLM_TIMEOUT_MS);
 
-      var request;
-      try {
-        request = fetch(endpointOf(cfg.baseURL), options);
-      } catch (error2) {
-        end(mapNetError(error2));
-        return;
-      }
-      if (!request || typeof request.then !== 'function') {
-        end({ ok: false, code: E.NET_CONFIG, retryable: false, status: 0 });
-        return;
-      }
-      request.then(function (res) {
-        var status = Number(res && res.status) || 0;
-        if (status < 200 || status >= 300) {
-          end(mapStatus(status, res));
-          return;
-        }
-        var bodyPromise;
-        try {
-          bodyPromise = (res && typeof res.text === 'function') ? res.text() : Promise.resolve('');
-        } catch (error3) {
-          end({ ok: false, code: E.NET_BAD, retryable: false, status: status });
-          return;
-        }
-        bodyPromise.then(function (text) {
-          var json = null;
-          if (typeof text === 'string' && text) {
-            try { json = JSON.parse(text); } catch (error4) { json = null; }
+      function send(currentBody) {
+        var options = {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + cfg.key
+          },
+          body: currentBody,
+          credentials: 'omit',
+          cache: 'no-store',
+          mode: 'cors'
+        };
+        if (typeof AbortController === 'function') {
+          try {
+            ctrl = new AbortController();
+            options.signal = ctrl.signal;
+          } catch (error) {
+            ctrl = null;
           }
-          if (!json || typeof json !== 'object') {
+        }
+        var request;
+        try {
+          request = fetch(endpointOf(cfg.baseURL), options);
+        } catch (error2) {
+          end(mapNetError(error2));
+          return;
+        }
+        if (!request || typeof request.then !== 'function') {
+          end({ ok: false, code: E.NET_CONFIG, retryable: false, status: 0 });
+          return;
+        }
+        request.then(function (res) {
+          var status = Number(res && res.status) || 0;
+          if (status < 200 || status >= 300) {
+            if (status === 400 && !compatTried) {
+              var stripped = stripOptionalBody(currentBody);
+              if (stripped) {
+                compatTried = true;
+                send(stripped);
+                return;
+              }
+            }
+            end(mapStatus(status, res));
+            return;
+          }
+          var bodyPromise;
+          try {
+            bodyPromise = (res && typeof res.text === 'function') ? res.text() : Promise.resolve('');
+          } catch (error3) {
             end({ ok: false, code: E.NET_BAD, retryable: false, status: status });
             return;
           }
-          end({ ok: true, status: status, json: json });
-        }, function () {
-          end({ ok: false, code: E.NET_BAD, retryable: false, status: status });
+          bodyPromise.then(function (text) {
+            var json = null;
+            if (typeof text === 'string' && text) {
+              try { json = JSON.parse(text); } catch (error4) { json = null; }
+            }
+            if (!json || typeof json !== 'object') {
+              end({ ok: false, code: E.NET_BAD, retryable: false, status: status });
+              return;
+            }
+            end({ ok: true, status: status, json: json });
+          }, function () {
+            end({ ok: false, code: E.NET_BAD, retryable: false, status: status });
+          });
+        }, function (error5) {
+          end(mapNetError(error5));
         });
-      }, function (error5) {
-        end(mapNetError(error5));
-      });
+      }
+      send(bodyStr);
     });
   }
 

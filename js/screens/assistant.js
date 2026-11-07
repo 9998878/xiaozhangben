@@ -58,6 +58,7 @@
     timeout: '网络超时，已改用本地解析',
     rate: '服务繁忙（限流），已改用本地解析',
     server: '模型服务出错，已改用本地解析',
+    auth: '密钥或权限不对，已改用本地解析',
     net: '在线服务连不上，已改用本地解析',
     config: '未启用在线模型，当前用本地解析',
     disabled: '未启用在线模型，当前用本地解析',
@@ -239,6 +240,7 @@
     token: 0,
     queue: [],
     typing: null,
+    pendingRaw: '',       /* 在途云端请求的原话：「取消等待」的作废目标（2.28.2） */
     timers: [],
     undoEntry: null,
     undoUntil: 0
@@ -491,6 +493,16 @@
     if (typing.soft) {
       body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: '模型响应较慢，继续等…' }));
     }
+    /* 2.28.2：云端等待期（最长 20s）给一个「取消等待」出口——作废在途响应，当句立刻转本地 */
+    if (session.pendingRaw) {
+      body.appendChild(el('div', { className: 's-assistant__actions' }, [
+        el('button', {
+          className: 's-assistant__ghost', type: 'button',
+          'aria-label': '取消等待，这一句改用本地解析',
+          onclick: cancelRemoteWait
+        }, ['取消等待'])
+      ]));
+    }
     return el('div', { className: 's-assistant__row s-assistant__row--bot', 'aria-live': 'polite' }, [
       el('div', { className: 's-assistant__avatar', 'aria-hidden': 'true' }, [icon('sparkles', 16)]),
       body
@@ -608,7 +620,7 @@
           className: 's-assistant__ghost',
           type: 'button',
           'aria-label': '去设置里开启联网解析',
-          onclick: function () { gotoSettings(); }
+          onclick: function () { gotoSettings('#/settings/ai'); }
         }, ['去设置'])
       ]));
     }
@@ -639,7 +651,7 @@
         className: 's-assistant__ghost',
         type: 'button',
         'aria-label': '去设置里检查联网配置',
-        onclick: function () { gotoSettings(); }
+        onclick: function () { gotoSettings('#/settings/ai'); }
       }, ['去设置'])
     ]);
   }
@@ -1050,6 +1062,7 @@
     session.busy = false;
     session.state = 'idle';
     session.typing = null;
+    session.pendingRaw = '';
     clearTimers();
     if (host && host.input) { host.input.disabled = false; }
     if (host && host.send) {
@@ -1085,6 +1098,9 @@
 
   function queueNext() {
     if (!session.queue.length) { return; }
+    /* 2.28.2：离屏（host 已卸载）不再取队首——旧版先 shift 再 submit，host 为空时
+       话语被静默吞掉，兑现不了「排在后面」。留在队列，回屏后由下一条回复带出。 */
+    if (!host) { return; }
     var next = session.queue.shift();
     later(function () { submit(next); }, 0);
   }
@@ -1126,6 +1142,7 @@
 
     session.token += 1;
     var token = session.token;
+    session.pendingRaw = raw; /* 「取消等待」的作废目标（2.28.2） */
     beginBusy('正在解析…', 'parsing', true);
     paint();
     scrollToEnd(true);
@@ -1171,6 +1188,17 @@
       endBusy();
       finishFallback(raw, 'bad');
     });
+  }
+
+  /* 2.28.2：「取消等待」——作废在途云端响应（token 机制），当句立刻转本地解析。
+     不静默吞掉这一句：云端结果回来时已过期丢弃，本地结果马上顶上。 */
+  function cancelRemoteWait() {
+    var raw = session.pendingRaw || '';
+    session.pendingRaw = '';
+    session.token += 1;
+    endBusy();
+    if (raw) { sendLocal(raw, 'timeout'); return; }
+    paint();
   }
 
   /* 远端彻底失败（正常不会走到：respondRemote 自带回落，这里只是兜底） */

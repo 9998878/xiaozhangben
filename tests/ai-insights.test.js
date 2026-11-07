@@ -487,6 +487,64 @@ regCase('5.4 上月超支但上月无预算 → 链断为 1', function () {
   checkEq(m.budget.overCategories[0].consecutiveMonths, 1, '上月无预算记录，链=1');
 });
 
+/* ============================== 用例 6：口径收尾（2.28.2） ============================== */
+
+section('用例 6：信用卡取现计透支、txCount 不计转账、anomalies 不带备注、裸「游戏」不误伤（2.28.2）');
+
+regCase('6.1 信用卡取现（credit → 非 credit transfer）计入新增透支，参与以贷养贷判定', function () {
+  const db = buildDb();
+  db.transactions = [
+    tx({ type: 'transfer', amountCents: 50000, accountId: 'ac_credit', toAccountId: 'ac_cash' }), /* 取现 */
+    tx({ type: 'transfer', amountCents: 30000, accountId: 'ac_cash', toAccountId: 'ac_credit' }), /* 还款 */
+    tx({ accountId: 'ac_credit', amountCents: 20000, categoryId: 'ca_digital' })                  /* 透支消费 */
+  ];
+  const m = buildMetrics(db);
+  checkEq(m.cashflow.creditInflowCents, 70000, '取现 50000 + 透支 20000 都算新增透支');
+  checkEq(m.debt.monthlyRepaymentCents, 30000, '还款照常');
+  checkEq(m.debt.loanToLoanSuspect, true, '边取现边还款且入不敷出 → 以贷养贷红旗');
+});
+
+regCase('6.2 txCount 不计 transfer：纯转账月为 0，requestAiInsights 守卫挡在「空账期」', async function () {
+  const db = buildDb();
+  db.transactions = [
+    tx({ type: 'transfer', amountCents: 5000, toAccountId: 'ac_credit' }),
+    tx({ type: 'transfer', amountCents: 3000, toAccountId: 'ac_cash' })
+  ];
+  const m = buildMetrics(db);
+  checkEq(m.dataQuality.txCount, 0, '纯转账月 txCount=0');
+  check(typeof m.dataQuality.missingDays === 'number', 'missingDays 口径不受影响');
+  const res = await aiInsights.requestAiInsights(m, {});
+  checkEq(res.reason, 'empty', '守卫必须挡住，不发 LLM 请求');
+});
+
+regCase('6.3 anomalies 不再带 note 字段（写-only 敏感面，2.28.2 摘除）', function () {
+  const m = buildMetrics(buildRichDb());
+  const ano = m.trends.anomalies;
+  checkEq(ano.length, 1, '装置恰一笔异常大额');
+  check(!('note' in ano[0]), 'anomalies 条目不得含 note：' + JSON.stringify(ano[0]));
+  checkEq(JSON.stringify(Object.keys(ano[0]).sort()), JSON.stringify(['categoryName', 'cents', 'date']), '只含 date/cents/categoryName');
+});
+
+regCase('6.4 裸「游戏」不再误伤：买游戏光盘不进游戏充值聚类，真充值仍命中', function () {
+  const db = buildDb();
+  db.transactions = [
+    tx({ categoryId: 'ca_food', amountCents: 20000, note: '买游戏光盘' }),
+    tx({ categoryId: 'ca_food', amountCents: 3000, note: '游戏充值' })
+  ];
+  const m = buildMetrics(db);
+  const groups = {};
+  m.smallFrequent.forEach(function (g) { groups[g.label] = g; });
+  const g = groups['游戏充值'];
+  check(g, '「游戏充值」仍应命中');
+  checkEq(g.count, 1, '只有「游戏充值」一笔命中（裸「游戏」误伤会使 count=2）');
+  checkEq(g.totalCents, 3000, '合计只含 3000（误伤会含 20000）');
+});
+
+regCase('6.5 系统提示词含 null 语义（规则 6.5，源码级）', function () {
+  check(aiSrc.indexOf('规则 6.5：字段值为 null 表示数据不足或该项不适用') >= 0,
+    'prompt 缺少 null 语义说明，模型可能把 null 当 0');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {

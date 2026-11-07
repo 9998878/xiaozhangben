@@ -154,7 +154,7 @@ if (!iconsBlock) { throw new Error('index.html 中找不到 icons 模块内联�
 vm.runInContext(iconsBlock, sandbox, { filename: 'inline:icons.js' });
 
 /* 模拟 app.js（加载链最后一环）把版本置为当前发布版本之后的最终状态。 */
-vm.runInContext("XZB.version = '2.28.1';", sandbox, { filename: 'inline:app-version-stub' });
+vm.runInContext("XZB.version = '2.28.2';", sandbox, { filename: 'inline:app-version-stub' });
 
 const nlSrc = fs.readFileSync(path.join(ROOT, 'js/modules/nl.js'), 'utf8');
 vm.runInContext(nlSrc, sandbox, { filename: 'js/modules/nl.js' });
@@ -623,17 +623,17 @@ test('6.5 index.html SYSTEM_CATEGORY_KEYS 字面量含 9 个新增 icon key', fu
 
 /* ============================== 用例 7：版本一致性 ============================== */
 
-section('用例 7：版本号 2.28.1 三处一致，无旧版本残留');
+section('用例 7：版本号 2.28.2 三处一致，无旧版本残留');
 
-test('7.1 index.html 含 XZB.version = \'2.28.1\'', function () {
-  check(/XZB\.version\s*=\s*'2\.28\.1'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.1\'');
+test('7.1 index.html 含 XZB.version = \'2.28.2\'', function () {
+  check(/XZB\.version\s*=\s*'2\.28\.2'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.2\'');
 });
 
-test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.1\' 且 CACHE_LABEL 含 2.28.1', function () {
-  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.1'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.1');
+test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.2\' 且 CACHE_LABEL 含 2.28.2', function () {
+  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.2'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.2');
   const m = /CACHE_LABEL\s*=\s*'([^']*)'/.exec(SW_JS);
   check(m, 'sw.js 找不到 CACHE_LABEL');
-  check(m[1].indexOf('2.28.1') >= 0, 'CACHE_LABEL 不含 2.28.1：' + m[1]);
+  check(m[1].indexOf('2.28.2') >= 0, 'CACHE_LABEL 不含 2.28.2：' + m[1]);
 });
 
 test('7.3 版本载体里无上一版 2.27.1 残留', function () {
@@ -861,6 +861,24 @@ test('13.4 摘除词不复活：老库残留「书」+ 缺「学费」，同步�
   const after = db.categories.find(function (c) { return c.id === 'ca_study'; });
   checkEq(JSON.stringify(after.aliases), JSON.stringify(['课程', '培训', '学费']), '摘 1 补 2：与种子对齐且「书」不复活');
   checkEq(schema.validateDb(db).ok, true, '整库校验通过');
+});
+
+/* ============================== 用例 15（2.28.2）：ca_veggie 死键修复与 iconOk 白名单启用 ============================== */
+
+section('用例 15（2.28.2）：ca_veg 死键改正为 ca_veggie、iconOk 白名单真正启用');
+
+test('15.1 resolveCategory(买菜/菜市场) → ca_veggie（旧 ca_veg 键是改名残留，词永远路由失败）', function () {
+  const cx = buildAssistantCx();
+  const resolve = sandbox.XZB.Core.assistant.resolveCategory;
+  checkEq(resolve('买菜', 'expense', cx).id, 'ca_veggie', '买菜');
+  checkEq(resolve('菜市场买菜 30', 'expense', cx).id, 'ca_veggie', '菜市场');
+});
+
+test('15.2 iconOk 真正启用白名单：注册表内通过、未注册拒绝（提升真实源码执行）', function () {
+  vm.runInContext(liftFunction(INDEX_HTML, 'iconOk'), sandbox, { filename: 'lift:iconOk' });
+  checkEq(sandbox.iconOk('wallet'), true, '已注册图标应通过');
+  checkEq(sandbox.iconOk('totally-fake-icon'), false, '未注册图标必须拒绝（旧版形同虚设）');
+  checkEq(sandbox.iconOk(''), false, '空串拒绝');
 });
 
 /* ============================== 汇总 ============================== */

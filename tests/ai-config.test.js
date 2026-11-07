@@ -360,10 +360,13 @@ regCase('7.2 源码：llmPlan 把 LLM_PLAN_TIMEOUT_MS 显式传给 httpOnce（�
     'llmPlan 未显式传解析超时，仍会吃默认 6s');
 });
 
-regCase('7.3 行为：响应在 6.2s 才回来（超过旧 6s 门）时 llmPlan 仍成功', async function () {
+regCase('7.3 行为：响应在 6.2s 才回来（超过旧 6s 门）时 llmPlan 仍成功（2.28.2 起等比缩时 100×，先后关系不变）', async function () {
   seedCompleteConfig();
   llm.setConfig({ noticeAt: Date.now() });
   const originalFetch = sandbox.fetch;
+  const originalSetTimeout = sandbox.setTimeout;
+  const SCALE = 100; /* 真实 6.2s → 62ms；httpOnce 的 20s 超时门 → 200ms，谁先谁后不变 */
+  sandbox.setTimeout = function (fn, ms) { return originalSetTimeout(fn, (Number(ms) || 0) / SCALE); };
   const payload = {
     choices: [{
       finish_reason: 'stop',
@@ -372,7 +375,7 @@ regCase('7.3 行为：响应在 6.2s 才回来（超过旧 6s 门）时 llmPlan 
   };
   sandbox.fetch = function () {
     return new Promise(function (resolve) {
-      setTimeout(function () {
+      sandbox.setTimeout(function () {
         resolve({ status: 200, text: function () { return Promise.resolve(JSON.stringify(payload)); } });
       }, 6200);
     });
@@ -382,6 +385,7 @@ regCase('7.3 行为：响应在 6.2s 才回来（超过旧 6s 门）时 llmPlan 
     checkEq(res && res.ok, true, 'plan().ok（旧 6s 门会在此超时并被回落本地）');
   } finally {
     sandbox.fetch = originalFetch;
+    sandbox.setTimeout = originalSetTimeout;
   }
 });
 
@@ -658,6 +662,74 @@ regCase('13.8 真超时（timeoutMs=1 + 永不 resolve）→ E_AS_NET_TIMEOUT', 
     function () { return llm.chat(CHAT_MSGS, { timeoutMs: 1 }); });
   checkEq(res.code, 'E_AS_NET_TIMEOUT', '超时归 NET_TIMEOUT');
   checkEq(res.reason, 'timeout', 'reason=timeout');
+});
+
+/* ============================== 用例 14：传输层健壮性（2.28.2） ============================== */
+
+section('用例 14：400 剥可选字段重试、端点防双拼、401/403 点名密钥（2.28.2）');
+
+regCase('14.1 端点不认 response_format：400 后自动剥掉重发一次，第二次成功', async function () {
+  ackCompleteConfig();
+  const bodies = [];
+  const res = await withNet(function (url, options) {
+    bodies.push(String(options.body));
+    if (bodies.length === 1) { return Promise.resolve({ status: 400 }); }
+    return Promise.resolve({ status: 200, text: function () { return Promise.resolve('{"ok":true}'); } });
+  }, true, function () { return llm.chat(CHAT_MSGS, { timeoutMs: 500 }); });
+  checkEq(res && res.ok, true, '剥字段重试后应成功');
+  checkEq(bodies.length, 2, '恰好重发一次');
+  check(bodies[0].indexOf('response_format') >= 0, '首次请求仍带 response_format');
+  check(bodies[1].indexOf('response_format') < 0, '重发必须剥掉 response_format');
+  checkEq(JSON.parse(bodies[1]).model, 'gpt-4o-mini', '其余字段原样保留');
+});
+
+regCase('14.2 端点连剥字段后仍 400：恰好 2 次 fetch，终态 E_AS_NET_CONFIG（不循环）', async function () {
+  ackCompleteConfig();
+  let calls = 0;
+  const res = await withNet(function () {
+    calls += 1;
+    return Promise.resolve({ status: 400 });
+  }, true, function () { return llm.chat(CHAT_MSGS, { timeoutMs: 500 }); });
+  checkEq(calls, 2, '最多重发一次');
+  checkEq(res.code, 'E_AS_NET_CONFIG', '终态归配置');
+});
+
+regCase('14.3 401 → E_AS_NET_CONFIG + reason=auth（点名密钥，2.28.2）', async function () {
+  ackCompleteConfig();
+  const res = await withNet(function () { return Promise.resolve({ status: 401 }); }, true,
+    function () { return llm.chat(CHAT_MSGS, { timeoutMs: 500 }); });
+  checkEq(res.code, 'E_AS_NET_CONFIG', '码仍归配置桶');
+  checkEq(res.reason, 'auth', 'reason 必须是 auth');
+});
+
+regCase('14.4 endpointOf 防双拼：baseURL 已含 /chat/completions 时不再追加', async function () {
+  ackCompleteConfig();
+  llm.setConfig({ baseURL: 'https://api.example.com/v1/chat/completions' });
+  let seenUrl = '';
+  const res = await withNet(function (url) {
+    seenUrl = url;
+    return Promise.resolve({ status: 200, text: function () { return Promise.resolve('{"ok":true}'); } });
+  }, true, function () { return llm.chat(CHAT_MSGS, { timeoutMs: 500 }); });
+  checkEq(res && res.ok, true, '请求应成功');
+  checkEq(seenUrl, 'https://api.example.com/v1/chat/completions', '不得双拼成 /chat/completions/chat/completions');
+});
+
+regCase('14.5 回环豁免补齐：https 页面填 http://[::ffff:127.0.0.1]:8080 / http://localhost. 仍可保存', async function () {
+  await withPageProtocol('https:', function () {
+    seedCompleteConfig();
+    const r1 = llm.setConfig({ baseURL: 'http://[::ffff:127.0.0.1]:8080/v1' });
+    checkEq(r1 && r1.ok, true, 'IPv6 映射回环应放行：' + JSON.stringify(r1));
+    const r2 = llm.setConfig({ baseURL: 'http://localhost.:8080/v1' });
+    checkEq(r2 && r2.ok, true, 'localhost.（FQDN 尾点）应放行：' + JSON.stringify(r2));
+  });
+});
+
+regCase('14.6 合法短域名不再被拒：http://a.io（11 字符）可保存', async function () {
+  await withPageProtocol('http:', function () {
+    seedCompleteConfig();
+    const r = llm.setConfig({ baseURL: 'http://a.io' });
+    checkEq(r && r.ok, true, '11 字符合法短域名应放行：' + JSON.stringify(r));
+  });
 });
 
 /* ============================== 汇总 ============================== */

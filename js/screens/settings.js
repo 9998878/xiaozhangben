@@ -3481,8 +3481,10 @@
       var ms = Math.floor(Number(result.ms) || 0);
       return ms > 0 ? '连接正常 · ' + ms + ' 毫秒' : '连接正常';
     }
-    /* 5xx 与 429 同码（E_AS_NET_RATE）不同因：服务端故障不得谎报「限流」（2.28.1） */
+    /* 5xx 与 429 同码（E_AS_NET_RATE）不同因：服务端故障不得谎报「限流」（2.28.1）。
+       401/403 同码（E_AS_NET_CONFIG）不同因：点名密钥，别让用户去改地址（2.28.2） */
     if (result.reason === 'server') { return '模型服务出错，稍后再试'; }
+    if (result.reason === 'auth') { return '密钥或权限不对，检查密钥'; }
     var code = result.code ? String(result.code) : '';
     return AI_ERR_TEXT[code] || '测试没通过，检查配置后再试';
   }
@@ -3588,12 +3590,15 @@
       return true;
     }
 
-    /* 开启在线模型的前提：三样都齐（已保存过密钥也算），否则明确提示并聚焦第一个缺口。 */
+    /* 开启在线模型的前提：三样都齐（已保存过密钥也算），否则明确提示并聚焦第一个缺口。
+       2.28.2：baseURL 不再只查非空——scheme/空格先过一遍（与保存口径一致），
+       非法地址不再能开启开关，开关态与生效配置不脱节。 */
     function configComplete(map) {
       var saved = llmCfg() || {};
       var typed = String(map.key.value || '');
       var hasKey = saved.hasKey === true || (typed !== '' && typed.indexOf('••••') !== 0);
-      return String(map.baseURL.value || '').trim() !== ''
+      var addr = String(map.baseURL.value || '').trim();
+      return /^https?:\/\/\S+$/i.test(addr)
         && String(map.model.value || '').trim() !== ''
         && hasKey;
     }
@@ -3648,7 +3653,8 @@
       }
     }));
     list.appendChild(switchRow(ctx, {
-      icon: 'eye', title: '显示密钥', sub: '只在本次打开时明文显示', checked: false,
+      /* 2.28.2 改名：已保存的密钥从不回填，旧名「显示密钥」名不副实——开关只影响本次手输 */
+      icon: 'eye', title: '明文显示本次输入', sub: '已保存的密钥不回填，开关只影响现在输入的内容', checked: false,
       onChange: function (next) { inputs.key.type = next ? 'text' : 'password'; return true; }
     }));
     wrap.appendChild(list);

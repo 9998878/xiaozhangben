@@ -546,8 +546,12 @@
       if (frac && frac.length > 3) {
         error = 'precision';
       }
-      if (core.indexOf(',') >= 0 && !/^\d{1,3}(,\d{3})+$/.test(core)) {
-        error = 'invalid';
+      if (core.indexOf(',') >= 0) {
+        /* 2.28.2：坏千分位（如 1,2345）不再按 1234 元静默收下——合法分组后紧跟更多数字
+           一律判 invalid，宁可让用户重说也不记错账 */
+        if (!/^\d{1,3}(,\d{3})+$/.test(core) || /\d/.test(String(work.charAt(coreEnd)))) {
+          error = 'invalid';
+        }
       }
 
       if (unit === '元' || unit === '块' || unit === '圆') {
