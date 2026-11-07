@@ -272,6 +272,8 @@
   /* A32 一次性标记：同样落 db.settings（走 store），不用浏览器键值存储。 */
   var FIRST_RUN_BANNER_KEY = 'firstRunBannerDone';
   var bannerShownThisSession = false;
+  /* 2.28.7：主屏改真页签后记住上次停留的页签（prefs 通道，theme/haptics 同款）。 */
+  var SETTINGS_TAB_KEY = 'settingsTab';
 
   function storageProtectText(persisted) {
     if (persisted === true) { return '已开启'; }
@@ -283,8 +285,9 @@
     return persisted === true ? '已开启' : '未开启';
   }
 
+  /* 2.28.7：已开启时右值自明，副标题只在有风险要交代（未开启）时出现。 */
   function storageProtectSub(persisted) {
-    if (persisted === true) { return '浏览器已允许本机持久化存储'; }
+    if (persisted === true) { return null; }
     return '系统可能清理数据，请定期导出备份';
   }
 
@@ -329,7 +332,7 @@
     return row({
       icon: 'lock',
       title: '应用锁',
-      sub: '离开 5 分钟后重新打开需要输入 PIN。只锁界面，不加密本机数据。',
+      sub: '重新打开需输入 PIN',
       value: isLockEnabled() ? '已开启' : '未开启',
       onClick: function () { openLockSheet(ctx); }
     });
@@ -964,12 +967,15 @@
     return node;
   }
 
+  /* 2.28.7：主屏改真页签后组标题由吸顶胶囊承担，title 传空即不渲染 head（子页不受影响）。 */
   function group(titleText, rows, footerText, headAction) {
     var wrap = h('section', { className: 's-settings-group' });
-    var head = h('div', { className: 's-settings-group__head' });
-    head.appendChild(t('h2', 's-settings-group__title', titleText));
-    if (headAction) { head.appendChild(headAction); }
-    wrap.appendChild(head);
+    if (titleText || headAction) {
+      var head = h('div', { className: 's-settings-group__head' });
+      if (titleText) { head.appendChild(t('h2', 's-settings-group__title', titleText)); }
+      if (headAction) { head.appendChild(headAction); }
+      wrap.appendChild(head);
+    }
 
     var list = h('div', { className: 'c-list s-settings-list' });
     for (var i = 0; i < rows.length; i += 1) {
@@ -1089,7 +1095,6 @@
       rows.push(switchRow(ctx, {
         icon: 'sparkles',
         title: '点按震动',
-        sub: '每次点击给一下轻微反馈',
         checked: prefsGet(ctx, 'haptics', true) !== false,
         onChange: function (next) {
           var saved = prefsSet(ctx, 'haptics', next);
@@ -1105,7 +1110,6 @@
       rows.push(switchRow(ctx, {
         icon: 'bell',
         title: '点按音效',
-        sub: '每次点击给一声轻响，代替不可用的震动',
         checked: prefsGet(ctx, 'sound', true) !== false,
         onChange: function (next) {
           var saved = prefsSet(ctx, 'sound', next);
@@ -1114,7 +1118,7 @@
         }
       }));
     }
-    return group('显示与手感', rows);
+    return group('', rows);
   }
 
   /* ---------------- B 安全（主屏可见；原在 about 子页「存储」组，IA-3 上移） ---------------- */
@@ -1124,7 +1128,7 @@
     var storeRows = [];
     storeRows.push(storageProtectRow(db));
     storeRows.push(lockRow(db));
-    return group('安全', storeRows, '应用锁只锁界面，不加密本机数据；本机数据保护是浏览器授予的持久化状态。');
+    return group('', storeRows);
   }
 
   /* ---------------- 小助手（2.17.0） ---------------- */
@@ -1188,41 +1192,39 @@
       row({
         icon: 'sparkles',
         title: '小助手',
-        sub: '说一句「午饭 28 微信」就记好，也能改、删、查',
+        sub: '说一句就能记好一笔',
         onClick: function () { go(ctx, '#/assistant'); }
       }),
       row({
         icon: 'cloud',
         title: '在线模型',
-        sub: '自己填接口地址与密钥；不填就纯本地解析',
         value: llmRowValue(),
         onClick: function () { go(ctx, '#/settings/ai'); }
       }),
       row({
         icon: 'undo',
         title: '撤销历史',
-        sub: count ? '最近 ' + count + ' 次写入可以撤' : '还没有可撤销的记录',
         value: count ? count + ' 条' : '暂无',
         onClick: function () { go(ctx, '#/assistant/history'); }
       })
     ];
-    /* A30 / D-05：清空撤销历史只在 #/assistant/history 子页留一个入口。 */
-    return group('小助手与联网', rows,
-      '默认在本机解析；开启在线模型后，你说的话会与账户名称、分类名称一起发送给你配置的模型服务。撤销历史只记录小助手与手动记账的差异，最多 30 条。');
+    /* A30 / D-05：清空撤销历史只在 #/assistant/history 子页留一个入口。
+       2.28.7：长说明砍成一行，但隐私告知句必须贴着「在线模型」开关（用例 12.2 锁口径）。 */
+    return group('', rows, '开启在线模型后，你说的话会与账户名称、分类名称一起发送。');
   }
 
   /* ---------------- 记账管理（M12：按任务找入口，不按实现方式） ---------------- */
 
-  /* ---------------- 本机数据总览（2.26.0：首屏先交代数据在哪、有多少） ---------------- */
+  /* ---------------- 本机数据总览（2.28.7 起：挂在「数据」页签顶部，交代数据规模与存储方式） ---------------- */
 
+  /* 2.28.7：总览并入「数据」页签，只留统计格与存储行（标题/lead/大按钮撤，
+     导入导出以数据与备份卡的行为准，不再双入口）。 */
   function sectionOverview(ctx, db) {
     var counts = countsOf(db);
     var info = storageInfo();
 
     var wrap = h('section', { className: 'c-card s-settings-overview' });
     var body = h('div', { className: 'c-card__body' });
-    body.appendChild(t('h2', 'c-card__title', '我的账本'));
-    body.appendChild(t('p', 's-settings-overview__lead', '数据仅保存在此设备，不需要账号'));
 
     var grid = h('div', { className: 's-settings-overview__grid' });
     grid.appendChild(statItem('流水', counts.transactions + ' 笔'));
@@ -1240,17 +1242,6 @@
       body.appendChild(noteBlock('当前是临时内存模式，关闭页面后数据会丢失，请先导出备份。', 's-settings-overview__warn'));
     }
 
-    var empty = counts.transactions === 0;
-    var btn = h('button', {
-      className: 'c-btn c-btn--primary s-settings-overview__export', type: 'button',
-      text: empty ? '导入备份' : '导出备份'
-    });
-    btn.addEventListener('click', function () {
-      if (empty) { pickImportFile(ctx); return; }
-      openExportSheet(ctx);
-    });
-    body.appendChild(btn);
-
     wrap.appendChild(body);
     return wrap;
   }
@@ -1259,7 +1250,7 @@
     var settings = settingsOf(db);
     var categories = listOf(db, 'categories').length;
 
-    return group('记账与分类', [
+    return group('', [
       row({
         icon: 'target',
         title: '预算与存钱目标',
@@ -1269,14 +1260,12 @@
       row({
         icon: 'tag',
         title: '分类管理',
-        sub: '常用的会排在前面',
         value: categories + ' 个分类',
         onClick: function () { go(ctx, '#/settings/categories?kind=expense'); }
       }),
       row({
         icon: 'wallet',
         title: '账户管理',
-        value: '余额与信用卡',
         onClick: function () { go(ctx, '#/accounts'); }
       }),
       row({
@@ -1288,13 +1277,13 @@
       switchRow(ctx, {
         icon: 'repeat',
         title: '定期账单自动入账',
-        sub: '打开应用时自动补记，默认关闭',
+        sub: '打开应用时自动补记',
         checked: settings.recurringAutoPost === true,
         onChange: function (next) {
           return commitSetting(ctx, 'recurringAutoPost', next, next ? '开启定期自动入账' : '关闭定期自动入账');
         }
       })
-    ], '定期账单只在打开应用时补记，不会在后台运行。');
+    ]);
   }
 
   /* ---------------- 数据：导出 ---------------- */
@@ -2230,7 +2219,6 @@
     var snapRow = row({
       icon: 'list',
       title: '快照记录',
-      sub: '导入前会自动存一份',
       value: '查看',
       onClick: function () { go(ctx, '#/settings/snapshots'); }
     });
@@ -2254,7 +2242,6 @@
       row({
         icon: 'upload',
         title: '导入备份',
-        sub: '从 JSON 备份恢复，导入前自动快照',
         onClick: function () { pickImportFile(ctx); }
       }),
       snapRow,
@@ -2262,7 +2249,7 @@
       switchRow(ctx, {
         icon: 'clock',
         title: '自动快照',
-        sub: '滚动保留最近 30 份',
+        sub: '保留最近 30 份',
         checked: settings.snapshotAuto !== false,
         onChange: function (next) {
           return commitSetting(ctx, 'snapshotAuto', next, next ? '开启自动快照' : '关闭自动快照');
@@ -2277,11 +2264,12 @@
       })
     ];
 
-    return group('数据与备份', rows, '导出、快照都只在本机完成，不经过服务器。');
+    return group('', rows, '导出、快照都只在本机完成；导入前会自动存一份快照。');
   }
 
   /* 危险区独立分组（M12 / D-04）：清空需手输确认；不进胶囊。
-     2.26.0：归档/新建入口统一由「账本管理」（#/books）承担，这里只保留清空一行。 */
+     2.26.0：归档/新建入口统一由「账本管理」（#/books）承担，这里只保留清空一行。
+     2.28.7：挂到「数据」页签底部，紧挨快照与备份，仍不进胶囊。 */
   function sectionDanger(ctx, db) {
     var wrap = h('section', { className: 's-settings-group s-settings-group--danger' });
     var head = h('div', { className: 's-settings-group__head' });
@@ -3365,11 +3353,11 @@
         className: 's-settings-version'
       })
     ];
-    /* R-11 / D-05：原句在「可选联网」后为假，已改为如实口径（与 renderAbout 隐私卡同源）。 */
-    return group('支持与关于', rows, '账目默认只存在这台设备上，无账号、无服务器；开启在线模型后只把当轮原话、账户名称与分类名称发给你配置的模型服务。');
+    /* R-11 / D-05：隐私口径整句移到 about 子页隐私卡（2.28.7 起主屏关于页签不再重复）。 */
+    return group('', rows);
   }
 
-  /* ---------------- 索引胶囊（SPEC P2-1 / DESIGN §4.2） ---------------- */
+  /* ---------------- 页签胶囊（2.28.7 起：吸顶真页签，取代 2.26.0 的滚动定位索引） ---------------- */
 
   /* A–F 六项（2.26.0 收拢：自动化并入记账/数据，安全上移主屏）；危险区 H 按 IA-4 视觉隔离，不进胶囊。 */
   var TOC_GROUPS = [
@@ -3422,63 +3410,44 @@
     return null;
   }
 
-  /* 落点让给 CSS 的 scroll-margin-top（顶栏 + 胶囊高度）；失败才退回容器 scrollTop。 */
-  function tocGoTo(nav, key) {
-    var target = tocTarget(key);
-    if (!target) { return; }
+  /* 2.28.7：初始页签读 prefs（settingsTab），非法值回退第一组。 */
+  function initialTab(ctx) {
+    var saved = prefsGet(ctx, SETTINGS_TAB_KEY, null);
+    for (var i = 0; i < TOC_GROUPS.length; i += 1) {
+      if (TOC_GROUPS[i][0] === saved) { return saved; }
+    }
+    return TOC_GROUPS[0][0];
+  }
+
+  /* 真页签（2.28.7）：点谁只显示谁——面板预建常驻、hidden 切换（先例 add.js syncType），
+     容器滚回顶；停留页签落 prefs，下次进屏还在原地。 */
+  function tocSelect(ctx, nav, key) {
     tocActive(nav, key);
-    if (typeof target.scrollIntoView === 'function') {
-      try { target.scrollIntoView({ block: 'start' }); return; } catch (error) { /* 走兜底 */ }
+    for (var i = 0; i < TOC_GROUPS.length; i += 1) {
+      var panel = tocTarget(TOC_GROUPS[i][0]);
+      if (panel) { panel.hidden = TOC_GROUPS[i][0] !== key; }
     }
     var host = tocHost(nav);
-    if (host) { host.scrollTop = target.offsetTop; }
+    if (host) { host.scrollTop = 0; }
+    prefsSet(ctx, SETTINGS_TAB_KEY, key);
   }
 
   function buildToc(ctx) {
-    var nav = h('nav', { className: 's-settings-toc', role: 'navigation', aria: { label: '分组索引' } });
+    var initial = initialTab(ctx);
+    var nav = h('nav', { className: 's-settings-toc', role: 'navigation', aria: { label: '分组页签' } });
     function add(key, label, first) {
       var item = h('button', {
         className: 's-settings-toc__item' + (first ? ' is-active' : ''),
         type: 'button', text: label, dataset: { group: key },
         aria: { current: first ? 'true' : 'false' }
       });
-      item.addEventListener('click', function () { buzz(ctx); tocGoTo(nav, key); });
+      item.addEventListener('click', function () { buzz(ctx); tocSelect(ctx, nav, key); });
       nav.appendChild(item);
     }
-    for (var i = 0; i < TOC_GROUPS.length; i += 1) { add(TOC_GROUPS[i][0], TOC_GROUPS[i][1], i === 0); }
+    for (var i = 0; i < TOC_GROUPS.length; i += 1) { add(TOC_GROUPS[i][0], TOC_GROUPS[i][1], TOC_GROUPS[i][0] === initial); }
     var shell = h('div', { className: 's-settings-toc-shell' });
     shell.appendChild(nav);
     return shell;
-  }
-
-  /* 高亮只在滚动容器上算（120ms 合帧），不监听 window。 */
-  function bindTocScroll(nav, root) {
-    var host = tocHost(root);
-    if (!host || typeof host.addEventListener !== 'function') { return; }
-    var ticking = false;
-    function sync() {
-      ticking = false;
-      if (!alive(nav)) { return; }
-      /* 2.26.1：线随视口比例走（固定 120px 在长卡片下会让高亮落后一整组）；
-         滚到底时强制收到最后一组，否则「关于」永远点不亮（页面已滚不动仍停在上一条）。 */
-      var best = TOC_GROUPS[0][0];
-      var atBottom = host.scrollTop + host.clientHeight >= host.scrollHeight - 4;
-      if (atBottom) {
-        best = TOC_GROUPS[TOC_GROUPS.length - 1][0];
-      } else {
-        var line = host.scrollTop + Math.round(host.clientHeight * 0.35);
-        for (var i = 0; i < TOC_GROUPS.length; i += 1) {
-          var node = tocTarget(TOC_GROUPS[i][0]);
-          if (node && node.offsetTop <= line) { best = TOC_GROUPS[i][0]; }
-        }
-      }
-      tocActive(nav, best);
-    }
-    host.addEventListener('scroll', function () {
-      if (ticking) { return; }
-      ticking = true;
-      if (typeof global.setTimeout === 'function') { global.setTimeout(sync, 120); }
-    }, { passive: true });
   }
 
   /* ---------------- C 组子页 #/settings/ai：在线模型 ---------------- */
@@ -3752,6 +3721,13 @@
 
   /* ---------------- 主渲染 ---------------- */
 
+  /* 面板壳（2.28.7）：页签切换的最小单元，id 保留 settings-group- 前缀供 tocTarget 定位。 */
+  function panelFor(key) {
+    var panel = h('div', { className: 's-settings-panel' });
+    panel.id = 'settings-group-' + key;
+    return panel;
+  }
+
   function render(root, ctx) {
     live.root = root;
     live.ctx = ctx;
@@ -3777,28 +3753,28 @@
     /* A32：空库首启一次性横幅（置位后不再出现；样式沿用既有 c-* / s-settings-note） */
     firstRunBannerMaybe(root, ctx, db);
 
-    /* 2.26.0：总览卡在首启横幅之后、吸顶索引之前，首屏先交代数据规模与存储方式。 */
-    root.appendChild(sectionOverview(ctx, db));
-
-    /* SPEC P2-1 / DESIGN §4.2：吸顶索引胶囊（A–F），危险区 H 不进胶囊。 */
+    /* SPEC P2-1 / DESIGN §4.2：吸顶页签胶囊（A–F），危险区 H 不进胶囊。 */
     var toc = buildToc(ctx);
     root.appendChild(toc);
 
-    /* A→F 六段（2.26.0 重排）：高频记账管理前置，AI 与自动化技术配置退出主屏。 */
+    /* 2.28.7：面板化——每组预建常驻、hidden 切换（先例 add.js syncType），不再长滚动。
+       总览卡与危险区并入「数据」面板：统计挨着备份与清空，首页签只剩记账管理。 */
+    var initial = initialTab(ctx);
     var sections = [
       ['manage', sectionManage(ctx, db)],
-      ['data', sectionData(ctx, db)],
+      ['data', sectionOverview(ctx, db), sectionData(ctx, db), sectionDanger(ctx, db)],
       ['security', sectionSecurity(ctx, db)],
       ['assistant', sectionAssistant(ctx)],
       ['appearance', sectionAppearance(ctx)],
       ['about', sectionAbout(ctx, db)]
     ];
     for (var i = 0; i < sections.length; i += 1) {
-      sections[i][1].id = 'settings-group-' + sections[i][0];
-      root.appendChild(sections[i][1]);
+      var key = sections[i][0];
+      var panel = panelFor(key);
+      for (var j = 1; j < sections[i].length; j += 1) { panel.appendChild(sections[i][j]); }
+      panel.hidden = key !== initial;
+      root.appendChild(panel);
     }
-    root.appendChild(sectionDanger(ctx, db));
-    bindTocScroll(toc, root);
   }
 
   /* ---------------- 注册 ---------------- */

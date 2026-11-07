@@ -11498,6 +11498,14 @@ textarea::selection {
 .s-settings-notice .c-card__title { margin: 0 0 var(--sp-1); color: var(--c-text-2); font-size: var(--fs-footnote); }
 .s-settings-notice .s-settings-note { margin: 0; padding: 0; color: var(--c-text-2); font-size: var(--fs-caption-1); line-height: var(--lh-caption-1); }
 
+/* ---------------- 页签面板（2.28.7：真页签，预建常驻 + hidden 切换） ---------------- */
+
+/* 面板显式 display:block 会压过 UA 的 [hidden] 兜底，必须自带 [hidden] 规则 */
+.s-settings-panel { display: block; }
+.s-settings-panel[hidden] { display: none; }
+/* 首卡与吸顶页签条的间距，c-card / s-settings-group 两种首卡都要覆盖 */
+.s-settings-panel > :first-child { margin-top: var(--sp-1); }
+
 /* ---------------- 分组卡片 ---------------- */
 
 .s-settings-group {
@@ -33102,7 +33110,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.28.6';
+  XZB.version = '2.28.7';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
