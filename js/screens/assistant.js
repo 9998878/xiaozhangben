@@ -1,7 +1,7 @@
 /* ============================================================================
    小账本 2.0 · js/screens/assistant.js · owner: 助手（T-AS）
    文件：src/js/screens/assistant.js
-   路由：#/assistant（聊天屏） / #/assistant/history（撤销历史）
+   路由：#/assistant（聊天屏）；2.28.8 起翻旧账撤回机制移除，历史子页路由不再存在
    契约锚点：
      - 写入只经 XZB.app.commit（assistant.execute 内部走它，本屏不碰 store / IndexedDB）；
      - 只读 XZB.app.db()；统计口径全部交给 XZB.core.assistant / XZB.core.stats；
@@ -23,7 +23,6 @@
   var icons = (XZB.ui && XZB.ui.icons) || {};
 
   function assistant() { return core.assistant || null; }
-  function historyApi() { return core.history || null; }
   function datesApi() { return core.dates || null; }
   function moneyApi() { return core.money || null; }
 
@@ -50,7 +49,7 @@
   var NOTICE_TAIL = '可在「我的」里关闭（小助手与联网）';
   var NOTICE_ASK = '现在要联网解析这一句吗？';
 
-  var UNDO_MS = 8000;
+  /* 2.28.8：撤销历史机制移除，UNDO_MS / 屏内撤销条一并删除。 */
   var TYPING_DELAY = 200;
 
   /* 回落原因 → 一行短说明（A27/D-08：不得静默切换） */
@@ -155,8 +154,6 @@
   }
 
   function stampText(iso) {
-    var h = historyApi();
-    if (h && typeof h.stampText === 'function') { return h.stampText(iso); }
     return clockText(iso);
   }
 
@@ -241,9 +238,7 @@
     queue: [],
     typing: null,
     pendingRaw: '',       /* 在途云端请求的原话：「取消等待」的作废目标（2.28.2） */
-    timers: [],
-    undoEntry: null,
-    undoUntil: 0
+    timers: []
   };
 
   function clearTimers() {
@@ -267,7 +262,6 @@
     session.typing = null;
     session.queue = [];
     session.token += 1;
-    hideUndoBar();
   }
 
   function pushTurn(turn) {
@@ -277,7 +271,7 @@
 
   /* ============================== 渲染：外壳 ============================== */
 
-  var host = null;      /* {root, ctx, shell, log, chipRow, input, send, banner, voice, capsule, subText, undoBar} */
+  var host = null;      /* {root, ctx, shell, log, chipRow, input, send, banner, voice, capsule, subText} */
 
   function render(root, ctx) {
     root.textContent = '';
@@ -285,10 +279,6 @@
       root.appendChild(el('div', { className: 's-assistant s-assistant--broken' }, [
         el('p', { className: 's-assistant__broken-text', text: '助手模块没有加载成功，请重新打开应用。' })
       ]));
-      return;
-    }
-    if (ctx && ctx.sub === 'history') {
-      renderHistory(root, ctx);
       return;
     }
     renderChat(root, ctx);
@@ -310,13 +300,7 @@
       el('div', { className: 's-assistant__head-mid' }, [
         el('h1', { className: 's-assistant__title', text: '小助手', tabindex: '-1' }),
         el('p', { className: 's-assistant__subtitle' }, [capsule, subText])
-      ]),
-      el('button', {
-        className: 's-assistant__icon-btn',
-        type: 'button',
-        'aria-label': '撤销历史',
-        onclick: function () { if (ctx && ctx.go) { ctx.go('#/assistant/history'); } }
-      }, [icon('undo', 22)])
+      ])
     ]);
 
     var log = el('div', {
@@ -328,8 +312,6 @@
     });
 
     var banner = el('div', { className: 's-assistant__banner', hidden: true });
-
-    var undoBar = el('div', { className: 's-assistant__undo-bar', hidden: true, role: 'status', 'aria-label': '刚才的写入可撤销' });
 
     var chipRow = el('div', { className: 's-assistant__chips', 'aria-label': '快捷示例' });
 
@@ -378,7 +360,6 @@
     ]);
 
     var foot = el('div', { className: 's-assistant__foot' }, [
-      undoBar,
       banner,
       chipRow,
       composer,
@@ -397,7 +378,6 @@
       input: input,
       send: send,
       banner: banner,
-      undoBar: undoBar,
       capsule: capsule,
       subText: subText,
       voice: voice
@@ -554,25 +534,6 @@
     } else if (kind === 'hint') {
       body.appendChild(replyOptions(reply));
       if (reply.examples && reply.examples.length) { body.appendChild(exampleList(reply.examples)); }
-    } else if (kind === 'confirm-undo') {
-      /* 撤销确认：把「要撤销的那一条」摘要摆出来，按钮直接执行逆操作 */
-      if (reply.entry) { body.appendChild(undoCard(reply.entry)); }
-      if (reply.entry) {
-        body.appendChild(el('div', { className: 's-assistant__actions' }, [
-          el('button', {
-            className: 's-assistant__primary',
-            type: 'button',
-            'aria-label': '撤销这一笔',
-            onclick: function () { undoEntry(reply.entry); }
-          }, ['撤销这笔']),
-          el('button', {
-            className: 's-assistant__ghost',
-            type: 'button',
-            'aria-label': '不撤销了',
-            onclick: function () { submit('算了'); }
-          }, ['算了'])
-        ]));
-      }
     }
 
     if (reply.warnings && reply.warnings.length) {
@@ -1023,14 +984,6 @@
     return wrap;
   }
 
-  function undoCard(entry) {
-    return el('div', { className: 's-assistant__undo-card' }, [
-      el('p', { className: 's-assistant__undo-label', text: entry.label || '操作' }),
-      el('p', { className: 's-assistant__undo-text', text: entry.summary || ('影响 ' + (entry.count || 0) + ' 笔') }),
-      el('p', { className: 's-assistant__undo-time', text: stampText(entry.at) })
-    ]);
-  }
-
   function linkButton(hash) {
     return el('div', { className: 's-assistant__actions' }, [
       el('button', {
@@ -1332,11 +1285,7 @@
       pushTurn({ who: 'bot', text: doneText, tone: 'ok', mode: 'local' });
       paint();
       scrollToEnd(true);
-      /* 成功后的撤销条不依赖 toast 的 5s：屏内自绘，8s 常驻（C3=A）。
-       * 只有真动过账目才出条：already（幂等重放）指向的是上一笔无关记录，不能给撤销。 */
-      var touched = created + updated + deleted;
-      if (touched) { showUndoBar(touched); }
-      refreshBanner();
+      /* 2.28.8：撤销历史机制移除，写入成功不再出屏内撤销条。 */
       queueNext();
     }, function () {
       endBusy();
@@ -1344,95 +1293,6 @@
       paint();
       scrollToEnd(true);
       queueNext();
-    });
-  }
-
-  /* ============================== 撤销条（8s 常驻） ============================== */
-
-  function latestEntry() {
-    var history = historyApi();
-    return history && history.list ? (history.list()[0] || null) : null;
-  }
-
-  function showUndoBar(count) {
-    if (!host || !host.undoBar) { return; }
-    var entry = latestEntry();
-    if (!entry) { return; }
-    session.undoEntry = entry;
-    session.undoUntil = Date.now() + UNDO_MS;
-    var bar = host.undoBar;
-    clear(bar);
-    bar.hidden = false;
-    bar.appendChild(el('span', {
-      className: 's-assistant__banner-text',
-      text: '已记 ' + (count || 1) + ' 笔（助手记账）'
-    }));
-    bar.appendChild(el('button', {
-      className: 's-assistant__undo-bar-btn',
-      type: 'button',
-      'aria-label': '撤销刚才写入的 ' + (count || 1) + ' 笔',
-      onclick: function () { confirmUndo(session.undoEntry); }
-    }, ['撤销']));
-    if (session.undoTimer) { clearTimeout(session.undoTimer); }
-    session.undoTimer = setTimeout(function () {
-      session.undoTimer = null;
-      hideUndoBar();
-      if (host) { refreshBanner(); }
-    }, UNDO_MS);
-  }
-
-  function hideUndoBar() {
-    if (session.undoTimer) { clearTimeout(session.undoTimer); session.undoTimer = null; }
-    session.undoEntry = null;
-    session.undoUntil = 0;
-    if (host && host.undoBar) {
-      host.undoBar.hidden = true;
-      clear(host.undoBar);
-    }
-  }
-
-  function undoBarActive() {
-    return !!(session.undoUntil && session.undoUntil > Date.now());
-  }
-
-  function undoEntry(entry) {
-    var as = assistant();
-    var cx = cxNow();
-    if (!as || !cx || !entry) { return; }
-    as.undoEntry(entry, cx).then(function (res) {
-      var msg = res && res.ok ? '已撤销：' + (entry.summary || entry.label || '') : ((res && res.message) || '撤销失败');
-      XZB.ui.toast.show(msg, { type: res && res.ok ? 'success' : 'danger' });
-      hideUndoBar();
-      if (host) { paint(); refreshBanner(); }
-    }, function () {
-      XZB.ui.toast.show('撤销失败', { type: 'danger' });
-    });
-  }
-
-  /* 统一的撤销确认：撤销条与撤销历史屏共用同一套语义 */
-  function confirmUndo(entry, after) {
-    if (!entry) { return; }
-    XZB.ui.sheet.confirm({
-      title: '撤销这次操作？',
-      message: (entry.summary || entry.label || '') + '\n撤销会按记录逐条改回；改不回去的条目会被跳过并告诉你。',
-      confirmLabel: '撤销',
-      kind: 'danger',
-      onConfirm: function (close) {
-        close();
-        var as = assistant();
-        var cx = cxNow();
-        if (!as || !cx) { return; }
-        as.undoEntry(entry, cx).then(function (res) {
-          if (res && res.ok) {
-            XZB.ui.toast.show('已撤销：' + (entry.summary || ''), { type: 'success' });
-          } else {
-            XZB.ui.toast.show((res && res.message) || '撤销失败', { type: 'danger' });
-          }
-          if (typeof after === 'function') { after(); }
-        }, function () {
-          XZB.ui.toast.show('撤销失败', { type: 'danger' });
-        });
-      }
     });
   }
 
@@ -1454,8 +1314,6 @@
     }
 
     var as = assistant();
-    var history = historyApi();
-    var last = history && history.list ? (history.list()[0] || null) : null;
     var draft = as && as.draft && as.draft.load ? as.draft.load() : null;
     var onScreen = false;
     if (draft && draft.plan) {
@@ -1500,21 +1358,6 @@
         }, ['继续'])
       ]);
       return;
-    }
-
-    /* 撤销条在的这 8 秒里，横幅让位，避免两处撤销入口同时出现 */
-    if (last && !session.busy && session.turns.length > 1 && !undoBarActive()) {
-      banner.hidden = false;
-      append(banner, [
-        icon('undo', 18),
-        el('span', { className: 's-assistant__banner-text', text: '刚才：' + (last.summary || last.label || '') }),
-        el('button', {
-          className: 's-assistant__banner-btn',
-          type: 'button',
-          'aria-label': '撤销刚才的操作',
-          onclick: function () { undoEntry(last); }
-        }, ['撤销'])
-      ]);
     }
   }
 
@@ -1583,127 +1426,7 @@
     };
   }
 
-  /* ============================== 撤销历史屏 ============================== */
-
-  var historyFilter = { range: 'all', source: 'all', amount: 'all' };
-
-  function renderHistory(root, ctx) {
-    if (!historyApi()) {
-      root.appendChild(el('div', { className: 's-assistant s-assistant--broken' }, [
-        el('p', { className: 's-assistant__broken-text', text: '历史模块没有加载成功。' })
-      ]));
-      return;
-    }
-    var head = el('header', { className: 's-assistant__head' }, [
-      el('button', {
-        className: 's-assistant__icon-btn',
-        type: 'button',
-        'aria-label': '返回助手',
-        onclick: function () { if (ctx && ctx.go) { ctx.go('#/assistant'); } }
-      }, [icon('back', 24)]),
-      el('div', { className: 's-assistant__head-mid' }, [
-        el('h1', { className: 's-assistant__title', text: '撤销历史', tabindex: '-1' }),
-        el('p', { className: 's-assistant__subtitle', text: '最近 30 条写入 · 可逐条撤销' })
-      ]),
-      el('button', {
-        className: 's-assistant__icon-btn',
-        type: 'button',
-        'aria-label': '清空历史',
-        onclick: function () { clearHistory(ctx); }
-      }, [icon('trash', 20)])
-    ]);
-
-    var filters = el('div', { className: 's-assistant__filters' });
-    var listHost = el('div', { className: 's-assistant__history' });
-
-    var body = el('div', { className: 's-assistant__history-wrap' }, [filters, listHost]);
-    root.appendChild(el('section', { className: 's-assistant s-assistant--history', 'data-assistant-history': '1' }, [head, body]));
-
-    paintFilters();
-    paintList();
-
-    function paintFilters() {
-      clear(filters);
-      [
-        { key: 'range', label: '时间', values: [['today', '今天'], ['week', '近 7 天'], ['all', '全部']] },
-        { key: 'source', label: '来源', values: [['all', '全部'], ['assistant', '助手'], ['manual', '手动']] },
-        { key: 'amount', label: '金额', values: [['all', '不限'], ['small', '≤50'], ['mid', '50~500'], ['large', '≥500']] }
-      ].forEach(function (group) {
-        var row = el('div', { className: 's-assistant__filter-row', role: 'group', 'aria-label': group.label });
-        group.values.forEach(function (pair) {
-          var active = historyFilter[group.key] === pair[0];
-          row.appendChild(el('button', {
-            className: 's-assistant__filter' + (active ? ' is-active' : ''),
-            type: 'button',
-            'aria-label': group.label + '：' + pair[1],
-            'aria-pressed': active ? 'true' : 'false',
-            onclick: function () {
-              historyFilter[group.key] = pair[0];
-              paintFilters();
-              paintList();
-            }
-          }, [pair[1]]));
-        });
-        filters.appendChild(row);
-      });
-    }
-
-    function currentEntries() {
-      var history = historyApi();
-      var entries = history.list ? history.list() : [];
-      if (history.filter) { entries = history.filter(entries, historyFilter); }
-      return entries;
-    }
-
-    function paintList() {
-      clear(listHost);
-      var entries = currentEntries();
-      if (!entries.length) {
-        listHost.appendChild(el('div', { className: 's-assistant__empty' }, [
-          icon('clock', 28),
-          el('p', { className: 's-assistant__empty-title', text: '还没有可撤销的记录' }),
-          el('p', { className: 's-assistant__empty-text', text: '用助手或手动记一笔后，这里会出现可撤销的操作。' })
-        ]));
-        return;
-      }
-      entries.forEach(function (entry) {
-        var card = el('div', { className: 's-assistant__hcard' }, [
-          el('div', { className: 's-assistant__hcard-top' }, [
-            el('span', { className: 's-assistant__hcard-label', text: entry.label || '操作' }),
-            el('span', { className: 's-assistant__hcard-time', text: stampText(entry.at) })
-          ]),
-          el('p', { className: 's-assistant__hcard-summary', text: entry.summary || ('影响 ' + (entry.count || 0) + ' 笔') }),
-          el('div', { className: 's-assistant__hcard-actions' }, [
-            el('button', {
-              className: 's-assistant__hcard-btn',
-              type: 'button',
-              'aria-label': '撤销：' + (entry.summary || entry.label || '这条记录'),
-              onclick: function () { confirmUndo(entry, paintList); }
-            }, ['撤销'])
-          ])
-        ]);
-        listHost.appendChild(card);
-      });
-    }
-  }
-
-  function clearHistory(ctx) {
-    var history = historyApi();
-    if (!history) { return; }
-    if (!history.list().length) { toast(ctx, '还没有记录', 'info'); return; }
-    XZB.ui.sheet.confirm({
-      title: '清空撤销历史？',
-      message: '只清空「可撤销的记录」，已经记好的账不受影响。',
-      confirmLabel: '清空',
-      kind: 'danger',
-      onConfirm: function (close) {
-        close();
-        history.clear();
-        toast(ctx, '已清空', 'success');
-        if (ctx && ctx.refresh) { ctx.refresh(); }
-      }
-    });
-  }
+  /* 2.28.8：撤销历史屏与清空入口随机制整体移除。 */
 
   function toast(ctx, msg, type) {
     if (XZB.ui && XZB.ui.toast) { XZB.ui.toast.show(msg, { type: type || 'info' }); }
@@ -1735,7 +1458,6 @@
 
   function destroy() {
     clearTimers();
-    hideUndoBar();
     host = null;
   }
 

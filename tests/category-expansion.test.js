@@ -975,6 +975,49 @@ test('17.4 四页签聚合：总览回首页签、安全并入数据、显示与
   check(settingsSrc17.indexOf('root.appendChild(sectionOverview') === -1, '总览卡不应再直接挂在主屏根部');
 });
 
+/* ============================== 用例 18：撤销历史移除 ============================== */
+
+/* 2.28.8「不要撤回机制」：持久化的撤销历史整体移除——保存好的账不可再被翻旧账撤回。
+ * 锁死：机制模块、commit 记录钩子、全部 UI 入口均不得复活；
+ * 另一套「删除后 5 秒内撤销」（内存快照栈，会话级，撤不了老账）不受影响。 */
+
+const settingsSrc18 = fs.readFileSync(path.join(ROOT, 'js/screens/settings.js'), 'utf8');
+const assistantSrc18 = fs.readFileSync(path.join(ROOT, 'js/screens/assistant.js'), 'utf8');
+const coreAssistantSrc18 = fs.readFileSync(path.join(ROOT, 'js/modules/core-assistant.js'), 'utf8');
+const ledgerSrc18 = fs.readFileSync(path.join(ROOT, 'js/screens/ledger.js'), 'utf8');
+const indexHtml18 = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+
+section('用例 18：撤销历史已移除——翻旧账撤回不复存在，5 秒删除撤销保留');
+
+test('18.1 持久化 history 模块不再存在', function () {
+  check(indexHtml18.indexOf('js/core/history.js') === -1, 'index.html 不应再内联 core/history.js 模块');
+  check(indexHtml18.indexOf('core.history = api') === -1, 'index.html 不应再挂载 XZB.core.history');
+  check(indexHtml18.indexOf('function recordHistory') === -1, 'commit 不应再记录撤销历史');
+  check(indexHtml18.indexOf("rawPrefs.indexOf('assistant.history.v1')") !== -1, '应保留旧撤销记录的一次性清理');
+});
+
+test('18.2 屏幕层撤销入口全部退场', function () {
+  check(settingsSrc18.indexOf('撤销历史') === -1, '设置页不应再有撤销历史入口');
+  check(assistantSrc18.indexOf('renderHistory') === -1, 'assistant.js 不应再有撤销历史屏');
+  check(assistantSrc18.indexOf('#/assistant/history') === -1, '不应再有撤销历史路由');
+  check(assistantSrc18.indexOf('showUndoBar') === -1 && assistantSrc18.indexOf('undoBar') === -1,
+    '屏内 8 秒撤销条应随机制移除');
+});
+
+test('18.3 对话层不再读历史、不再执行逆操作', function () {
+  check(coreAssistantSrc18.indexOf('core.history') === -1, 'core-assistant 不应再读写 core.history');
+  check(coreAssistantSrc18.indexOf('function undoEntry') === -1 && coreAssistantSrc18.indexOf('function revertEntry') === -1,
+    'undo 执行链应移除');
+  check(coreAssistantSrc18.indexOf('撤销功能已经下线') !== -1, '对助手说「撤销」应得到固定引导回复');
+  check(coreAssistantSrc18.indexOf('删除后可以从撤销历史恢复') === -1, '删除确认不应再承诺可从撤销历史恢复');
+});
+
+test('18.4 5 秒删除撤销（内存栈）保留不受影响', function () {
+  check(indexHtml18.indexOf('UNDO_LIMIT = 30') !== -1, 'A 机制 undoStack 限长应保留');
+  check(ledgerSrc18.indexOf("label: '撤销'") !== -1, '流水页删除后的 5 秒撤销 toast 应保留');
+  check(ledgerSrc18.indexOf('app.undo()') !== -1, '流水页撤销应走内存快照栈 app.undo()');
+});
+
 /* ============================== 汇总 ============================== */
 
 console.log('\n=========================================');

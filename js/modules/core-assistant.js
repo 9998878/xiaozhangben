@@ -304,8 +304,9 @@
   /* ============================== 意图 ============================== */
 
   var INTENT_RULES = [
+    /* 2.28.8：撤销历史机制移除；「撤销」口令保留一条规则，只回固定引导，不再读历史。
+       「把刚才那笔删掉」这类删账口令由 delete 规则承接。 */
     { intent: 'undo', re: /^(撤销|撤回|回退|反悔|undo)/i },
-    { intent: 'undo', re: /(把|将)?(刚才|刚刚|上一笔|上次|最后)(那|这)?笔?(的)?(账)?(撤销|撤回|删掉|恢复)/ },
     { intent: 'update', re: /(改成|改为|改到|修改|调成|换成|更正|改一下)/ },
     { intent: 'delete', re: /(删除|删掉|去掉|移除)(这|那|刚才|上一)?笔?|把.{1,6}删了|将.{1,6}删了/ },
     /* P0-2 本地洞察：必须排在 query 之前——「月底会超多少」同时命中两个意图，
@@ -1555,8 +1556,7 @@
         text: M.E_AS_UNKNOWN,
         options: [
           { label: '记一笔：午饭 35', value: 'create 午饭 35' },
-          { label: '查一查：这个月餐饮花了多少', value: 'query 这个月餐饮花了多少' },
-          { label: '撤销上一笔', value: 'undo' }
+          { label: '查一查：这个月餐饮花了多少', value: 'query 这个月餐饮花了多少' }
         ]
       }
     };
@@ -1962,7 +1962,7 @@
     }];
     var text;
     if (plan.kind === 'delete') {
-      text = '确认删除这笔？删除后可以从撤销历史恢复';
+      text = '确认删除这笔？';
     } else if (plan.edit.replaceType) {
       text = '这笔要改成「' + TYPE_TEXT[plan.edit.replaceType] + '」：会软删旧账并新建一笔，确认后一起写入';
     } else {
@@ -1988,33 +1988,16 @@
     };
   }
 
+  /* 2.28.8：撤销历史机制移除；「撤销」口令只回固定引导（记错的那笔直接改/删），不再读历史。 */
   function handleUndo(input, state, cx) {
-    var history = core.history;
-    var entry = null;
-    if (history && typeof history.list === 'function') {
-      var entries = history.list();
-      entry = entries.length ? entries[0] : null;
-    }
-    if (!entry) {
-      return { state: state, reply: { kind: 'hint', text: '没有可撤销的记录' } };
-    }
     return {
       state: state,
       reply: {
-        kind: 'confirm-undo',
-        text: '撤销「' + entry.label + '」（' + entry.summary + '）？撤销后不能重复',
-        entry: entry
+        kind: 'hint',
+        text: '撤销功能已经下线：保存好的账不会再被翻旧账撤回。记错了那笔，直接在流水里改或删就行。',
+        options: []
       }
     };
-  }
-
-  /* 撤销执行：由屏幕调用，经 XZB.app.commit 的 mutator 落地 */
-  function revertEntry(entry, working) {
-    var history = core.history;
-    if (!history || typeof history.revert !== 'function') {
-      return { ok: false, code: E.UNKNOWN, message: M.E_AS_UNKNOWN };
-    }
-    return history.revert(working, entry);
   }
 
   /* ============================== 落库（唯一写入口） ============================== */
@@ -2075,104 +2058,7 @@
     });
   }
 
-  /* 撤销历史里的一条：定向逆操作，走同一写入口；撤销本身不进历史（history:false） */
-  function undoEntry(entry, cx, options) {
-    var opts = options || {};
-    var commit = opts.commit || commitApi();
-    if (!commit) {
-      return Promise.resolve({ ok: false, code: E.UNKNOWN, message: '写入通道不可用' });
-    }
-    if (!entry) {
-      return Promise.resolve({ ok: false, code: E.UNKNOWN, message: '没有可撤销的记录' });
-    }
-    if (cx && cx.readonly) {
-      return Promise.resolve({ ok: false, code: E.READONLY_STORAGE, message: M.E_AS_READONLY_STORAGE });
-    }
-    return Promise.resolve(commit(function (working) {
-      var res = revertEntry(entry, working);
-      if (!res || !res.ok) {
-        return { abort: true, code: (res && res.code) || E.UNKNOWN, message: (res && res.message) || M.E_AS_INVALID };
-      }
-      return { value: res };
-    }, { label: '撤销', undo: false, history: false })).then(function (res) {
-      if (!res || !res.ok) {
-        return { ok: false, code: (res && res.code) || E.UNKNOWN, message: (res && res.message) || '撤销失败，请重试' };
-      }
-      var store = core.history;
-      if (store && typeof store.remove === 'function') { store.remove(entry.id); }
-      return { ok: true, result: res.value };
-    }, function (error) {
-      return { ok: false, code: E.UNKNOWN, message: (error && error.message) || '撤销失败，请重试' };
-    });
-  }
-
-  /* ============================== 统一撤销（T10） ============================== */
-  /* 口径（DESIGN §6/R-06/R-10）：只做整批撤销，不做单笔；读 core.history、写 app.commit，成功后 remove(id)。
-     skipped>0 时已撤下的笔照常落库，但整批返回 ok:false + E_HISTORY_PARTIAL + 三计数（history.js:334-336）。 */
-  var UNDONE = [];
-
-  function undoList() {
-    try { return core.history.list() || []; } catch (error) { return []; }
-  }
-
-  /* on=true 开写前落标记（并发第二次直接拦）；on=false 写失败后撤标记（允许重试） */
-  function undoMark(id, on) {
-    var i = UNDONE.indexOf(id);
-    if (i !== -1) { UNDONE.splice(i, 1); }
-    if (on) { UNDONE.push(id); }
-  }
-
-  /* 失败统一形状（计数归零）；成功/部分成功直接透传 history.revert 的原对象（字段本就同构） */
-  function undoFail(code, message) {
-    return Promise.resolve({ ok: false, code: code, message: message, restored: 0, removed: 0, skipped: 0 });
-  }
-
-  function undoAvailable() { return undoList().length > 0; }
-
-  /* history 条目 → UI 摘要：补 title（=label）与 text；ops 原样留给 revert（readAll 每次 clone，不污染存储） */
-  function undoLast() {
-    var entries = undoList();
-    if (!entries.length) { return null; }
-    entries[0].title = entries[0].label || '这一步';
-    entries[0].text = undoDescribe(entries[0]);
-    return entries[0];
-  }
-
-  function undoDescribe(entry) {
-    var item = entry || undoLast();
-    var count = (item && item.count) || 0;
-    if (!count) { return '没有可撤销的记录'; }
-    var create = ((item && item.ops) || {}).create || [];
-    return (create.length === count ? '已记录 ' + count + ' 笔' : (item.summary || '共 ' + count + ' 笔')) + '，可撤销';
-  }
-
-  /* revert(entry, cx) → Promise<{ok, code?, message?, restored, removed, skipped}>；entry 可为 id 字符串 */
-  function undoRevert(entry, cx) {
-    var store = core.history;
-    var commit = commitApi();
-    var item = entry;
-    var id;
-    if (!store || typeof store.revert !== 'function' || !commit) { return undoFail(E.UNKNOWN, M.E_AS_UNKNOWN); }
-    if (typeof item === 'string') { item = store.find(item); }
-    if (!item || !item.id) { return undoFail('E_HISTORY_MISSING', store.MESSAGES.E_HISTORY_MISSING); }
-    if (cx && cx.readonly) { return undoFail(E.READONLY_STORAGE, M.E_AS_READONLY_STORAGE); }
-    id = String(item.id);
-    /* 幂等拦截：内存标记（连点/并发）+ 读库复核（刷新后回放旧 entry）→ 不写库、计数归零 */
-    if (UNDONE.indexOf(id) !== -1 || !store.find(id)) { return undoFail('E_HISTORY_MISSING', store.MESSAGES.E_HISTORY_MISSING); }
-    undoMark(id, true);
-    return commit(function (working) {
-      var res = store.revert(working, item);
-      if (!res.ok && res.code !== 'E_HISTORY_PARTIAL') { return { abort: true, code: res.code, message: res.message }; }
-      return { value: res };   /* partial 也落库：已撤下的那几笔必须真撤掉 */
-    }, { label: '撤销', undo: false, history: false }).then(function (res) {
-      if (!res || !res.ok) {
-        undoMark(id, false);
-        return undoFail((res && res.code) || E.UNKNOWN, (res && res.message) || M.E_AS_UNKNOWN);
-      }
-      store.remove(id);
-      return res.value || undoFail(E.UNKNOWN, M.E_AS_UNKNOWN);
-    });
-  }
+  /* 2.28.8：undoEntry 与统一撤销组（T10）随撤销历史机制整体移除。 */
 
 /* ============================== 联网模型（llm） ============================== */
   /*
@@ -3654,19 +3540,11 @@
       save: draftSave,
       clear: draftClear
     },
-    revertEntry: revertEntry,
     briefTx: briefTx,
     previewEdit: previewEdit,
     planLabel: planLabel,
     execute: execute,
-    undoEntry: undoEntry,
-    /* 整批撤销的单一入口（T10） */
-    undo: {
-      available: undoAvailable,
-      last: undoLast,
-      revert: undoRevert,
-      describe: undoDescribe
-    },
+    /* 2.28.8：revertEntry/undoEntry/undo 组随撤销历史机制移除。 */
     /* 联网段：配置读写 + 两条出站入口（传输层只在本文件，NET_ALLOW 只放这一个文件） */
     llm: {
       getConfig: llmGetConfig,

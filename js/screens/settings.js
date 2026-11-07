@@ -1135,16 +1135,7 @@
 
   /* ---------------- 小助手（2.17.0） ---------------- */
 
-  function historyApi() { return coreMod('history'); }
-
-  function historyCount() {
-    var api = historyApi();
-    if (!api || typeof api.list !== 'function') { return 0; }
-    try {
-      var entries = api.list();
-      return entries && entries.length ? entries.length : 0;
-    } catch (error) { return 0; }
-  }
+  /* 2.28.8：翻旧账撤回机制整体移除（保存好的账不再可被撤回），historyApi/historyCount 一并删除。 */
 
   /* 配置读写一律经 XZB.core.assistant.llm；本屏 DEPS 只含 icon-picker，先惰性 ensure。 */
   function llmApi() {
@@ -1189,7 +1180,6 @@
   }
 
   function sectionAssistant(ctx) {
-    var count = historyCount();
     var rows = [
       row({
         icon: 'sparkles',
@@ -1202,16 +1192,10 @@
         title: '在线模型',
         value: llmRowValue(),
         onClick: function () { go(ctx, '#/settings/ai'); }
-      }),
-      row({
-        icon: 'undo',
-        title: '撤销历史',
-        value: count ? count + ' 条' : '暂无',
-        onClick: function () { go(ctx, '#/assistant/history'); }
       })
     ];
-    /* A30 / D-05：清空撤销历史只在 #/assistant/history 子页留一个入口。
-       2.28.7：长说明砍成一行，但隐私告知句必须贴着「在线模型」开关（用例 12.2 锁口径）。 */
+    /* 2.28.8：翻旧账撤回的入口行随机制移除。
+       隐私告知句必须贴着「在线模型」开关（用例 12.2 锁口径）。 */
     return group('', rows, '开启在线模型后，你说的话会与账户名称、分类名称一起发送。');
   }
 

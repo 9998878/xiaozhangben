@@ -12390,7 +12390,7 @@ textarea::selection {
 </style>
   <style>
 /* 小账本 2.0 · css/screens/assistant.css
- * 小助手屏（#/assistant）与撤销历史（#/assistant/history）。
+ * 小助手屏（#/assistant）。2.28.8 起撤销历史机制已移除。
  * 类名一律 s-as-*；颜色/间距/圆角/字号全部取 tokens.css，不出现色值字面量。
  * 布局：整屏 flex 纵向（头部 / 消息流 / 输入区），消息流自己滚，
  *       键盘弹出时靠 --vvh 与 safe-area 保证输入框不被遮住。
@@ -12765,8 +12765,7 @@ textarea::selection {
 /* 几个小按钮共用的按下底色 */
 .s-assistant__opt:active,
 .s-assistant__chip:active,
-.s-assistant__target:active,
-.s-assistant__hcard-btn:active {
+.s-assistant__target:active {
   background: var(--c-fill-press);
 }
 
@@ -12775,10 +12774,7 @@ textarea::selection {
 .s-assistant__opt:focus-visible,
 .s-assistant__chip:focus-visible,
 .s-assistant__target:focus-visible,
-.s-assistant__filter:focus-visible,
-.s-assistant__hcard-btn:focus-visible,
 .s-assistant__banner-btn:focus-visible,
-.s-assistant__undo-bar-btn:focus-visible,
 .s-assistant__icon-btn:focus-visible,
 .s-assistant__send:focus-visible,
 .s-assistant__mic:focus-visible {
@@ -12952,34 +12948,6 @@ textarea::selection {
   text-overflow: ellipsis;
 }
 
-/* ---------------- 撤销卡片 ---------------- */
-
-.s-assistant__undo-card {
-  margin-top: var(--sp-2);
-  padding: var(--sp-2);
-  border-radius: var(--r-md);
-  background: var(--c-fill);
-}
-
-.s-assistant__undo-label {
-  margin: 0;
-  color: var(--c-text);
-  font-size: var(--fs-footnote);
-  font-weight: var(--fw-semibold);
-}
-
-.s-assistant__undo-text {
-  margin: 2px 0 0;
-  color: var(--c-text-2);
-  font-size: var(--fs-footnote);
-}
-
-.s-assistant__undo-time {
-  margin: 4px 0 0;
-  color: var(--c-text-3);
-  font-size: var(--fs-caption-2);
-}
-
 /* ---------------- 输入区 ---------------- */
 
 .s-assistant__foot {
@@ -12990,8 +12958,7 @@ textarea::selection {
   background: var(--c-bg);
 }
 
-.s-assistant__banner,
-.s-assistant__undo-bar {
+.s-assistant__banner {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -13004,14 +12971,8 @@ textarea::selection {
   line-height: var(--lh-footnote);
 }
 
-.s-assistant__banner[hidden],
-.s-assistant__undo-bar[hidden] {
+.s-assistant__banner[hidden] {
   display: none;
-}
-
-/* 撤销条（C3=A）：写入成功后常驻 8s，放在输入框上方，不遮输入区 */
-.s-assistant__undo-bar {
-  background: var(--c-success-soft);
 }
 
 .s-assistant__banner svg {
@@ -13028,8 +12989,7 @@ textarea::selection {
   min-width: 0;
 }
 
-.s-assistant__banner-btn,
-.s-assistant__undo-bar-btn {
+.s-assistant__banner-btn {
   flex: none;
   min-height: var(--h-tap-min);
   padding: 0 10px;
@@ -13170,158 +13130,12 @@ textarea::selection {
   text-align: center;
 }
 
-/* ---------------- 撤销历史 ---------------- */
-
-.s-assistant--history {
-  background: var(--c-bg);
-}
-
-.s-assistant__history-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-.s-assistant__filters {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: var(--sp-3) var(--page-x) var(--sp-2);
-  border-bottom: var(--hairline) solid var(--c-hairline);
-}
-
-.s-assistant__filter-row {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.s-assistant__filter-row::-webkit-scrollbar {
-  display: none;
-}
-
-.s-assistant__filter {
-  flex: none;
-  min-height: var(--h-tap-min);
-  padding: 0 10px;
-  border: var(--hairline) solid var(--c-stroke);
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: var(--c-text-2);
-  font-family: inherit;
-  font-size: var(--fs-caption-1);
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.s-assistant__filter.is-active {
-  border-color: var(--c-tint);
-  background: var(--c-tint-soft);
-  color: var(--c-tint-soft-text);
-  font-weight: var(--fw-semibold);
-}
-
-.s-assistant__history {
-  padding: var(--sp-3) var(--page-x) var(--sp-8);
-}
-
-.s-assistant__hcard {
-  margin-bottom: var(--sp-2);
-  padding: var(--sp-3);
-  border: var(--hairline) solid var(--c-hairline);
-  border-radius: var(--r-card);
-  background: var(--c-bg-elev);
-}
-
-.s-assistant__hcard-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-2);
-}
-
-.s-assistant__hcard-label {
-  color: var(--c-text);
-  font-size: var(--fs-row);
-  font-weight: var(--fw-row);
-}
-
-.s-assistant__hcard-time {
-  flex: none;
-  color: var(--c-text-3);
-  font-size: var(--fs-caption-1);
-  font-variant-numeric: tabular-nums;
-}
-
-.s-assistant__hcard-summary {
-  margin: 4px 0 0;
-  color: var(--c-text-2);
-  font-size: var(--fs-footnote);
-  line-height: var(--lh-footnote);
-}
-
-.s-assistant__hcard-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: var(--sp-2);
-}
-
-.s-assistant__hcard-btn {
-  min-height: var(--h-tap-min);
-  padding: 0 12px;
-  border: var(--hairline) solid var(--c-stroke);
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: var(--c-tint);
-  font-family: inherit;
-  font-size: var(--fs-footnote);
-  font-weight: var(--fw-semibold);
-  cursor: pointer;
-}
-
-.s-assistant__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-10) var(--sp-4);
-  color: var(--c-text-4);
-  text-align: center;
-}
-
-.s-assistant__empty svg {
-  display: block;
-  width: 28px;
-  max-width: none;
-  height: 28px;
-}
-
-.s-assistant__empty-title {
-  margin: 0;
-  color: var(--c-text-2);
-  font-size: var(--fs-callout);
-  font-weight: var(--fw-semibold);
-}
-
-.s-assistant__empty-text {
-  margin: 0;
-  color: var(--c-text-3);
-  font-size: var(--fs-footnote);
-  line-height: var(--lh-footnote);
-}
-
 /* ---------------- 适配 ---------------- */
 
 @media (min-width: 700px) {
   .s-assistant__head,
   .s-assistant__log,
-  .s-assistant__foot,
-  .s-assistant__filters,
-  .s-assistant__history {
+  .s-assistant__foot {
     padding-right: var(--page-x-landscape);
     padding-left: var(--page-x-landscape);
   }
@@ -13332,8 +13146,7 @@ textarea::selection {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .s-assistant__log,
-  .s-assistant__history-wrap {
+  .s-assistant__log {
     scroll-behavior: auto;
   }
 }
@@ -23398,463 +23211,6 @@ textarea::selection {
 
 </script>
   <script>
-/* ============================================================================
-   小账本 2.0 · js/core/history.js · owner: 助手（T-AS）
-   文件：src/js/core/history.js
-   挂载：window.XZB.core.history（Node 下可 require）
-   依赖：XZB.core.dates（nowIso）、XZB.app.prefs（懒取，仅存偏好命名空间键）
-
-   职责：为「撤销历史」提供 **紧凑差异** 记录与定向逆操作。
-   为什么不用整库快照：
-     app.js 的内存撤销栈每条都存 before/after 两份整库快照（5000 条时约 1.2MB/份），
-     放进 localStorage（≈5MB）必炸。这里只记「变了什么」：
-       create → 只存 id + 展示用摘要（撤销=软删该条）
-       update → 只存 id + 变更字段的旧值（撤销=逐字段回填）
-       delete → 存整条旧值（撤销=恢复 deleted=false 并回填字段）
-   副作用边界：本文件不碰 IndexedDB、不碰 DOM；写库一律由调用方经 XZB.app.commit。
-   ============================================================================ */
-(function (global) {
-  'use strict';
-
-  var XZB = global.XZB || (global.XZB = {});
-  var core = XZB.core || (XZB.core = XZB.Core = XZB.Core || XZB.core || {});
-
-  var KEY = 'assistant.history.v1';
-  var MAX_ENTRIES = 30;
-  var NOTE_CAP = 60;
-
-  var MESSAGES = {
-    E_HISTORY_UNAVAILABLE: '撤销历史暂不可用',
-    E_HISTORY_MISSING: '这条记录已经撤销过了',
-    E_HISTORY_STALE: '账目已变化，无法自动撤销',
-    E_HISTORY_APPLY: '撤销失败，请重试',
-    E_HISTORY_PARTIAL: '部分账目已被删除，撤销没有全部生效'
-  };
-
-  var RANGE_LABEL = { today: '今天', week: '近 7 天', all: '全部' };
-  var SOURCE_LABEL = { all: '全部来源', assistant: '助手', manual: '手动' };
-  var AMOUNT_LABEL = { all: '不限', small: '50 元以下', mid: '50–500 元', large: '500 元以上' };
-
-  function nowIso() {
-    var dates = core.dates;
-    if (dates && typeof dates.nowIso === 'function') { return dates.nowIso(); }
-    return new Date().toISOString();
-  }
-
-  function clone(value) {
-    if (value === null || typeof value !== 'object') { return value; }
-    return JSON.parse(JSON.stringify(value));
-  }
-
-  function trimNote(note) {
-    var text = String(note || '');
-    if (text.length <= NOTE_CAP) { return text; }
-    return text.slice(0, NOTE_CAP) + '…';
-  }
-
-  function bytesOf(text) {
-    return String(text || '').length;
-  }
-
-  /* ------------------------------ 存储 ------------------------------ */
-
-  function prefsApi() {
-    var app = XZB.app;
-    return app && app.prefs ? app.prefs : null;
-  }
-
-  function readAll() {
-    var prefs = prefsApi();
-    if (!prefs || typeof prefs.get !== 'function') { return []; }
-    var raw;
-    try { raw = prefs.get(KEY, null); } catch (error) { return []; }
-    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.entries)) { return []; }
-    var out = [];
-    for (var i = 0; i < raw.entries.length; i += 1) {
-      var item = raw.entries[i];
-      if (item && typeof item === 'object' && item.id) { out.push(item); }
-    }
-    return out;
-  }
-
-  function writeAll(entries) {
-    var prefs = prefsApi();
-    if (!prefs || typeof prefs.set !== 'function') { return { ok: false, code: 'E_HISTORY_UNAVAILABLE', message: MESSAGES.E_HISTORY_UNAVAILABLE }; }
-    try {
-      prefs.set(KEY, { version: 1, entries: entries.slice(0, MAX_ENTRIES) });
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, code: 'E_HISTORY_UNAVAILABLE', message: MESSAGES.E_HISTORY_UNAVAILABLE };
-    }
-  }
-
-  /* ------------------------------ 差异 ------------------------------ */
-
-  function indexById(list) {
-    var map = {};
-    for (var i = 0; i < list.length; i += 1) {
-      var item = list[i];
-      if (item && item.id) { map[item.id] = item; }
-    }
-    return map;
-  }
-
-  function sameValue(a, b) {
-    if (a === b) { return true; }
-    if (Array.isArray(a) && Array.isArray(b)) {
-      if (a.length !== b.length) { return false; }
-      for (var i = 0; i < a.length; i += 1) { if (a[i] !== b[i]) { return false; } }
-      return true;
-    }
-    return false;
-  }
-
-  function changedFields(before, after) {
-    var keys = {};
-    var k;
-    for (k in after) {
-      if (Object.prototype.hasOwnProperty.call(after, k) && !sameValue(before[k], after[k])) { keys[k] = after[k]; }
-    }
-    for (k in before) {
-      if (Object.prototype.hasOwnProperty.call(before, k) && !sameValue(before[k], after[k]) && !(k in keys)) { keys[k] = after[k]; }
-    }
-    return keys;
-  }
-
-  function brief(tx) {
-    return {
-      type: tx.type,
-      amountCents: Number(tx.amountCents) || 0,
-      date: tx.date,
-      categoryId: tx.categoryId || '',
-      accountId: tx.accountId || '',
-      note: trimNote(tx.note)
-    };
-  }
-
-  /* diff(beforeDb, afterDb) → ops（只覆盖 transactions 表，其余表不进历史） */
-  function diff(before, after) {
-    var beforeList = (before && Array.isArray(before.transactions)) ? before.transactions : [];
-    var afterList = (after && Array.isArray(after.transactions)) ? after.transactions : [];
-    var beforeMap = indexById(beforeList);
-    var afterMap = indexById(afterList);
-    var ops = { create: [], update: [], delete: [] };
-    var id;
-
-    for (id in afterMap) {
-      if (!Object.prototype.hasOwnProperty.call(afterMap, id)) { continue; }
-      var next = afterMap[id];
-      var prev = beforeMap[id];
-      if (!prev) {
-        var created = brief(next);
-        created.id = id;
-        ops.create.push(created);
-        continue;
-      }
-      var changes = changedFields(prev, next);
-      var keys = Object.keys(changes);
-      if (!keys.length) { continue; }
-      var old = {};
-      for (var i = 0; i < keys.length; i += 1) { old[keys[i]] = prev[keys[i]]; }
-      var updated = brief(next);
-      updated.id = id;
-      updated.old = old;
-      ops.update.push(updated);
-    }
-
-    for (id in beforeMap) {
-      if (!Object.prototype.hasOwnProperty.call(beforeMap, id)) { continue; }
-      if (afterMap[id]) { continue; }
-      /* 硬删：整条留底才能恢复 */
-      ops.delete.push({ id: id, values: clone(beforeMap[id]) });
-    }
-
-    return ops;
-  }
-
-  function countOf(ops) {
-    if (!ops) { return 0; }
-    return (ops.create || []).length + (ops.update || []).length + (ops.delete || []).length;
-  }
-
-  function amountOf(ops) {
-    var total = 0;
-    var list = (ops && ops.create) || [];
-    for (var i = 0; i < list.length; i += 1) { total += Number(list[i].amountCents) || 0; }
-    return total;
-  }
-
-  function summarize(ops) {
-    var create = (ops && ops.create) || [];
-    var update = (ops && ops.update) || [];
-    var remove = (ops && ops.delete) || [];
-    var parts = [];
-    if (create.length) { parts.push('新增 ' + create.length + ' 笔'); }
-    if (update.length) { parts.push('修改 ' + update.length + ' 笔'); }
-    if (remove.length) { parts.push('删除 ' + remove.length + ' 笔'); }
-    return {
-      count: create.length + update.length + remove.length,
-      amountCents: amountOf(ops),
-      text: parts.length ? parts.join(' · ') : '无账目变化',
-      undoable: (create.length + update.length + remove.length) > 0
-    };
-  }
-
-  /* ------------------------------ 记录 ------------------------------ */
-
-  function record(input) {
-    var raw = input || {};
-    var ops = raw.ops || { create: [], update: [], delete: [] };
-    var summary = summarize(ops);
-    if (!summary.count) { return { ok: false, code: 'E_HISTORY_EMPTY', message: '没有需要记录的变化' }; }
-    var stamp = Date.now();
-    var entry = {
-      id: 'h_' + stamp.toString(36) + '_' + Math.random().toString(36).slice(2, 6),
-      at: stamp,
-      label: raw.label ? String(raw.label) : '记账',
-      source: raw.source === 'assistant' ? 'assistant' : 'manual',
-      summary: summary.text,
-      count: summary.count,
-      amountCents: summary.amountCents,
-      ops: ops
-    };
-    var list = readAll();
-    list.unshift(entry);
-    /* 单条膨胀保护：序列化后超 4000 字符的旧条目直接丢弃最早的那条，绝不静默截断当前条 */
-    var trimmed = [];
-    var budget = 24000;
-    for (var i = 0; i < list.length && trimmed.length < MAX_ENTRIES; i += 1) {
-      var size = bytesOf(JSON.stringify(list[i]));
-      if (i > 0 && budget - size < 0) { break; }
-      budget -= size;
-      trimmed.push(list[i]);
-    }
-    writeAll(trimmed);
-    return { ok: true, entry: entry };
-  }
-
-  function list() {
-    return readAll();
-  }
-
-  function remove(id) {
-    var key = String(id || '');
-    if (!key) { return { ok: false, code: 'E_HISTORY_MISSING', message: MESSAGES.E_HISTORY_MISSING }; }
-    var entries = readAll();
-    var next = [];
-    var found = false;
-    for (var i = 0; i < entries.length; i += 1) {
-      if (entries[i].id === key) { found = true; continue; }
-      next.push(entries[i]);
-    }
-    if (!found) { return { ok: false, code: 'E_HISTORY_MISSING', message: MESSAGES.E_HISTORY_MISSING }; }
-    writeAll(next);
-    return { ok: true };
-  }
-
-  function clear() {
-    writeAll([]);
-    return { ok: true };
-  }
-
-  function find(id) {
-    var entries = readAll();
-    for (var i = 0; i < entries.length; i += 1) {
-      if (entries[i].id === String(id || '')) { return entries[i]; }
-    }
-    return null;
-  }
-
-  /* ------------------------------ 逆操作 ------------------------------ */
-
-  function findTx(db, id) {
-    var list = (db && Array.isArray(db.transactions)) ? db.transactions : [];
-    for (var i = 0; i < list.length; i += 1) {
-      if (list[i] && list[i].id === id) { return list[i]; }
-    }
-    return null;
-  }
-
-  /* revert(working, entry)：在 app.commit 的整库克隆上同步执行定向逆操作。
-     返回 { ok, restored, removed, skipped }；不抛错（抛错会被 app.commit 兜成 E_COMMIT）。 */
-  function revert(working, entry) {
-    var stamp = nowIso();
-    var ops = (entry && entry.ops) || {};
-    var restored = 0;
-    var removed = 0;
-    var skipped = 0;
-    var i;
-
-    var created = ops.create || [];
-    for (i = 0; i < created.length; i += 1) {
-      var tx = findTx(working, created[i].id);
-      if (!tx) { skipped += 1; continue; }
-      if (tx.deleted !== true) {
-        tx.deleted = true;
-        tx.deletedAt = stamp;
-        tx.updatedAt = stamp;
-        removed += 1;
-      }
-    }
-
-    var updated = ops.update || [];
-    for (i = 0; i < updated.length; i += 1) {
-      var target = findTx(working, updated[i].id);
-      if (!target) { skipped += 1; continue; }
-      var old = updated[i].old || {};
-      var key;
-      var touched = false;
-      for (key in old) {
-        if (!Object.prototype.hasOwnProperty.call(old, key)) { continue; }
-        if (!sameValue(target[key], old[key])) { target[key] = old[key]; touched = true; }
-      }
-      if (touched) { target.updatedAt = stamp; restored += 1; }
-    }
-
-    var deleted = ops.delete || [];
-    for (i = 0; i < deleted.length; i += 1) {
-      var values = clone(deleted[i].values || {});
-      if (!values.id) { skipped += 1; continue; }
-      var existing = findTx(working, values.id);
-      if (existing) {
-        existing.deleted = false;
-        existing.deletedAt = null;
-        existing.updatedAt = stamp;
-        restored += 1;
-      } else {
-        values.deleted = false;
-        values.deletedAt = null;
-        values.updatedAt = stamp;
-        working.transactions.push(values);
-        restored += 1;
-      }
-    }
-
-    /* 有目标账目已被硬删除 ⇒ 撤销不可能全部生效，不得谎报成功（DECISIONS R-06） */
-    if (skipped > 0) {
-      return { ok: false, code: 'E_HISTORY_PARTIAL', message: MESSAGES.E_HISTORY_PARTIAL, restored: restored, removed: removed, skipped: skipped };
-    }
-    return { ok: true, restored: restored, removed: removed, skipped: skipped };
-  }
-
-  /* ------------------------------ 筛选 ------------------------------ */
-
-  function startOfTodayMs() {
-    var now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now.getTime();
-  }
-
-  function matchRange(entry, range) {
-    if (!range || range === 'all') { return true; }
-    var at = Number(entry.at) || 0;
-    if (range === 'today') { return at >= startOfTodayMs(); }
-    if (range === 'week') { return at >= startOfTodayMs() - 6 * 86400000; }
-    return true;
-  }
-
-  function matchSource(entry, source) {
-    if (!source || source === 'all') { return true; }
-    return entry.source === source;
-  }
-
-  function matchAmount(entry, amount) {
-    if (!amount || amount === 'all') { return true; }
-    var cents = Number(entry.amountCents) || 0;
-    if (amount === 'small') { return cents < 5000; }
-    if (amount === 'mid') { return cents >= 5000 && cents <= 50000; }
-    if (amount === 'large') { return cents > 50000; }
-    return true;
-  }
-
-  function filter(entries, opts) {
-    var query = opts || {};
-    var out = [];
-    var list = Array.isArray(entries) ? entries : readAll();
-    for (var i = 0; i < list.length; i += 1) {
-      var entry = list[i];
-      if (!matchRange(entry, query.range)) { continue; }
-      if (!matchSource(entry, query.source)) { continue; }
-      if (!matchAmount(entry, query.amount)) { continue; }
-      out.push(entry);
-    }
-    return out;
-  }
-
-  /* ------------------------------ 文案 ------------------------------ */
-
-  function stampText(entry) {
-    var dates = core.dates;
-    var at = new Date(Number(entry && entry.at) || Date.now());
-    var pad = function (n) { return String(n).padStart(2, '0'); };
-    var day = dates && typeof dates.todayStr === 'function' ? dates.todayStr(at) : '';
-    var hh = pad(at.getHours());
-    var mm = pad(at.getMinutes());
-    if (day && day === (dates && dates.todayStr ? dates.todayStr() : day)) { return '今天 ' + hh + ':' + mm; }
-    return (day ? day.slice(5) + ' ' : '') + hh + ':' + mm;
-  }
-
-  function describeOps(entry) {
-    var ops = (entry && entry.ops) || {};
-    var parts = [];
-    var i;
-    for (i = 0; i < (ops.create || []).length; i += 1) {
-      parts.push('+ ' + trimNote(ops.create[i].note || '') + ' ' + yuan(ops.create[i].amountCents));
-    }
-    for (i = 0; i < (ops.update || []).length; i += 1) {
-      var old = ops.update[i].old || {};
-      var bits = Object.keys(old).map(function (k) { return k + ':' + String(old[k]); }).slice(0, 3);
-      parts.push('改 ' + ops.update[i].id.slice(-4) + (bits.length ? '（' + bits.join(',') + '）' : ''));
-    }
-    for (i = 0; i < (ops.delete || []).length; i += 1) {
-      parts.push('− ' + trimNote((ops.delete[i].values || {}).note || '') + ' ' + yuan((ops.delete[i].values || {}).amountCents));
-    }
-    return parts.slice(0, 4).join(' · ');
-  }
-
-  function yuan(cents) {
-    var n = Number(cents) || 0;
-    return '¥' + (n / 100).toFixed(2).replace(/\.00$/, '');
-  }
-
-  var api = {
-    KEY: KEY,
-    MAX_ENTRIES: MAX_ENTRIES,
-    MESSAGES: MESSAGES,
-    RANGE_LABEL: RANGE_LABEL,
-    SOURCE_LABEL: SOURCE_LABEL,
-    AMOUNT_LABEL: AMOUNT_LABEL,
-    read: readAll,
-    record: record,
-    list: list,
-    find: find,
-    remove: remove,
-    clear: clear,
-    diff: diff,
-    summarize: summarize,
-    countOf: countOf,
-    amountOf: amountOf,
-    revert: revert,
-    filter: filter,
-    stampText: stampText,
-    describeOps: describeOps,
-    yuan: yuan,
-    available: function () { return !!prefsApi(); }
-  };
-
-  core.history = api;
-  if (XZB.core && XZB.core !== core) { XZB.core.history = api; }
-
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = api;
-  }
-})(
-  typeof window !== 'undefined'
-    ? window
-    : (typeof globalThis !== 'undefined' ? globalThis : this)
-);
-</script>
-  <script>
 /* 小账本 2.0 · js/core/backup.js · owner: dba（T02 · T12）
  * 职责：
  *   1) §3.7 导出：JSON 全量备份 / CSV（13 列 + BOM），纯字符串返回，另提供 Blob 下载附件 API；
@@ -33118,6 +32474,17 @@ textarea::selection {
   var migrate = Core.migrate || null;
 
   var PREFS_KEY = 'xzb.ui.v2';
+  /* 2.28.8：撤销历史机制已移除，一次性清掉 prefs 里的旧撤销记录（幂等，失败不阻断启动）。 */
+  try {
+    var rawPrefs = global.localStorage.getItem(PREFS_KEY);
+    if (rawPrefs && rawPrefs.indexOf('assistant.history.v1') !== -1) {
+      var cleaned = JSON.parse(rawPrefs);
+      if (cleaned && cleaned['assistant.history.v1'] !== undefined) {
+        delete cleaned['assistant.history.v1'];
+        global.localStorage.setItem(PREFS_KEY, JSON.stringify(cleaned));
+      }
+    }
+  } catch (error) { /* 清不掉就留着：无人再读 */ }
   /* 应用锁存储键（CONTRACT §1 应用锁存储键 + §7.1 L-c/L-n2）：由本文件注入，lock.js 不持字面量（L-o） */
   var LOCK_KEY = 'xzb2.lock.v1';
   var WIPE_MARKER = 'xzb2.wipe-pending.v1';
@@ -33553,25 +32920,7 @@ textarea::selection {
     };
   }
 
-  /* 撤销历史（持久化，core/history.js）：只记录「账目变了什么」的紧凑差异。
-     整库快照不进 localStorage —— app.js 的撤销栈已按 D02 收紧步数，这里再存两份快照必爆配额。
-     跳过条件：撤销/重做（undo:false）与前调用方显式关掉（history:false），避免「撤销」自己进历史。 */
-  function recordHistory(before, after, label, opts) {
-    var history = Core.history;
-    if (!history || typeof history.record !== 'function' || typeof history.diff !== 'function') { return; }
-    if (opts.undo === false || opts.history === false) { return; }
-    try {
-      var ops = history.diff(before, after);
-      if (!ops || !history.countOf(ops)) { return; }
-      history.record({
-        label: label,
-        ops: ops,
-        source: opts.source === 'assistant' ? 'assistant' : 'manual'
-      });
-    } catch (error) {
-      /* 历史记录失败不阻断保存：账已经落库，历史只是辅助能力 */
-    }
-  }
+  /* 2.28.8：撤销历史机制（core/history.js）整体移除，commit 不再记录差异历史。 */
 
   /* T09 的 core/undo.js 尚未交付、API 未冻结；有同名入口时同步镜像一份，
      真正的撤销仍由本文件的全库快照栈兜底，避免两套栈互相污染。 */
@@ -33671,7 +33020,6 @@ textarea::selection {
         } else if (opts.clearRedo !== false) {
           state.session.redoStack = [];
         }
-        recordHistory(before, state.db, label, opts);
         state.session.lastActionAt = Date.now();
         return { ok: true, value: written.value, label: label };
       }).then(function (result) {
