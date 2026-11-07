@@ -1038,7 +1038,9 @@
 
   function themeRow(ctx) {
     var current = prefsGet(ctx, 'theme', 'auto');
-    var node = h('div', { className: 'c-row s-settings-theme' });
+    /* 2.28.7 二次收敛：补图标——合并进「偏好」页签后与相邻行（点按震动等）保持同一行式。 */
+    var node = h('div', { className: 'c-row c-row--icon s-settings-theme' });
+    node.appendChild(iconEl('sun', 20, 'c-row__icon s-settings-row__icon'));
     node.appendChild(t('span', 'c-row__title s-settings-theme__label', '外观'));
 
     var seg = h('div', {
@@ -1121,9 +1123,9 @@
     return group('', rows);
   }
 
-  /* ---------------- B 安全（主屏可见；原在 about 子页「存储」组，IA-3 上移） ---------------- */
+  /* ---------------- B 安全（2.28.7 二次收敛：并入「数据」页签，紧挨备份与危险区） ---------------- */
 
-  /* 存储/应用锁两行已上移主屏「安全」组（IA-3），about 子页不留重复入口。 */
+  /* 存储/应用锁两行（IA-3 上移主屏后，2.28.7 起随「数据」页签聚合，与「存储」概览不再隔页签互抢）。 */
   function sectionSecurity(ctx, db) {
     var storeRows = [];
     storeRows.push(storageProtectRow(db));
@@ -1215,10 +1217,10 @@
 
   /* ---------------- 记账管理（M12：按任务找入口，不按实现方式） ---------------- */
 
-  /* ---------------- 本机数据总览（2.28.7 起：挂在「数据」页签顶部，交代数据规模与存储方式） ---------------- */
+  /* ---------------- 本机数据总览（2.26.0：首屏先交代数据在哪、有多少） ---------------- */
 
-  /* 2.28.7：总览并入「数据」页签，只留统计格与存储行（标题/lead/大按钮撤，
-     导入导出以数据与备份卡的行为准，不再双入口）。 */
+  /* 2.28.7 二次收敛：回首页签顶部（一度挪进「数据」页签，丢了 2.26.0 的首屏交代本意），
+     只留统计格与存储行（标题/lead/大按钮已在 2.28.7 撤，导入导出以数据与备份卡为准）。 */
   function sectionOverview(ctx, db) {
     var counts = countsOf(db);
     var info = storageInfo();
@@ -1249,6 +1251,7 @@
   function sectionManage(ctx, db) {
     var settings = settingsOf(db);
     var categories = listOf(db, 'categories').length;
+    var counts = countsOf(db);
 
     return group('', [
       row({
@@ -1263,14 +1266,17 @@
         value: categories + ' 个分类',
         onClick: function () { go(ctx, '#/settings/categories?kind=expense'); }
       }),
+      /* 2.28.7 二次收敛：右值补回（账户/账本数量），避免整行只剩一个箭头。 */
       row({
         icon: 'wallet',
         title: '账户管理',
+        value: counts.accounts + ' 个账户',
         onClick: function () { go(ctx, '#/accounts'); }
       }),
       row({
         icon: 'book',
         title: '账本管理',
+        value: counts.books + ' 个账本',
         onClick: function () { go(ctx, '#/books'); }
       }),
       /* 2.26.0：自动入账并入记账管理（原来单独占一个「自动化」组）。 */
@@ -3359,10 +3365,10 @@
 
   /* ---------------- 页签胶囊（2.28.7 起：吸顶真页签，取代 2.26.0 的滚动定位索引） ---------------- */
 
-  /* A–F 六项（2.26.0 收拢：自动化并入记账/数据，安全上移主屏）；危险区 H 按 IA-4 视觉隔离，不进胶囊。 */
+  /* 四页签（2.28.7 二次收敛：安全并入数据、显示与关于合并为「偏好」，原六签撑不起内容量）；
+     危险区仍按 IA-4 视觉隔离，不进胶囊。 */
   var TOC_GROUPS = [
-    ['manage', '记账'], ['data', '数据'], ['security', '安全'],
-    ['assistant', '助手'], ['appearance', '显示'], ['about', '关于']
+    ['manage', '记账'], ['data', '数据'], ['assistant', '助手'], ['about', '偏好']
   ];
 
   function tocTarget(key) {
@@ -3753,20 +3759,20 @@
     /* A32：空库首启一次性横幅（置位后不再出现；样式沿用既有 c-* / s-settings-note） */
     firstRunBannerMaybe(root, ctx, db);
 
-    /* SPEC P2-1 / DESIGN §4.2：吸顶页签胶囊（A–F），危险区 H 不进胶囊。 */
+    /* SPEC P2-1 / DESIGN §4.2：吸顶页签胶囊（四页签），危险区不进胶囊。 */
     var toc = buildToc(ctx);
     root.appendChild(toc);
 
-    /* 2.28.7：面板化——每组预建常驻、hidden 切换（先例 add.js syncType），不再长滚动。
-       总览卡与危险区并入「数据」面板：统计挨着备份与清空，首页签只剩记账管理。 */
+    /* 2.28.7 二次收敛：四页签——每组预建常驻、hidden 切换（先例 add.js syncType）。
+       总览卡回首页签顶部（2.26.0「首屏先交代数据规模与存储方式」的本意）；
+       安全并入「数据」页签（存储保护紧挨备份，之后才是危险区，操作→保护→销毁递进）；
+       显示与关于合并为「偏好」，救回四个空页签的留白。 */
     var initial = initialTab(ctx);
     var sections = [
-      ['manage', sectionManage(ctx, db)],
-      ['data', sectionOverview(ctx, db), sectionData(ctx, db), sectionDanger(ctx, db)],
-      ['security', sectionSecurity(ctx, db)],
+      ['manage', sectionOverview(ctx, db), sectionManage(ctx, db)],
+      ['data', sectionData(ctx, db), sectionSecurity(ctx, db), sectionDanger(ctx, db)],
       ['assistant', sectionAssistant(ctx)],
-      ['appearance', sectionAppearance(ctx)],
-      ['about', sectionAbout(ctx, db)]
+      ['about', sectionAppearance(ctx), sectionAbout(ctx, db)]
     ];
     for (var i = 0; i < sections.length; i += 1) {
       var key = sections[i][0];

@@ -623,21 +623,21 @@ test('6.5 index.html SYSTEM_CATEGORY_KEYS 字面量含 9 个新增 icon key', fu
 
 /* ============================== 用例 7：版本一致性 ============================== */
 
-section('用例 7：版本号 2.28.7 三处一致，无旧版本残留');
+section('用例 7：版本号 2.28.8 三处一致，无旧版本残留');
 
-test('7.1 index.html 含 XZB.version = \'2.28.7\'', function () {
-  check(/XZB\.version\s*=\s*'2\.28\.7'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.7\'');
+test('7.1 index.html 含 XZB.version = \'2.28.8\'', function () {
+  check(/XZB\.version\s*=\s*'2\.28\.8'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.8\'');
 });
 
-test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.7\' 且 CACHE_LABEL 含 2.28.7', function () {
-  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.7'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.7');
+test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.8\' 且 CACHE_LABEL 含 2.28.8', function () {
+  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.8'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.8');
   const m = /CACHE_LABEL\s*=\s*'([^']*)'/.exec(SW_JS);
   check(m, 'sw.js 找不到 CACHE_LABEL');
-  check(m[1].indexOf('2.28.7') >= 0, 'CACHE_LABEL 不含 2.28.7：' + m[1]);
+  check(m[1].indexOf('2.28.8') >= 0, 'CACHE_LABEL 不含 2.28.8：' + m[1]);
 });
 
-test('7.3 版本载体里无上一版 2.28.6 残留', function () {
-  const old = '2.28.' + String.fromCharCode(54); // 上一发布版 2.28.6
+test('7.3 版本载体里无上一版 2.28.7 残留', function () {
+  const old = '2.28.' + String.fromCharCode(55); // 上一发布版 2.28.7
   check(INDEX_HTML.indexOf("XZB.version = '" + old + "'") < 0, 'index.html 仍有旧 XZB.version');
   check(SW_JS.indexOf('xzb2-v' + old) < 0, 'sw.js CACHE_NAME 仍含旧版本');
   check(SW_JS.indexOf('小账本2-v' + old) < 0, 'sw.js CACHE_LABEL 仍含旧版本');
@@ -943,11 +943,11 @@ const settingsSrc17 = fs.readFileSync(path.join(ROOT, 'js/screens/settings.js'),
 
 section('用例 17：设置页真页签——面板切换、记忆停留、数据面板聚合');
 
-test('17.1 六组预建进 .s-settings-panel，切换走 hidden', function () {
+test('17.1 四组预建进 .s-settings-panel，切换走 hidden', function () {
   check(settingsSrc17.indexOf("className: 's-settings-panel'") !== -1, 'panelFor 应生成 s-settings-panel 面板壳');
   check(settingsSrc17.indexOf("panel.id = 'settings-group-' + key") !== -1, '面板 id 保留 settings-group- 前缀供 tocTarget 定位');
   check(settingsSrc17.indexOf('panel.hidden = key !== initial') !== -1, '初始渲染应按停留页签置 hidden');
-  check(settingsSrc17.indexOf('panel.hidden = TOC_GROUPS[i][0] !== key') !== -1, '切换应对六面板统一置 hidden');
+  check(settingsSrc17.indexOf('panel.hidden = TOC_GROUPS[i][0] !== key') !== -1, '切换应对四面板统一置 hidden');
 });
 
 test('17.2 scrollspy 退场：bindTocScroll 不复存在，选中后容器滚回顶', function () {
@@ -962,9 +962,15 @@ test('17.3 停留页签落 prefs（settingsTab），非法值回退第一组', f
   check(settingsSrc17.indexOf('return TOC_GROUPS[0][0]') !== -1, 'initialTab 对非法值应回退第一组');
 });
 
-test('17.4 总览与危险区并入「数据」面板，主屏不再单独挂危险区', function () {
-  check(settingsSrc17.indexOf("['data', sectionOverview(ctx, db), sectionData(ctx, db), sectionDanger(ctx, db)]") !== -1,
-    '数据面板应为 总览+数据与备份+危险区 三卡聚合');
+test('17.4 四页签聚合：总览回首页签、安全并入数据、显示与关于合并为偏好', function () {
+  check(settingsSrc17.indexOf("['manage', sectionOverview(ctx, db), sectionManage(ctx, db)]") !== -1,
+    '首页签应以总览卡开头（2.26.0 首屏先交代数据规模）');
+  check(settingsSrc17.indexOf("['data', sectionData(ctx, db), sectionSecurity(ctx, db), sectionDanger(ctx, db)]") !== -1,
+    '数据页签应为 备份+安全+危险区 三卡聚合');
+  check(settingsSrc17.indexOf("['about', sectionAppearance(ctx), sectionAbout(ctx, db)]") !== -1,
+    '偏好页签应合并显示与关于');
+  check(settingsSrc17.indexOf("['security',") === -1, '安全不再独占页签');
+  check(settingsSrc17.indexOf("['appearance',") === -1, '显示不再独占页签');
   check(settingsSrc17.indexOf('root.appendChild(sectionDanger') === -1, '危险区不应再直接挂在主屏根部');
   check(settingsSrc17.indexOf('root.appendChild(sectionOverview') === -1, '总览卡不应再直接挂在主屏根部');
 });
