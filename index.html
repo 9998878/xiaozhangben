@@ -14755,12 +14755,10 @@ textarea::selection {
 
   function iconOk(value) {
     if (typeof value !== 'string' || value === '') { return false; }
-    /* 2.28.2：真正启用白名单守卫——旧版引用不存在的 UI.icons.NAMES（实际是 names() 函数），
-       守卫形同虚设，任何非空字符串都放行。判定用 icons.has()（按 PATHS 注册表，可渲染才通过）。 */
-    var UI = XZB.UI || XZB.ui;
-    var icons = UI && UI.icons;
-    if (icons && typeof icons.has === 'function') { return icons.has(value); }
-    return true; /* icons 块未加载（极端时序）时保持旧行为，不因守卫误伤整库 */
+    /* 2.28.3 回退 2.28.2 的严格白名单：老库里的图标键可能来自已下线的注册表条目，
+       加载期整库校验一严格就会 E_STORAGE_CORRUPT 把用户挡在数据门外（数据没丢但打不开）。
+       重新启用前必须先做「未知图标 → 默认图标」的加载期兼容迁移（见 known-issues 待办）。 */
+    return true;
   }
 
   function enumOr(value, allowed, fallback) {
@@ -32865,7 +32863,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.28.2';
+  XZB.version = '2.28.3';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
