@@ -2813,7 +2813,7 @@
         empty.appendChild(iconEl(view.mode === 'fav' ? 'star' : 'tag', 28, 's-settings-empty__icon'));
         var title = view.mode === 'hidden' ? '没有已隐藏的分类'
           : (view.mode === 'fav' ? '还没有常用分类' : (kw ? '没有匹配的分类' : '还没有' + (kind === 'expense' ? '支出' : '收入') + '分类'));
-        var desc = view.mode === 'fav' ? '点分类行右侧的星标，把常用的收进来；记一笔的主宫格会优先显示它们。'
+        var desc = view.mode === 'fav' ? '点分类行右侧的星标，把常用的收进来；系统分类会优先出现在记一笔主宫格，收藏的分类都会置顶在「全部」分类面板的「常用」组。'
           : (kw ? '换个关键词试试。' : '新增一个分类，记账时就能选到它。');
         empty.appendChild(t('p', 'c-empty__title', title));
         empty.appendChild(t('p', 'c-empty__desc', desc));
@@ -2837,7 +2837,7 @@
     });
 
     paintList();
-    page.appendChild(noteBlock('系统分类可以改图标和颜色，但不能改名或删除；星标只影响记一笔主宫格的常用排序，不改动数据。'));
+    page.appendChild(noteBlock('系统分类可以改图标和颜色，但不能改名或删除；星标把分类置顶到「全部」分类面板的「常用」组（系统分类还会优先出现在记一笔主宫格，自定义分类不进主宫格），不改动数据。'));
     root.appendChild(page);
   }
 

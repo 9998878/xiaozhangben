@@ -7,7 +7,8 @@
  *   1. 三态分段 支出/收入/转账（编辑模式锁定，改类型走 E_TX_TYPE 文案）。
  *   2. 金额区点击唤起 XZB.ui.keypad（复用组件：删/小数点/长按连删/完成全由组件负责），
  *      键盘固定底部 bottom:var(--kb)，页面高度用 --vvh 计算，键盘收起回落。
- *   3. 分类宫格 4 列（按 type 过滤、12 色槽 data-tone），长按或末尾「管理」跳 #/settings。
+ *   3. 分类宫格 4 列（按 type 过滤、12 色槽 data-tone；只放系统分类，自定义分类收进
+ *      「全部」面板），长按或末尾「管理」打开自定义分类管理面板。
  *   4. 账户横向 chip（默认上次账户，存 prefs.lastAccountId）；转账变「转出 → 转入」两行，
  *      选同一个给 store.MESSAGES.E_TRANSFER_SAME 中文。
  *   5. 日期：今天/昨天/前天 chip + 自绘月历浮层（不引日历库）。
@@ -1030,8 +1031,9 @@
     }
 
     /* ---------- 同步：分类宫格（两层） ----------
-     * 主层只放常用（收藏 → 自定义 → 最近 → 高频 → 系统兜底，共 8 个）＋「全部」「自定义」；
-     * 其余分类进「全部」底部面板。当前选中的分类永远挤进主层，保证看得见。 */
+     * 主层只放 收藏 → 最近 → 高频 → 系统兜底（共 8 个）＋「全部」「管理」，四个来源都只认系统分类；
+     * 自定义分类（含被收藏的）一律不占主层，统一收进「全部」底部面板选。
+     * 当前选中的系统分类不在主层时挤进主层，保证看得见；自定义分类的选中态由草稿条显示。 */
     var GRID_MAIN = 8;
 
     function favoriteIds() {
@@ -1053,20 +1055,30 @@
         seen[id] = true;
         picked.push(byId[id]);
       }
+      /* 收藏也只认系统分类：自定义分类（含被收藏的）一律不进主层，统一在「全部」面板选 */
       var favs = favoriteIds();
-      for (var f = 0; f < favs.length; f += 1) { push(favs[f]); }
-      /* 用户自建的分类就是要常用，优先露脸 */
-      for (var c = 0; c < pool.length && picked.length < GRID_MAIN; c += 1) {
-        if (pool[c].system !== true) { push(pool[c].id); }
+      for (var f = 0; f < favs.length; f += 1) {
+        var favCat = byId[favs[f]];
+        if (favCat && favCat.system === true) { push(favCat.id); }
       }
+      /* 最近/高频/兜底只认系统分类：自定义分类不占主层，统一进「全部」面板的「自定义分类」分组选 */
       var recents = recentPairs();
-      for (var r = 0; r < recents.length && picked.length < GRID_MAIN; r += 1) { push(recents[r].categoryId); }
+      for (var r = 0; r < recents.length && picked.length < GRID_MAIN; r += 1) {
+        var recCat = byId[recents[r].categoryId];
+        if (recCat && recCat.system === true) { push(recCat.id); }
+      }
       var hist = historyPairs(type);
-      for (var h = 0; h < hist.length && picked.length < GRID_MAIN; h += 1) { push(hist[h].categoryId); }
-      for (var s = 0; s < pool.length && picked.length < GRID_MAIN; s += 1) { push(pool[s].id); }
-      /* 当前选中的分类不在主层就顶到最前（编辑/「全部」面板选来的） */
-      if (state.categoryId && !seen[state.categoryId]) {
-        picked.unshift(byId[state.categoryId]);
+      for (var h = 0; h < hist.length && picked.length < GRID_MAIN; h += 1) {
+        var histCat = byId[hist[h].categoryId];
+        if (histCat && histCat.system === true) { push(histCat.id); }
+      }
+      for (var s = 0; s < pool.length && picked.length < GRID_MAIN; s += 1) {
+        if (pool[s].system === true) { push(pool[s].id); }
+      }
+      /* 当前选中的系统分类不在主层就顶到最前（编辑/「全部」面板选来的）；自定义分类不进主层 */
+      var selectedCat = state.categoryId ? byId[state.categoryId] : null;
+      if (selectedCat && selectedCat.system === true && !seen[selectedCat.id]) {
+        picked.unshift(selectedCat);
         picked = picked.slice(0, GRID_MAIN);
       }
       return picked;
@@ -1140,7 +1152,8 @@
     }
 
     /* ---------- 「全部」分类底部面板（N1） ----------
-     * 搜索 + 支出/收入过滤 + 常用/系统/自定义分组；选中即关面板、更新草稿条并弹键盘。 */
+     * 搜索 + 支出/收入过滤 + 常用/系统/自定义分组；选中即关面板、更新草稿条并弹键盘。
+     * 打开时先刷新一次分类快照，保证屏内新建/删除过的自定义分类立即看得到。 */
     function openAllCategories() {
       var sheet = ui('sheet');
       if (!sheet || typeof sheet.open !== 'function') {
@@ -1149,6 +1162,7 @@
       }
       var panelKind = state.type === 'income' ? 'income' : 'expense';
       if (state.type === 'transfer') return;
+      refreshCategoriesFromDb();
       var holder = make('div', 's-add-all');
       var keyword = '';
 
@@ -1197,10 +1211,76 @@
         section('常用', pool.filter(isFav));
         section('自定义分类', pool.filter(function (c) { return c.system !== true && !isFav(c); }));
         section('系统分类', pool.filter(function (c) { return c.system === true && !isFav(c); }));
+        paintPresetGroups(pool);
         if (!listBox.childNodes.length) {
           listBox.appendChild(make('p', 's-add-all__empty',
             keyword ? '没有叫「' + keyword + '」的分类' : '还没有可选的分类'));
         }
+      }
+
+      /* ---------- 现成种类（图标库一键添加） ----------
+       * 把 XZB.ui.icons 里自带中文名的预设按组摆进面板；点一下即建成同名分类并选中记账，
+       * 与当前类型已有分类同名的自动隐藏（说明已经建过，去「自定义分类」组用它）。 */
+      function paintPresetGroups(pool) {
+        var iconsApi = ui('icons');
+        if (!iconsApi || typeof iconsApi.groups !== 'function' || typeof iconsApi.labelOf !== 'function') { return; }
+        var taken = {};
+        pool.forEach(function (c) { if (c && c.name) { taken[c.name] = true; } });
+        var libGroups = iconsApi.groups();
+        for (var gi = 0; gi < libGroups.length; gi += 1) {
+          var libGroup = libGroups[gi];
+          var presets = [];
+          for (var ki = 0; ki < libGroup.keys.length; ki += 1) {
+            var presetName = iconsApi.labelOf(libGroup.keys[ki]);
+            if (!presetName || taken[presetName]) { continue; }
+            if (keyword && presetName.indexOf(keyword) < 0) { continue; }
+            presets.push({ key: libGroup.keys[ki], name: presetName });
+          }
+          if (!presets.length) { continue; }
+          listBox.appendChild(make('p', 's-add-all__group', '现成种类 · ' + libGroup.label));
+          var presetGrid = make('div', 's-add-all__grid');
+          var tone = (gi % 12) + 1;
+          for (var pi = 0; pi < presets.length; pi += 1) {
+            presetGrid.appendChild(presetCell(presets[pi], tone));
+          }
+          listBox.appendChild(presetGrid);
+        }
+      }
+
+      function presetCell(preset, tone) {
+        var cell = button('s-add-cat s-add-cat--sm');
+        cell.setAttribute('data-tone', String(tone));
+        cell.setAttribute('data-haptic', 'select');
+        cell.setAttribute('aria-label', '添加现成分类 ' + preset.name);
+        var ico = make('span', 's-add-cat__ico');
+        ico.appendChild(iconNode(preset.key, 24));
+        cell.appendChild(ico);
+        cell.appendChild(make('span', 's-add-cat__name', preset.name));
+        cell.addEventListener('click', function () { addPresetCategory(preset); });
+        return cell;
+      }
+
+      function addPresetCategory(preset) {
+        commitNewCategory({ name: preset.name, icon: preset.key, kind: panelKind, tone: 0 }).then(function (res) {
+          if (!res || !res.ok) {
+            /* 同名竞态（连点/刚建过）：直接选中已有同名分类，不打断记账 */
+            var poolNow = categoriesFor(panelKind);
+            for (var i = 0; i < poolNow.length; i += 1) {
+              if (poolNow[i].name === preset.name) {
+                setCategory(poolNow[i].id);
+                sheetHandle.close('pick');
+                openKeypad();
+                return;
+              }
+            }
+            showToast(messageOf(res.code, res.message || '保存失败，请重试'), { type: 'danger' });
+            return;
+          }
+          refreshCategoriesFromDb();
+          if (res.id) { setCategory(res.id); }
+          sheetHandle.close('pick');
+          openKeypad();
+        });
       }
 
       function allCell(category, index) {
@@ -1388,12 +1468,9 @@
       });
     }
 
-    /* ---------- 自定义分类（宫格「自定义」格的面板） ----------
-     * 在这里新建的分类永久挂在宫格末尾（maxSort+10），以后记账直接点它。
-     * 删除沿用设置页的 applyCategoryDelete：存量流水自动归到「其他」。
-     */
-    /* ---------- 自定义分类（宫格「管理」格的面板） ----------
-     * 在这里新建的分类永久挂在宫格末尾（maxSort+10），以后记账直接点它。
+    /* ---------- 自定义分类（宫格「管理」格的面板，纯定义入口：新建/删除，不选分类记账） ----------
+     * 在这里新建的分类统一收进「全部」底部面板（sort 仍按 maxSort+10，决定它在面板里的排位），
+     * 主宫格不再展示自定义分类；选中一律去「全部」面板。
      * 删除沿用设置页的 applyCategoryDelete：存量流水自动归到「其他」。
      *
      * 2.6：图标候选换成专属库（8 组 × 12 枚，与系统分类零交集），
@@ -1441,6 +1518,60 @@
       return commit(mutator, options);
     }
 
+    /* 屏内「管理」面板新建/删除分类后，进屏时的分类快照（categoriesAll）已过期——
+     * 「全部」面板、宫格与 categoryById 都吃这份快照，不刷新就会「管理里有、全部里没有」。
+     * 从 app.db() 取最新分类重建快照（与 openQuickItems 的 freshCategories 同源）。 */
+    function refreshCategoriesFromDb() {
+      var source = app && typeof app.db === 'function' ? app.db() : null;
+      if (!source || !Array.isArray(source.categories)) return;
+      categoriesAll = liveCategories(source.categories);
+    }
+
+    /* 新建自定义分类的共享提交链：管理面板的表单与「全部」面板的「现成种类」都走这里。
+     * input: { name, icon, kind, tone }；成功时 res.id 为新分类 id（落库即永久保存）。 */
+    function commitNewCategory(input) {
+      var name = String(input.name || '').trim().slice(0, 8);
+      var kind = input.kind === 'income' ? 'income' : 'expense';
+      var tone = input.tone || (kind === 'income' ? 10 : 1);
+      var createdId = '';
+      return quickCommit(function (working) {
+        var list = Array.isArray(working.categories) ? working.categories : [];
+        for (var i = 0; i < list.length; i += 1) {
+          if (list[i] && list[i].kind === kind && list[i].name === name) {
+            return { abort: true, code: 'E_CATEGORY_DUP', message: '已经有叫「' + name + '」的分类了' };
+          }
+        }
+        var maxSort = 0;
+        for (var s = 0; s < list.length; s += 1) {
+          if (list[s] && list[s].kind === kind) {
+            var value = Number(list[s].sort);
+            if (isFinite(value) && value > maxSort) { maxSort = value; }
+          }
+        }
+        var created = schema.createCategory({
+          kind: kind,
+          name: name,
+          icon: input.icon || 'tag',
+          color: readTokenText(CAT_PALETTE[tone - 1]) || readTokenText(CAT_PALETTE[0]),
+          sort: maxSort + 10,
+          hidden: false,
+          system: false,
+          aliases: []
+        }, dates.nowIso());
+        var check = schema.validateCategory(created, { categories: list });
+        if (!check.ok) {
+          return { abort: true, code: (check.errors && check.errors[0] && check.errors[0].code) || 'E_INVALID_INPUT' };
+        }
+        list.push(created);
+        createdId = created.id;
+        working.updatedAt = dates.nowIso();
+        return {};
+      }, { label: '新增自定义分类' }).then(function (res) {
+        if (res && res.ok) { res.id = createdId; }
+        return res;
+      });
+    }
+
     function openQuickItems() {
       var sheet = ui('sheet');
       if (!sheet || typeof sheet.open !== 'function') {
@@ -1463,7 +1594,7 @@
         }
         if (!customs.length) {
           holder.appendChild(make('p', 's-add-quick__empty',
-            '还没有自定义分类。建一个（比如「烟钱」「猫粮」），它会一直留在宫格最后，以后直接点它记账。'));
+            '还没有自定义分类。建一个（比如「烟钱」「猫粮」），它会永久保存，收进「全部」分类面板，记账时在那里选。'));
         } else {
           var list = make('div', 's-add-quick__list');
           for (var j = 0; j < customs.length; j += 1) {
@@ -1474,7 +1605,7 @@
         var newBtn = button('c-btn c-btn--primary c-btn--block s-add-quick__new', '＋ 新建分类');
         newBtn.addEventListener('click', function () { paintForm(); });
         holder.appendChild(newBtn);
-        holder.appendChild(make('p', 's-add-quick__hint', '新建的分类固定排在宫格最后，记账时直接点图标就行。'));
+        holder.appendChild(make('p', 's-add-quick__hint', '新建的分类会永久保存，统一收进「全部」分类面板，记账时在那里选。'));
       }
 
       function customRow(category) {
@@ -1517,6 +1648,13 @@
             showToast(messageOf(res.code, '删除失败，请重试'), { type: 'danger' });
             return;
           }
+          refreshCategoriesFromDb();
+          /* 删掉的正好是当前选中的分类：回退到该类型的默认分类，草稿条同步 */
+          if (String(state.categoryId) === String(category.id)) {
+            state.categoryId = defaultCategoryId(state.type, categoriesAll, settings);
+          }
+          renderGrid();
+          syncAmount();
           showToast('分类已删除，相关流水归到「其他」', { type: 'success' });
           paintList();
         });
@@ -1617,44 +1755,15 @@
             return;
           }
           var icon = (pickerCtl && pickerCtl.value && pickerCtl.value()) || draft.icon;
-          quickCommit(function (working) {
-            var list = Array.isArray(working.categories) ? working.categories : [];
-            for (var i = 0; i < list.length; i += 1) {
-              if (list[i] && list[i].kind === draft.kind && list[i].name === name) {
-                return { abort: true, code: 'E_CATEGORY_DUP', message: '已经有叫「' + name + '」的分类了' };
-              }
-            }
-            var maxSort = 0;
-            for (var s = 0; s < list.length; s += 1) {
-              if (list[s] && list[s].kind === draft.kind) {
-                var value = Number(list[s].sort);
-                if (isFinite(value) && value > maxSort) { maxSort = value; }
-              }
-            }
-            var created = schema.createCategory({
-              kind: draft.kind,
-              name: name,
-              icon: icon,
-              color: readTokenText(CAT_PALETTE[draft.tone - 1]) || readTokenText(CAT_PALETTE[0]),
-              sort: maxSort + 10,
-              hidden: false,
-              system: false,
-              aliases: []
-            }, dates.nowIso());
-            var check = schema.validateCategory(created, { categories: list });
-            if (!check.ok) {
-              return { abort: true, code: check.errors[0].code || 'E_INVALID_INPUT' };
-            }
-            list.push(created);
-            working.updatedAt = dates.nowIso();
-            return {};
-          }, { label: '新增自定义分类' }).then(function (res) {
+          commitNewCategory({ name: name, icon: icon, kind: draft.kind, tone: draft.tone }).then(function (res) {
             if (!res || !res.ok) {
               showToast(messageOf(res.code, res.message || '保存失败，请重试'), { type: 'danger' });
               return;
             }
             rememberIcon(icon);
-            showToast('分类已加到宫格最后', { type: 'success' });
+            refreshCategoriesFromDb();
+            renderGrid();
+            showToast('已保存，收进「全部」分类面板', { type: 'success' });
             sheet.close('created');
           });
         }

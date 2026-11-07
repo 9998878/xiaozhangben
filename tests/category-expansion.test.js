@@ -154,7 +154,7 @@ if (!iconsBlock) { throw new Error('index.html 中找不到 icons 模块内联�
 vm.runInContext(iconsBlock, sandbox, { filename: 'inline:icons.js' });
 
 /* 模拟 app.js（加载链最后一环）把版本置为当前发布版本之后的最终状态。 */
-vm.runInContext("XZB.version = '2.28.3';", sandbox, { filename: 'inline:app-version-stub' });
+vm.runInContext("XZB.version = '2.28.4';", sandbox, { filename: 'inline:app-version-stub' });
 
 const nlSrc = fs.readFileSync(path.join(ROOT, 'js/modules/nl.js'), 'utf8');
 vm.runInContext(nlSrc, sandbox, { filename: 'js/modules/nl.js' });
@@ -623,21 +623,21 @@ test('6.5 index.html SYSTEM_CATEGORY_KEYS 字面量含 9 个新增 icon key', fu
 
 /* ============================== 用例 7：版本一致性 ============================== */
 
-section('用例 7：版本号 2.28.3 三处一致，无旧版本残留');
+section('用例 7：版本号 2.28.4 三处一致，无旧版本残留');
 
-test('7.1 index.html 含 XZB.version = \'2.28.3\'', function () {
-  check(/XZB\.version\s*=\s*'2\.28\.3'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.3\'');
+test('7.1 index.html 含 XZB.version = \'2.28.4\'', function () {
+  check(/XZB\.version\s*=\s*'2\.28\.4'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.4\'');
 });
 
-test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.3\' 且 CACHE_LABEL 含 2.28.3', function () {
-  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.3'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.3');
+test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.4\' 且 CACHE_LABEL 含 2.28.4', function () {
+  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.4'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.4');
   const m = /CACHE_LABEL\s*=\s*'([^']*)'/.exec(SW_JS);
   check(m, 'sw.js 找不到 CACHE_LABEL');
-  check(m[1].indexOf('2.28.3') >= 0, 'CACHE_LABEL 不含 2.28.3：' + m[1]);
+  check(m[1].indexOf('2.28.4') >= 0, 'CACHE_LABEL 不含 2.28.4：' + m[1]);
 });
 
-test('7.3 版本载体里无上一版 2.27.1 残留', function () {
-  const old = '2.27.' + String.fromCharCode(49); // 上一发布版 2.27.1
+test('7.3 版本载体里无上一版 2.28.3 残留', function () {
+  const old = '2.28.' + String.fromCharCode(51); // 上一发布版 2.28.3
   check(INDEX_HTML.indexOf("XZB.version = '" + old + "'") < 0, 'index.html 仍有旧 XZB.version');
   check(SW_JS.indexOf('xzb2-v' + old) < 0, 'sw.js CACHE_NAME 仍含旧版本');
   check(SW_JS.indexOf('小账本2-v' + old) < 0, 'sw.js CACHE_LABEL 仍含旧版本');
@@ -880,6 +880,58 @@ test('15.2 iconOk 保持宽松（2.28.3 回退 2.28.2 的严格白名单）：�
   checkEq(sandbox.iconOk('legacy-icon-from-old-version'), true,
     '未知图标必须放行——严格校验会让带旧图标键的老库 E_STORAGE_CORRUPT（2.28.2 教训）');
   checkEq(sandbox.iconOk(''), false, '空串仍拒绝');
+});
+
+/* ============================== 用例 16：自定义分类永久保存 ============================== */
+
+/* 2.28.3 主宫格改版回归：自定义分类（含被收藏的）不再进主宫格、统一收进「全部」面板，
+ * 前提是它们必须永久保存。本组用例锁住启动加载链里唯一会动分类元数据的入口
+ * syncCategoryCatalog（种子窄合并 + 别名清理 + 图标升级）：
+ * 用户自建分类（system:false）无论何种字段形态都必须逐字段原样。 */
+
+section('用例 16：自定义分类永久保存——启动目录同步链不碰用户自建分类');
+
+function buildLegacyDbWithUserCats() {
+  const db = buildLegacyDb();
+  const userCats = [
+    { id: 'ca_user_smoke', kind: 'expense', name: '烟钱', icon: 'cat', color: '#a1b2c3',
+      sort: 900, hidden: false, system: false, aliases: ['烟'], createdAt: FIXED_AT, updatedAt: FIXED_AT, deleted: false },
+    { id: 'ca_user_catfood', kind: 'expense', name: '猫粮', icon: 'tag', color: '#ff8800',
+      sort: 910, hidden: true, system: false, aliases: ['喵粮'], createdAt: FIXED_AT, updatedAt: FIXED_AT, deleted: false },
+    { id: 'ca_user_side', kind: 'income', name: '副业', icon: 'coins', color: '#00aa66',
+      sort: 920, hidden: false, system: false, aliases: [], createdAt: FIXED_AT, updatedAt: FIXED_AT, deleted: false }
+  ];
+  userCats.forEach(function (c) { db.categories.push(c); });
+  return { db: db, userCats: userCats };
+}
+
+test('16.1 syncCategoryCatalog 后，用户自建分类逐字段原样（含 hidden/别名/图标/颜色）', function () {
+  const fx = buildLegacyDbWithUserCats();
+  schema.syncCategoryCatalog(fx.db);
+  fx.userCats.forEach(function (cat) {
+    const after = byId(fx.db.categories, cat.id);
+    check(after !== null, '用户分类「' + cat.name + '」不应被目录同步删除');
+    checkEq(JSON.stringify(after), JSON.stringify(cat), '用户分类「' + cat.name + '」应逐字段原样');
+  });
+});
+
+test('16.2 分类数 = 40 旧 + 12 种子 + 3 用户；再跑一次（模拟重启二次加载）仍原样', function () {
+  const fx = buildLegacyDbWithUserCats();
+  schema.syncCategoryCatalog(fx.db);
+  checkEq(fx.db.categories.length, 55, '40 旧分类 + 补齐 12 种子 + 3 用户 = 55');
+  schema.syncCategoryCatalog(fx.db);
+  checkEq(fx.db.categories.length, 55, '二次同步不应增删分类');
+  fx.userCats.forEach(function (cat) {
+    const after = byId(fx.db.categories, cat.id);
+    checkEq(JSON.stringify(after), JSON.stringify(cat), '二次同步后「' + cat.name + '」仍逐字段原样');
+  });
+});
+
+test('16.3 带用户自建分类的库同步后仍通过 validateDb', function () {
+  const fx = buildLegacyDbWithUserCats();
+  schema.syncCategoryCatalog(fx.db);
+  const result = schema.validateDb(fx.db);
+  checkEq(result.ok, true, 'validateDb -> ' + JSON.stringify(result));
 });
 
 /* ============================== 汇总 ============================== */
