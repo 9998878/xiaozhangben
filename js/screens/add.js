@@ -7,8 +7,8 @@
  *   1. 三态分段 支出/收入/转账（编辑模式锁定，改类型走 E_TX_TYPE 文案）。
  *   2. 金额区点击唤起 XZB.ui.keypad（复用组件：删/小数点/长按连删/完成全由组件负责），
  *      键盘固定底部 bottom:var(--kb)，页面高度用 --vvh 计算，键盘收起回落。
- *   3. 分类宫格 4 列（按 type 过滤、12 色槽 data-tone；只放系统分类，自定义分类收进
- *      「全部」面板），长按或末尾「管理」打开自定义分类管理面板。
+ *   3. 分类宫格 4 列（按 type 过滤、12 色槽 data-tone）：全量分类拉通铺开，常用置顶、
+ *      自建分类排在最后；「现成种类」「管理」两格收在宫格尾。
  *   4. 账户横向 chip（默认上次账户，存 prefs.lastAccountId）；转账变「转出 → 转入」两行，
  *      选同一个给 store.MESSAGES.E_TRANSFER_SAME 中文。
  *   5. 日期：今天/昨天/前天 chip + 自绘月历浮层（不引日历库）。
@@ -333,8 +333,23 @@
   function amountOf(text) {
     var money = core('money');
     if (!money) return 0;
-    var parsed = money.parseAmount(String(text === null || text === undefined ? '' : text), { allowNegative: false });
-    return parsed && parsed.ok ? parsed.cents : 0;
+    /* 键盘加减法（2.28.5）：支持 128.5+30-8.5 算式，切段解析后左结合；
+     * 单段时与旧逻辑等价。解析失败的段整体记 0（宁可不记，不记错账）。 */
+    var raw = String(text === null || text === undefined ? '' : text).trim();
+    if (!raw) return 0;
+    var parts = raw.split(/([+\-])/);
+    var total = null;
+    var pendingOp = '+';
+    for (var i = 0; i < parts.length; i += 1) {
+      var part = parts[i];
+      if (part === '+' || part === '-') { pendingOp = part; continue; }
+      if (!part) { continue; }
+      var parsed = money.parseAmount(part, { allowNegative: false });
+      if (!parsed || !parsed.ok) { return 0; }
+      if (total === null) { total = parsed.cents; }
+      else { total = pendingOp === '+' ? total + parsed.cents : total - parsed.cents; }
+    }
+    return total === null ? 0 : total;
   }
   function formatMoney(cents) {
     var money = core('money');
@@ -459,9 +474,9 @@
     draftBar.appendChild(draftAmt);
     wrap.appendChild(draftBar);
 
-    /* 分类宫格 */
+    /* 分类宫格（分组拉通容器：各组自带 s-add-grid 行，容器本身不参与网格布局） */
     var gridBlock = make('div', 's-add-grid-wrap');
-    var grid = make('div', 's-add-grid');
+    var grid = make('div', '');
     grid.setAttribute('role', 'group');
     grid.setAttribute('aria-label', '选择分类');
     gridBlock.appendChild(grid);
@@ -1030,12 +1045,10 @@
       });
     }
 
-    /* ---------- 同步：分类宫格（两层） ----------
-     * 主层只放 收藏 → 最近 → 高频 → 系统兜底（共 8 个）＋「全部」「管理」，四个来源都只认系统分类；
-     * 自定义分类（含被收藏的）一律不占主层，统一收进「全部」底部面板选。
-     * 当前选中的系统分类不在主层时挤进主层，保证看得见；自定义分类的选中态由草稿条显示。 */
-    var GRID_MAIN = 8;
-
+    /* ---------- 同步：分类宫格（分组拉通） ----------
+     * 全量分类直接上屏：常用（收藏）置顶，其余按库内顺序铺开——
+     * 自建分类（管理新建 / 现成种类点选）不单独分组，自然排在全部分类的最后面。
+     * 宫格末尾保留「现成种类」折叠区与「管理」格。 */
     function favoriteIds() {
       var prefs = prefApi();
       if (!prefs || typeof prefs.get !== 'function') return [];
@@ -1044,44 +1057,25 @@
       });
     }
 
-    function mainCategories(type) {
+    function mainCategoryGroups(type) {
       var pool = categoriesFor(type);
+      var favs = favoriteIds();
       var byId = {};
       for (var p = 0; p < pool.length; p += 1) { byId[pool[p].id] = pool[p]; }
-      var picked = [];
-      var seen = {};
-      function push(id) {
-        if (!id || seen[id] || !byId[id]) return;
-        seen[id] = true;
-        picked.push(byId[id]);
-      }
-      /* 收藏也只认系统分类：自定义分类（含被收藏的）一律不进主层，统一在「全部」面板选 */
-      var favs = favoriteIds();
+      var favSet = {};
+      var favList = [];
       for (var f = 0; f < favs.length; f += 1) {
         var favCat = byId[favs[f]];
-        if (favCat && favCat.system === true) { push(favCat.id); }
+        if (favCat && !favSet[favCat.id]) { favSet[favCat.id] = true; favList.push(favCat); }
       }
-      /* 最近/高频/兜底只认系统分类：自定义分类不占主层，统一进「全部」面板的「自定义分类」分组选 */
-      var recents = recentPairs();
-      for (var r = 0; r < recents.length && picked.length < GRID_MAIN; r += 1) {
-        var recCat = byId[recents[r].categoryId];
-        if (recCat && recCat.system === true) { push(recCat.id); }
+      var rest = [];
+      for (var c = 0; c < pool.length; c += 1) {
+        if (!favSet[pool[c].id]) { rest.push(pool[c]); }
       }
-      var hist = historyPairs(type);
-      for (var h = 0; h < hist.length && picked.length < GRID_MAIN; h += 1) {
-        var histCat = byId[hist[h].categoryId];
-        if (histCat && histCat.system === true) { push(histCat.id); }
-      }
-      for (var s = 0; s < pool.length && picked.length < GRID_MAIN; s += 1) {
-        if (pool[s].system === true) { push(pool[s].id); }
-      }
-      /* 当前选中的系统分类不在主层就顶到最前（编辑/「全部」面板选来的）；自定义分类不进主层 */
-      var selectedCat = state.categoryId ? byId[state.categoryId] : null;
-      if (selectedCat && selectedCat.system === true && !seen[selectedCat.id]) {
-        picked.unshift(selectedCat);
-        picked = picked.slice(0, GRID_MAIN);
-      }
-      return picked;
+      return [
+        { title: '常用', list: favList },
+        { title: '', list: rest }
+      ];
     }
 
     function gridCell(category, index) {
@@ -1104,24 +1098,197 @@
       return cell;
     }
 
+    var presetsOpen = false;
+
     function renderGrid() {
       clear(grid);
       if (state.type === 'transfer') return;
-      var list = mainCategories(state.type);
-      for (var i = 0; i < list.length; i += 1) {
-        grid.appendChild(gridCell(list[i], i));
+      /* 分类拉通：三组全量上屏，不用再点「全部」 */
+      var groups = mainCategoryGroups(state.type);
+      for (var gi = 0; gi < groups.length; gi += 1) {
+        var group = groups[gi];
+        if (!group.list.length) { continue; }
+        if (group.title) { grid.appendChild(make('p', 's-add-all__group', group.title)); }
+        var row = make('div', 's-add-grid');
+        for (var ci = 0; ci < group.list.length; ci += 1) {
+          row.appendChild(gridCell(group.list[ci], ci));
+        }
+        grid.appendChild(row);
       }
-      /* 「全部」格：打开全部分类面板 */
-      var allCell = button('s-add-cat s-add-cat--all', '');
-      allCell.setAttribute('data-action', 'all');
-      allCell.setAttribute('aria-label', '全部分类');
-      var allIco = make('span', 's-add-cat__ico');
-      allIco.appendChild(iconNode('ellipsis', 24));
-      allCell.appendChild(allIco);
-      allCell.appendChild(make('span', 's-add-cat__name', '全部'));
-      grid.appendChild(allCell);
+      if (presetsOpen) {
+        grid.appendChild(make('p', 's-add-all__group', '现成种类 · 点大类弹出细分'));
+        var prow = make('div', 's-add-grid');
+        paintPresetGroupsPage(prow);
+        grid.appendChild(prow);
+      }
+      appendGridTail();
+      syncGridActive();
+    }
 
-      /* 「管理」格：灰底 + 号，与其余图标同规格（保留自定义分类功能，去视觉噪音） */
+    /* ---------- 现成种类（两级：大类九宫格 → 锚定大类的细分弹层） ----------
+     * 点「现成种类」先出大类；点大类，细分弹层从该图标位置弹出（非底部弹层），
+     * 点一个立即建同名分类并选中（落库永久保存）。与已有分类同名的预设不再出现。 */
+    var presetPopGroup = -1;
+    var presetPopNode = null;
+
+    function presetTakenNames() {
+      var taken = {};
+      var pool = categoriesFor(state.type);
+      for (var i = 0; i < pool.length; i += 1) {
+        if (pool[i] && pool[i].name) { taken[pool[i].name] = true; }
+      }
+      return taken;
+    }
+
+    function paintPresetGroupsPage(row) {
+      var iconsApi = ui('icons');
+      if (!iconsApi || typeof iconsApi.groups !== 'function' || typeof iconsApi.labelOf !== 'function') { return; }
+      var taken = presetTakenNames();
+      var libGroups = iconsApi.groups();
+      for (var gi = 0; gi < libGroups.length; gi += 1) {
+        var g = libGroups[gi];
+        var remain = 0;
+        for (var ki = 0; ki < g.keys.length; ki += 1) {
+          var nm = iconsApi.labelOf(g.keys[ki]);
+          if (nm && !taken[nm]) { remain += 1; }
+        }
+        if (!remain) { continue; }
+        var cell = button('s-add-cat s-add-cat--sm', '');
+        cell.setAttribute('data-preset-group', String(gi));
+        cell.setAttribute('data-tone', String((gi % 12) + 1));
+        cell.setAttribute('data-haptic', 'select');
+        cell.setAttribute('aria-label', '现成种类 ' + g.label + '，剩 ' + remain + ' 个可添加');
+        var ico = make('span', 's-add-cat__ico');
+        ico.appendChild(iconNode(g.keys[0], 24));
+        cell.appendChild(ico);
+        cell.appendChild(make('span', 's-add-cat__name', g.label));
+        cell.addEventListener('click', function (index, node) {
+          return function (event) {
+            event.stopPropagation();
+            if (presetPopGroup === index) { closePresetPop(true); return; }
+            openPresetPop(index, node);
+          };
+        }(gi, cell));
+        row.appendChild(cell);
+      }
+    }
+
+    function openPresetPop(gi, anchorCell) {
+      closePresetPop(false);
+      presetPopGroup = gi;
+      var iconsApi = ui('icons');
+      var g = iconsApi.groups()[gi];
+      var taken = presetTakenNames();
+      var pop = make('div', 's-add-presets-pop');
+      var head = make('div', 's-add-presets-pop__head');
+      head.appendChild(make('span', '', g.label + ' · 点一个立即建并选中'));
+      var x = button('s-add-presets-pop__x', '收起');
+      x.addEventListener('click', function (event) { event.stopPropagation(); closePresetPop(true); });
+      head.appendChild(x);
+      pop.appendChild(head);
+      var pg = make('div', 's-add-presets-pop__grid');
+      for (var ki = 0; ki < g.keys.length; ki += 1) {
+        var nm = iconsApi.labelOf(g.keys[ki]);
+        if (!nm || taken[nm]) { continue; }
+        pg.appendChild(presetCellPage({ key: g.keys[ki], name: nm }, (gi % 12) + 1));
+      }
+      pop.appendChild(pg);
+      pop.addEventListener('click', function (event) { event.stopPropagation(); });
+      gridBlock.appendChild(pop);
+      presetPopNode = pop;
+      positionPresetPop(pop, anchorCell);
+    }
+
+    function closePresetPop(rerender) {
+      presetPopGroup = -1;
+      if (presetPopNode && presetPopNode.parentNode) { presetPopNode.parentNode.removeChild(presetPopNode); }
+      presetPopNode = null;
+      if (rerender) { renderGrid(); }
+    }
+
+    /* 锚定定位：弹层挂在 gridBlock（relative）内，默认从大类图标下方弹出、箭头指向图标；
+     * 视口放不下翻到上方。页面滚动时随内容一起走（absolute 随文档流）。 */
+    function positionPresetPop(pop, anchorCell) {
+      var gRect = gridBlock.getBoundingClientRect();
+      var cRect = anchorCell.getBoundingClientRect();
+      var popW = pop.offsetWidth || 280;
+      var popH = pop.offsetHeight || 200;
+      var left = cRect.left - gRect.left + cRect.width / 2 - popW / 2;
+      left = Math.max(8, Math.min(left, gRect.width - popW - 8));
+      var belowFits = cRect.bottom + popH + 12 < window.innerHeight;
+      var aboveFits = cRect.top - popH - 56 > 0;
+      var above = !belowFits && aboveFits;
+      if (above) {
+        pop.classList.add('s-add-presets-pop--up');
+        pop.style.left = left + 'px';
+        pop.style.top = 'auto';
+        pop.style.bottom = (gRect.height - (cRect.top - gRect.top) + 8) + 'px';
+      } else {
+        pop.style.left = left + 'px';
+        pop.style.top = (cRect.bottom - gRect.top + 8) + 'px';
+      }
+      var arrowX = Math.max(14, Math.min(cRect.left - gRect.left + cRect.width / 2 - left - 5, popW - 24));
+      pop.style.setProperty('--pop-arrow', arrowX + 'px');
+    }
+
+    function presetCellPage(preset, tone) {
+      var cell = button('s-add-cat s-add-cat--sm');
+      cell.setAttribute('data-tone', String(tone));
+      cell.setAttribute('data-haptic', 'select');
+      cell.setAttribute('aria-label', '添加现成分类 ' + preset.name);
+      var ico = make('span', 's-add-cat__ico');
+      ico.appendChild(iconNode(preset.key, 24));
+      cell.appendChild(ico);
+      cell.appendChild(make('span', 's-add-cat__name', preset.name));
+      cell.addEventListener('click', function (event) {
+        event.stopPropagation();
+        commitNewCategory({ name: preset.name, icon: preset.key, kind: state.type, tone: 0 }).then(function (res) {
+          if (!res || !res.ok) {
+            /* 同名竞态（连点/刚建过）：直接选中已有同名分类，不打断记账 */
+            var poolNow = categoriesFor(state.type);
+            for (var i = 0; i < poolNow.length; i += 1) {
+              if (poolNow[i].name === preset.name) {
+                state.categoryId = poolNow[i].id;
+                refreshCategoriesFromDb();
+                syncAmount();
+                showToast('「' + preset.name + '」已建过，已选中');
+                return;
+              }
+            }
+            showToast(messageOf(res.code, res.message || '保存失败，请重试'), { type: 'danger' });
+            return;
+          }
+          refreshCategoriesFromDb();
+          if (res.id) { state.categoryId = res.id; }
+          /* 不整屏重绘（会拆掉弹层）：原地同步草稿条，关弹层时 renderGrid 统一去重 */
+          syncAmount();
+          cell.classList.add('is-added');
+          cell.setAttribute('aria-disabled', 'true');
+          showToast('已保存，排在「全部」最后', { type: 'success' });
+        });
+      });
+      return cell;
+    }
+
+    /* 宫格末尾：「现成种类」折叠开关 + 「管理」格（纯定义入口） */
+    function appendGridTail() {
+      var tail = make('div', 's-add-grid');
+      var presetBtn = button('s-add-cat s-add-cat--all', '');
+      presetBtn.setAttribute('data-action', 'presets');
+      presetBtn.setAttribute('aria-expanded', presetsOpen ? 'true' : 'false');
+      presetBtn.setAttribute('aria-label', presetsOpen ? '收起现成种类' : '展开现成种类');
+      var pIco = make('span', 's-add-cat__ico');
+      pIco.appendChild(iconNode('ellipsis', 24));
+      presetBtn.appendChild(pIco);
+      presetBtn.appendChild(make('span', 's-add-cat__name', presetsOpen ? '收起' : '现成种类'));
+      presetBtn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        presetsOpen = !presetsOpen;
+        closePresetPop(false);
+        renderGrid();
+      });
+      tail.appendChild(presetBtn);
+
       var quickCell = button('s-add-cat s-add-cat--quick', '');
       quickCell.setAttribute('data-action', 'quick');
       quickCell.setAttribute('aria-label', '自定义分类');
@@ -1129,8 +1296,9 @@
       quickIco.appendChild(iconNode('plus', 24));
       quickCell.appendChild(quickIco);
       quickCell.appendChild(make('span', 's-add-cat__name', '管理'));
-      grid.appendChild(quickCell);
-      syncGridActive();
+      tail.appendChild(quickCell);
+
+      grid.appendChild(tail);
     }
 
     function syncGridActive() {
@@ -1201,16 +1369,16 @@
 
         function section(title, list) {
           if (!list.length) return;
-          listBox.appendChild(make('p', 's-add-all__group', title));
+          if (title) { listBox.appendChild(make('p', 's-add-all__group', title)); }
           var gridNode = make('div', 's-add-all__grid');
           list.forEach(function (category, index) {
             gridNode.appendChild(allCell(category, index));
           });
           listBox.appendChild(gridNode);
         }
+        /* 与主宫格同构：常用置顶，其余（系统在前、自建在后）不分组铺开 */
         section('常用', pool.filter(isFav));
-        section('自定义分类', pool.filter(function (c) { return c.system !== true && !isFav(c); }));
-        section('系统分类', pool.filter(function (c) { return c.system === true && !isFav(c); }));
+        section('', pool.filter(function (c) { return !isFav(c); }));
         paintPresetGroups(pool);
         if (!listBox.childNodes.length) {
           listBox.appendChild(make('p', 's-add-all__empty',
@@ -1469,7 +1637,7 @@
     }
 
     /* ---------- 自定义分类（宫格「管理」格的面板，纯定义入口：新建/删除，不选分类记账） ----------
-     * 在这里新建的分类统一收进「全部」底部面板（sort 仍按 maxSort+10，决定它在面板里的排位），
+     * 在这里新建的分类永久保存，排在「全部」分类的最后面（sort 仍按 maxSort+10），
      * 主宫格不再展示自定义分类；选中一律去「全部」面板。
      * 删除沿用设置页的 applyCategoryDelete：存量流水自动归到「其他」。
      *
@@ -1594,7 +1762,7 @@
         }
         if (!customs.length) {
           holder.appendChild(make('p', 's-add-quick__empty',
-            '还没有自定义分类。建一个（比如「烟钱」「猫粮」），它会永久保存，收进「全部」分类面板，记账时在那里选。'));
+            '还没有自定义分类。建一个（比如「烟钱」「猫粮」），它会永久保存，排在「全部」分类的最后面。'));
         } else {
           var list = make('div', 's-add-quick__list');
           for (var j = 0; j < customs.length; j += 1) {
@@ -1605,7 +1773,7 @@
         var newBtn = button('c-btn c-btn--primary c-btn--block s-add-quick__new', '＋ 新建分类');
         newBtn.addEventListener('click', function () { paintForm(); });
         holder.appendChild(newBtn);
-        holder.appendChild(make('p', 's-add-quick__hint', '新建的分类会永久保存，统一收进「全部」分类面板，记账时在那里选。'));
+        holder.appendChild(make('p', 's-add-quick__hint', '新建的分类会永久保存，排在「全部」分类的最后面。'));
       }
 
       function customRow(category) {
@@ -1763,7 +1931,7 @@
             rememberIcon(icon);
             refreshCategoriesFromDb();
             renderGrid();
-            showToast('已保存，收进「全部」分类面板', { type: 'success' });
+            showToast('已保存，排在「全部」最后', { type: 'success' });
             sheet.close('created');
           });
         }
@@ -1872,7 +2040,7 @@
       return '¥' + text.replace(/\.00$/, '');
     }
 
-    /* 常用模板行已并入属性栏/宫格排序（mainCategories 用 recentPairs 优先露出常用分类） */
+    /* 常用模板行已并入属性栏（宫格已分组拉通全量分类，不再按最近/高频截取） */
 
     /* ---------- 备注（属性栏 chip + sheet 编辑，页面不再常驻输入框） ---------- */
     function syncNote() {
@@ -3118,11 +3286,6 @@
       var target = event.target;
       if (!target || !target.closest) return;
       if (holdFired) { holdFired = false; return; }
-      var allCellNode = target.closest('.s-add-cat--all');
-      if (allCellNode) {
-        openAllCategories();
-        return;
-      }
       var quickCell = target.closest('.s-add-cat--quick');
       if (quickCell) {
         openQuickItems();
@@ -3132,6 +3295,15 @@
       if (!cell) return;
       setCategory(cell.getAttribute('data-category'));
       openKeypad();
+    });
+
+    /* 现成种类弹层：点弹层与大类格以外的空白即收起（listen 随屏销毁自动解绑） */
+    listen(global.document, 'click', function (event) {
+      if (presetPopGroup < 0 || !presetPopNode) { return; }
+      var t = event.target;
+      if (t && presetPopNode.contains(t)) { return; }
+      if (t && t.closest && t.closest('[data-preset-group]')) { return; }
+      closePresetPop(true);
     });
 
     function openCategoryManage() {
@@ -3231,8 +3403,7 @@
     syncTags();
     syncAmount();
     syncSaveState();
-    /* 键盘常驻：进入页面即展开，键盘就是这个页面的主体 */
-    openKeypad();
+    /* 进入页面不自动弹键盘（键盘收起时全量分类一目了然）；点金额或选分类后再展开 */
 
     listen(global.document, 'visibilitychange', onViewportChange);
   }

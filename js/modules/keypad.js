@@ -6,7 +6,8 @@
  *   })
  * 返回句柄：{ el, root, value(), setValue(), cents(), clear(), confirm(),
  *            disable(), enable(), setVibrate(), destroy() }
- * 规则：1–9/0/小数点/删除/完成；金额最多 9 位整数 + 2 位小数；
+ * 规则：1–9/0/小数点/＋/−/删除/完成；支持 128.5+30-8.5 算式，完成键取合计（须 > 0）；
+ *       每段金额最多 9 位整数 + 2 位小数；符号不能打头、连按换符号；
  *       长按删除连删；确认结果 {ok:true,cents} 或 {ok:false,code}；
  *       数字键用 CSS Grid 4 列，键高 ≥44px；中文 aria-label。
  * 依赖：XZB.core.money.parseAmount（UI 层必须先加载 core/money.js）。
@@ -63,9 +64,7 @@
     return true;
   }
 
-  function sanitize(value, maxInteger, maxDecimals) {
-    var text = String(value === null || value === undefined ? '' : value);
-    text = text.replace(/[^\d.]/g, '');
+  function sanitizeSegment(text, maxInteger, maxDecimals) {
     var dot = text.indexOf('.');
     if (dot >= 0) {
       var intPart = text.slice(0, dot).replace(/^0+(?=\d)/, '').slice(0, maxInteger);
@@ -73,8 +72,26 @@
       if (!intPart) { intPart = '0'; }
       return intPart + '.' + decPart;
     }
-    text = text.replace(/^0+(?=\d)/, '').slice(0, maxInteger);
-    return text;
+    return text.replace(/^0+(?=\d)/, '').slice(0, maxInteger);
+  }
+
+  /* 算式感知清洗：允许 + / −，逐段按「9 位整数 + 2 位小数」清洗后回拼；
+   * 符号不打头、不连续；单段（外部 setValue 预填）行为与旧版一致。 */
+  function sanitize(value, maxInteger, maxDecimals) {
+    var text = String(value === null || value === undefined ? '' : value);
+    var parts = text.split(/([+\-])/);
+    var out = [];
+    for (var i = 0; i < parts.length; i += 1) {
+      var part = parts[i];
+      if (part === '+' || part === '-') {
+        if (out.length && out[out.length - 1] !== '+' && out[out.length - 1] !== '-') { out.push(part); }
+        continue;
+      }
+      var cleaned = part.replace(/[^\d.]/g, '');
+      if (!cleaned) { continue; }
+      out.push(sanitizeSegment(cleaned, maxInteger, maxDecimals));
+    }
+    return out.join('');
   }
 
   function mount(el, options) {
@@ -120,6 +137,10 @@
 
     var amount = make('span', 'c-keypad__amount is-empty', '0.00');
     display.appendChild(amount);
+
+    var totalHint = make('span', 'c-keypad__total', '');
+    totalHint.setAttribute('aria-hidden', 'true');
+    display.appendChild(totalHint);
     root.appendChild(display);
 
     var grid = make('div', 'c-keypad__grid');
@@ -139,12 +160,28 @@
       } catch (error) { /* iOS 无震动，静默降级 */ }
     }
 
+    /* 算式求值：按 + / − 切段，逐段 parseAmount 后左结合；悬挂小数点按前缀处理 */
     function parseCurrent() {
       var m = money();
       if (!m || typeof m.parseAmount !== 'function') {
         return { ok: false, code: 'E_MONEY_MISSING' };
       }
-      return m.parseAmount(value, { allowNegative: false });
+      var parts = value.split(/([+\-])/);
+      var total = null;
+      var op = '+';
+      for (var i = 0; i < parts.length; i += 1) {
+        var part = parts[i];
+        if (part === '+' || part === '-') { op = part; continue; }
+        if (!part) { continue; }
+        var norm = part.replace(/\.$/, '');
+        if (!norm) { continue; }
+        var parsed = m.parseAmount(norm, { allowNegative: false });
+        if (!parsed || !parsed.ok) { return { ok: false, code: (parsed && parsed.code) || 'E_AMOUNT_FORMAT' }; }
+        if (total === null) { total = parsed.cents; }
+        else { total = op === '+' ? total + parsed.cents : total - parsed.cents; }
+      }
+      if (total === null) { return { ok: false, code: 'E_AMOUNT_EMPTY' }; }
+      return { ok: true, cents: total };
     }
 
     function render() {
@@ -158,7 +195,16 @@
         zero = parsed.ok && parsed.cents === 0;
       }
       amount.classList.toggle('is-empty', zero);
-      display.setAttribute('aria-label', '金额 ' + text + ' 元');
+      if (/[+\-]/.test(value)) {
+        var ev = parseCurrent();
+        var m = money();
+        totalHint.textContent = ev.ok && m && typeof m.formatCents === 'function'
+          ? '= ' + m.formatCents(ev.cents)
+          : '';
+      } else {
+        totalHint.textContent = '';
+      }
+      display.setAttribute('aria-label', '金额 ' + text + ' 元' + (totalHint.textContent ? '，合计 ' + totalHint.textContent.slice(2) + ' 元' : ''));
 
       if (confirmBtn) {
         if (disabled || zero) {
@@ -179,24 +225,31 @@
       }
     }
 
+    function currentSegment() {
+      var i = value.length;
+      while (i > 0 && value.charAt(i - 1) !== '+' && value.charAt(i - 1) !== '-') { i -= 1; }
+      return value.slice(i);
+    }
+
     function appendDigit(digit) {
       if (disabled || destroyed) { return; }
-      var next = value;
-      var dot = next.indexOf('.');
+      var seg = currentSegment();
+      var next;
+      var dot = seg.indexOf('.');
 
       if (dot >= 0) {
-        var decimals = next.slice(dot + 1);
+        var decimals = seg.slice(dot + 1);
         if (decimals.length >= maxDecimals) { return; }
-        next += digit;
+        next = seg + digit;
       } else {
-        if (next.length >= maxInteger && next !== '0') { return; }
-        if (next === '0') {
+        if (seg.length >= maxInteger && seg !== '0') { return; }
+        if (seg === '0') {
           next = digit === '0' ? '0' : digit;
         } else {
-          next += digit;
+          next = seg + digit;
         }
       }
-      value = next;
+      value = value.slice(0, value.length - seg.length) + next;
       render();
       notifyChange();
       vibrate();
@@ -204,8 +257,25 @@
 
     function appendDot() {
       if (disabled || destroyed || maxDecimals === 0) { return; }
-      if (value.indexOf('.') >= 0) { return; }
-      value = value ? value + '.' : '0.';
+      var seg = currentSegment();
+      if (seg.indexOf('.') >= 0) { return; }
+      var next = seg ? seg + '.' : '0.';
+      value = value.slice(0, value.length - seg.length) + next;
+      render();
+      notifyChange();
+      vibrate();
+    }
+
+    /* 加减法：符号不能打头；连按换符号；悬挂小数点（如 5.）先收掉再接符号 */
+    function appendOperator(op) {
+      if (disabled || destroyed) { return; }
+      if (!value) { return; }
+      var last = value.charAt(value.length - 1);
+      if (last === '+' || last === '-' || last === '.') {
+        value = value.slice(0, -1) + op;
+      } else {
+        value += op;
+      }
       render();
       notifyChange();
       vibrate();
@@ -254,10 +324,30 @@
     }
     grid.appendChild(deleteBtn);
 
-    /* 第 2 行：4 5 6 + 跨 3 行的完成键 */
+    /* 第 2 行：4 5 6 ＋ */
     addDigitKey('4', '4');
     addDigitKey('5', '5');
     addDigitKey('6', '6');
+
+    var plusBtn = makeKey('plus', '＋', '加号，金额继续加一笔', 'c-keypad__key--op');
+    plusBtn.addEventListener('click', function () { appendOperator('+'); });
+    grid.appendChild(plusBtn);
+
+    /* 第 3 行：7 8 9 − */
+    addDigitKey('7', '7');
+    addDigitKey('8', '8');
+    addDigitKey('9', '9');
+
+    var minusBtn = makeKey('minus', '−', '减号，从金额里减一笔', 'c-keypad__key--op');
+    minusBtn.addEventListener('click', function () { appendOperator('-'); });
+    grid.appendChild(minusBtn);
+
+    /* 第 4 行：. 0（跨两列）完成；双零键已按 2.28.5 反馈删除 */
+    var dotBtn = makeKey('dot', '.', '小数点', 'c-keypad__key--dot');
+    dotBtn.addEventListener('click', appendDot);
+    grid.appendChild(dotBtn);
+
+    addDigitKey('0', '0', 'span 2');
 
     confirmBtn = makeKey('confirm', '完成', '确认金额，完成记账', 'c-keypad__key--confirm');
     confirmBtn.addEventListener('click', function () {
@@ -265,25 +355,6 @@
       confirm();
     });
     grid.appendChild(confirmBtn);
-
-    /* 第 3 行：7 8 9 */
-    addDigitKey('7', '7');
-    addDigitKey('8', '8');
-    addDigitKey('9', '9');
-
-    /* 第 4 行：. 0 00（第 4 列由完成键跨行占据） */
-    var dotBtn = makeKey('dot', '.', '小数点', 'c-keypad__key--dot');
-    dotBtn.addEventListener('click', appendDot);
-    grid.appendChild(dotBtn);
-
-    addDigitKey('0', '0');
-
-    var doubleZero = makeKey('00', '00', '两个零', 'c-keypad__key--zero');
-    doubleZero.addEventListener('click', function () {
-      appendDigit('0');
-      appendDigit('0');
-    });
-    grid.appendChild(doubleZero);
 
     /* ---------- 长按删除连删 ---------- */
     var holdTimer = 0;
@@ -373,6 +444,13 @@
         result = { ok: false, code: 'E_AMOUNT_ZERO' };
       } else {
         result = { ok: true, cents: parsed.cents };
+        /* 内部值归一为合计的纯数字串：onConfirm 里 value() 取到的是合计，显示屏也归位 */
+        var m1 = money();
+        if (m1 && typeof m1.formatCents === 'function') {
+          value = sanitize(String(m1.formatCents(parsed.cents)).replace(/[^\d.]/g, ''), maxInteger, maxDecimals);
+        } else {
+          value = sanitize(String(parsed.cents / 100), maxInteger, maxDecimals);
+        }
       }
       if (typeof opts.onConfirm === 'function') {
         try { opts.onConfirm(result); } catch (error) {

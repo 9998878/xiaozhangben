@@ -154,7 +154,7 @@ if (!iconsBlock) { throw new Error('index.html 中找不到 icons 模块内联�
 vm.runInContext(iconsBlock, sandbox, { filename: 'inline:icons.js' });
 
 /* 模拟 app.js（加载链最后一环）把版本置为当前发布版本之后的最终状态。 */
-vm.runInContext("XZB.version = '2.28.4';", sandbox, { filename: 'inline:app-version-stub' });
+vm.runInContext("XZB.version = '2.28.5';", sandbox, { filename: 'inline:app-version-stub' });
 
 const nlSrc = fs.readFileSync(path.join(ROOT, 'js/modules/nl.js'), 'utf8');
 vm.runInContext(nlSrc, sandbox, { filename: 'js/modules/nl.js' });
@@ -623,21 +623,21 @@ test('6.5 index.html SYSTEM_CATEGORY_KEYS 字面量含 9 个新增 icon key', fu
 
 /* ============================== 用例 7：版本一致性 ============================== */
 
-section('用例 7：版本号 2.28.4 三处一致，无旧版本残留');
+section('用例 7：版本号 2.28.5 三处一致，无旧版本残留');
 
-test('7.1 index.html 含 XZB.version = \'2.28.4\'', function () {
-  check(/XZB\.version\s*=\s*'2\.28\.4'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.4\'');
+test('7.1 index.html 含 XZB.version = \'2.28.5\'', function () {
+  check(/XZB\.version\s*=\s*'2\.28\.5'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.5\'');
 });
 
-test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.4\' 且 CACHE_LABEL 含 2.28.4', function () {
-  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.4'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.4');
+test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.5\' 且 CACHE_LABEL 含 2.28.5', function () {
+  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.5'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.5');
   const m = /CACHE_LABEL\s*=\s*'([^']*)'/.exec(SW_JS);
   check(m, 'sw.js 找不到 CACHE_LABEL');
-  check(m[1].indexOf('2.28.4') >= 0, 'CACHE_LABEL 不含 2.28.4：' + m[1]);
+  check(m[1].indexOf('2.28.5') >= 0, 'CACHE_LABEL 不含 2.28.5：' + m[1]);
 });
 
-test('7.3 版本载体里无上一版 2.28.3 残留', function () {
-  const old = '2.28.' + String.fromCharCode(51); // 上一发布版 2.28.3
+test('7.3 版本载体里无上一版 2.28.4 残留', function () {
+  const old = '2.28.' + String.fromCharCode(52); // 上一发布版 2.28.4
   check(INDEX_HTML.indexOf("XZB.version = '" + old + "'") < 0, 'index.html 仍有旧 XZB.version');
   check(SW_JS.indexOf('xzb2-v' + old) < 0, 'sw.js CACHE_NAME 仍含旧版本');
   check(SW_JS.indexOf('小账本2-v' + old) < 0, 'sw.js CACHE_LABEL 仍含旧版本');

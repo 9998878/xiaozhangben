@@ -2248,11 +2248,24 @@ textarea::selection {
 
 .c-keypad__key--confirm {
   grid-column: 4;
-  grid-row: 2 / span 3;
+  grid-row: 4;
   background: var(--c-tint);
   color: var(--c-on-tint);
   font-size: var(--fs-body);
   font-weight: var(--fw-bold);
+}
+/* 2.28.5 键盘加减法：＋/− 运算符键与算式实时合计 */
+.c-keypad__key--op {
+  color: var(--c-text-2);
+  font-size: 20px;
+  font-weight: var(--fw-medium);
+}
+.c-keypad__total {
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--c-text-2);
+  font-size: var(--fs-footnote);
+  white-space: nowrap;
 }
 
 .c-keypad__key--confirm:active,
@@ -5899,6 +5912,68 @@ textarea::selection {
   margin: var(--sp-2) 0 var(--sp-1);
   font-size: var(--fs-footnote);
   color: var(--c-text-3);
+}
+/* ---------- 现成种类二级弹层（2.28.5）：锚定大类图标，从图标位置弹出而非底部 ---------- */
+.s-add-grid-wrap {
+  position: relative;
+}
+.s-add-presets-pop {
+  position: absolute;
+  z-index: var(--z-sticky);
+  width: min(320px, calc(100% - 20px));
+  background: var(--c-bg-elev);
+  border: var(--hairline) solid var(--c-hairline);
+  border-radius: 14px;
+  box-shadow: var(--shadow-2);
+  animation: s-add-pop-in .16s ease-out;
+}
+.s-add-presets-pop--up {
+  transform-origin: bottom center;
+}
+.s-add-presets-pop::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: var(--pop-arrow, 24px);
+  width: 10px;
+  height: 10px;
+  background: var(--c-bg-elev);
+  border-left: var(--hairline) solid var(--c-hairline);
+  border-top: var(--hairline) solid var(--c-hairline);
+  transform: rotate(45deg);
+}
+.s-add-presets-pop--up::before {
+  top: auto;
+  bottom: -5px;
+  transform: rotate(225deg);
+}
+@keyframes s-add-pop-in {
+  from { transform: scale(.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.s-add-presets-pop__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px 6px;
+  font-size: var(--fs-footnote);
+  color: var(--c-text-3);
+}
+.s-add-presets-pop__x {
+  border: none;
+  background: none;
+  color: var(--c-text-3);
+  font-size: var(--fs-footnote);
+  padding: 4px 6px;
+}
+.s-add-presets-pop__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 6px;
+  padding: 2px 12px 12px;
+}
+.s-add-presets-pop .is-added {
+  opacity: .45;
 }
 .s-add-all__grid {
   display: grid;
@@ -32863,7 +32938,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.28.4';
+  XZB.version = '2.28.5';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
