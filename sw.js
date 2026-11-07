@@ -120,6 +120,18 @@
     }));
   }
 
+  /* cache.add 会命中 HTTP 缓存——iOS 会把旧响应直接塞进新版本缓存
+     （2.28.5 手机端拿不到新键盘/新面板的根因）。这里强制 cache:'reload'
+     绕过 HTTP 缓存再写 Cache Storage，预缓存的永远是服务器最新文件。 */
+  async function addFresh(cache, url) {
+    var request = new Request(url, { cache: 'reload' });
+    var response = await fetch(request);
+    if (!response || !response.ok) {
+      throw new Error('E_PRECACHE_FAILED ' + url);
+    }
+    await cache.put(request, response);
+  }
+
   /* 逐条预缓存：单条失败只记录、不中断其余条目；失败清单留给 activate 后空闲重试 */
   async function precache() {
     var cache = await caches.open(CACHE_NAME);
@@ -127,7 +139,7 @@
     for (var i = 0; i < PRECACHE.length; i += 1) {
       var url = PRECACHE[i];
       try {
-        await cache.add(url);
+        await addFresh(cache, url);
       } catch (error) {
         failed.push(url);
       }
@@ -169,7 +181,7 @@
     var failed = [];
     for (var i = 0; i < list.length; i += 1) {
       try {
-        await cache.add(list[i]);
+        await addFresh(cache, list[i]);
       } catch (error) {
         failed.push(list[i]);
       }
