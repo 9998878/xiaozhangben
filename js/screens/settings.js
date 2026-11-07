@@ -1084,7 +1084,8 @@
     /* 震动开关按平台出现（iOS Safari 无 navigator.vibrate）；2.11.1 起点按即震。 */
     var rows = [themeRow(ctx)];
     var haptics = XZB.ui && XZB.ui.haptics;
-    if (haptics && typeof haptics.supported === 'function' && haptics.supported()) {
+    var hapticsOk = !!(haptics && typeof haptics.supported === 'function' && haptics.supported());
+    if (hapticsOk) {
       rows.push(switchRow(ctx, {
         icon: 'sparkles',
         title: '点按震动',
@@ -1093,6 +1094,22 @@
         onChange: function (next) {
           var saved = prefsSet(ctx, 'haptics', next);
           try { haptics.setEnabled(next); } catch (error) { /* 忽略 */ }
+          return saved;
+        }
+      }));
+    }
+    /* 点按音效与震动互补：只在不震设备（iPhone）上出现——能震的设备震即可，
+       留一个震不了/响不了的开关都比没有更伤信任（2.1 的老结论继续成立）。 */
+    var sound = XZB.ui && XZB.ui.sound;
+    if (!hapticsOk && sound && typeof sound.supported === 'function' && sound.supported()) {
+      rows.push(switchRow(ctx, {
+        icon: 'bell',
+        title: '点按音效',
+        sub: '每次点击给一声轻响，代替不可用的震动',
+        checked: prefsGet(ctx, 'sound', true) !== false,
+        onChange: function (next) {
+          var saved = prefsSet(ctx, 'sound', next);
+          try { sound.setEnabled(next); } catch (error) { /* 忽略 */ }
           return saved;
         }
       }));

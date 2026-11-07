@@ -27741,6 +27741,154 @@ textarea::selection {
 
 </script>
   <script>
+/* 小账本 2.0 · js/ui/sound.js · 点按音效（2.28.6 新增）
+ * ------------------------------------------------------------------
+ * iPhone 没有 navigator.vibrate，网页永远震不了（见 ui/haptics 头注释）。
+ * 本模块是 iPhone 上的「替身手感」：把「点一下」合成一声极短的「嗒」，
+ * 用 Web Audio 现场合成（不是音频文件，零资源、零请求）。
+ *
+ * 平台互补（别再走回头路）：
+ *   · 能震的设备（Android 等）：本模块全程闭嘴，只震不出声，
+ *     避免震+声叠成「又震又响」的双重反馈。
+ *   · 不能震的设备（iPhone）：本模块接管，haptics 静默失败、sound 出声。
+ *   · 设置页的「点按音效」开关只在不震设备上出现，与震动开关正好互补。
+ *
+ * 公开：XZB.ui.sound
+ *   supported()            当前设备能不能出声
+ *   fire(kind)             按类型出一声，返回是否真的出了
+ *   setEnabled(bool) / isEnabled()
+ *   applyPrefs(prefs)      启动时把偏好灌进来（默认开）
+ *
+ * 类型与 haptics 同名同语义：tap｜key｜select｜success（双响）｜warn｜error
+ * 约束：不读业务数据、不写存储、出错静默（音效失败绝不能影响记账）。
+ * 静音拨片：iOS 的静音开关下可能不响——静音就该安静，符合直觉。
+ */
+(function (global) {
+  'use strict';
+
+  var XZB = global.XZB || (global.XZB = {});
+  var UI = XZB.UI || (XZB.UI = {});
+
+  /* 音色表：freq 越高越「嗒」，越低越「咚」；gain 压得很低，只当手感不当铃声 */
+  var KINDS = {
+    tap:    { freq: 1800, ms: 8,  gain: 0.05 },
+    key:    { freq: 1600, ms: 6,  gain: 0.045 },
+    select: { freq: 1300, ms: 12, gain: 0.06 },
+    warn:   { freq: 900,  ms: 18, gain: 0.07 },
+    error:  { freq: 700,  ms: 22, gain: 0.075 }
+    /* success 没有单音色：双响（低-高两声），在 fire() 里特判 */
+  };
+
+  /* 与 haptics 同一口径：两次出声最小间隔，连点不糊成机关枪 */
+  var MIN_GAP = 32;
+
+  var enabled = true;
+  var lastAt = 0;
+  var audioCtx = null;
+
+  function supported() {
+    return !!(global.AudioContext || global.webkitAudioContext);
+  }
+
+  /* 平台互补的闸门：haptics 能震的设备，音效一律不响 */
+  function hapticsAvailable() {
+    var group = XZB.ui || XZB.UI || null;
+    var api = group ? group.haptics : null;
+    return !!(api && typeof api.supported === 'function' && api.supported());
+  }
+
+  function setEnabled(on) {
+    enabled = on !== false;
+  }
+
+  function isEnabled() {
+    return enabled;
+  }
+
+  /* AudioContext 必须在用户手势内创建/唤醒才能出声（iOS 的硬规矩）。
+     fire() 只会被 press 引擎的 pointerup 和点击回调带进来，天然是手势内。 */
+  function ensureCtx() {
+    var Ctor = global.AudioContext || global.webkitAudioContext;
+    if (!Ctor) { return null; }
+    if (!audioCtx) {
+      try { audioCtx = new Ctor(); } catch (error) { return null; }
+    }
+    if (audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') {
+      try { audioCtx.resume(); } catch (error) { /* 出错即哑，下次再试 */ }
+    }
+    return audioCtx;
+  }
+
+  /* 一声「嗒」：正弦波 + 指数衰减包络，ms 毫秒内归零，之后摘掉节点防泄漏 */
+  function tickAt(ac, freq, ms, gain, when) {
+    try {
+      var osc = ac.createOscillator();
+      var env = ac.createGain();
+      var t = ac.currentTime + (when || 0);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      env.gain.setValueAtTime(gain, t);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000);
+      osc.connect(env);
+      env.connect(ac.destination);
+      osc.start(t);
+      osc.stop(t + ms / 1000 + 0.02);
+      osc.onended = function () {
+        try { osc.disconnect(); env.disconnect(); } catch (error) { /* 忽略 */ }
+      };
+    } catch (error) { /* 静默：音效失败绝不能影响记账 */ }
+  }
+
+  function fire(kind) {
+    if (!enabled) { return false; }
+    if (!supported() || hapticsAvailable()) { return false; }
+    var key = String(kind || 'tap');
+    if (key === 'none' || key === 'off') { return false; }
+    var at = Date.now();
+    if (at - lastAt < MIN_GAP) { return false; }
+    lastAt = at;
+    var ac = ensureCtx();
+    if (!ac) { return false; }
+    if (key === 'success') {
+      tickAt(ac, 1300, 10, 0.055, 0);
+      tickAt(ac, 1900, 12, 0.06, 0.07);
+      return true;
+    }
+    var spec = KINDS[key] || KINDS.tap;
+    tickAt(ac, spec.freq, spec.ms, spec.gain, 0);
+    return true;
+  }
+
+  /* 启动时灌偏好：读不到就按「开」处理，与 haptics 同口径 */
+  function applyPrefs(prefs) {
+    var source = prefs || (XZB.app && XZB.app.prefs) || null;
+    if (!source || typeof source.get !== 'function') { return; }
+    try { setEnabled(source.get('sound', true) !== false); } catch (error) { /* 保持默认 */ }
+  }
+
+  var api = Object.freeze({
+    supported: supported,
+    fire: fire,
+    setEnabled: setEnabled,
+    isEnabled: isEnabled,
+    applyPrefs: applyPrefs
+  });
+
+  UI.sound = api;
+  var lower = XZB.ui || (XZB.ui = {});
+  if (!lower.sound) { lower.sound = api; }
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+  }
+})(
+  typeof window !== 'undefined'
+    ? window
+    : (typeof globalThis !== 'undefined' ? globalThis : this)
+);
+
+</script>
+  <script>
 /* 小账本 2.0 · js/ui/press.js
  * 全局按压反馈引擎。职责：在指针按下/抬起的正确时机给元素加/去 .is-pressed，
  * 并在「确认是一次点按」时交给 XZB.ui.haptics 震一下（滑动不算点按，不震）。
@@ -27808,12 +27956,20 @@ textarea::selection {
     return group ? group.haptics : null;
   }
 
+  function soundApi() {
+    var group = XZB.ui || XZB.UI || null;
+    return group ? group.sound : null;
+  }
+
   function tick(el) {
-    var api = hapticsApi();
-    if (!api || typeof api.fire !== 'function') { return; }
     var kind = el && el.getAttribute ? el.getAttribute('data-haptic') : '';
     if (kind === 'none') { return; }
-    api.fire(kind || 'tap');
+    /* 震与声各发各的：Android 只有震（sound 见 hapticsAvailable 自行闭嘴），
+       iPhone 只有声（haptics.fire 见 supported() 自行失败）。 */
+    var haptic = hapticsApi();
+    if (haptic && typeof haptic.fire === 'function') { haptic.fire(kind || 'tap'); }
+    var sound = soundApi();
+    if (sound && typeof sound.fire === 'function') { sound.fire(kind || 'tap'); }
   }
 
   function press(el) {
@@ -29597,6 +29753,14 @@ textarea::selection {
       if (type === 'success') { haptics.fire('success'); }
       else if (type === 'danger') { haptics.fire('error'); }
       else if (type === 'warning') { haptics.fire('warn'); }
+    }
+    /* 音效跟着同一套类型走（sound.fire 自己判断平台，能震的设备不响；
+       与 tap 同在 32ms 内也会被节流吃掉，口径与震动一致）。 */
+    var sound = XZB.ui && XZB.ui.sound;
+    if (sound && typeof sound.fire === 'function') {
+      if (type === 'success') { sound.fire('success'); }
+      else if (type === 'danger') { sound.fire('error'); }
+      else if (type === 'warning') { sound.fire('warn'); }
     }
 
     /* 新的顶掉旧的：旧提示不播退出动画，直接移除。 */
@@ -32938,7 +33102,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.28.5';
+  XZB.version = '2.28.6';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -33214,6 +33378,14 @@ textarea::selection {
      haptics 自己会返回 false，这里不需要判断平台。 */
   function applyHaptics() {
     var api = XZB.ui && XZB.ui.haptics;
+    if (!api || typeof api.applyPrefs !== 'function') return;
+    api.applyPrefs(prefsApi);
+  }
+
+  /* 点按音效：把偏好灌进 ui/sound（默认开）。能震的设备 sound 自己闭嘴，
+     这里同样不需要判断平台。 */
+  function applySound() {
+    var api = XZB.ui && XZB.ui.sound;
     if (!api || typeof api.applyPrefs !== 'function') return;
     api.applyPrefs(prefsApi);
   }
@@ -34019,6 +34191,7 @@ textarea::selection {
 
     applyTheme();
     applyHaptics();
+    applySound();
     watchThemeMedia();
 
     Promise.resolve().then(function () {
