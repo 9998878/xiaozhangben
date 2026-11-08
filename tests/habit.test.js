@@ -264,6 +264,21 @@ test('6.4 异常兜底：db 为 null / prefs 为 null → null 不抛错', funct
   check(tip || tip === null, 'prefs null 不抛错');
 });
 
+section('用例 7：时间画像取全天所有发生时刻（E2E 抓到的 bug 回归）');
+test('7.1 同一天 12:10 与 17:39 各一笔：傍晚查看也应命中（旧逻辑按首见 12:10 去重而漏）', function () {
+  const nowEvening = new Date(2026, 10, 8, 17, 54, 0);
+  const list = [
+    tx('noon1', '2026-11-05', '12:10'),
+    tx('eve1', '2026-11-05', '17:39'),
+    tx('noon2', '2026-11-06', '12:10'),
+    tx('eve2', '2026-11-06', '17:39'),
+    tx('eve3', '2026-11-07', '17:39')
+  ];
+  const tip = habit.suggestHabits(dbWith(list), fakePrefs(), nowEvening);
+  check(tip, '17:39 的发生时刻必须参与触发窗');
+  checkEq(tip.votes, 3, '票数仍按天=3');
+});
+
 /* ============================== 汇总 ============================== */
 
 console.log('\n===== 汇总 =====');

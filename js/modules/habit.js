@@ -89,9 +89,11 @@
         if (!g) {
           g = groups[key] = { key: key, categoryId: catId, days: {}, minutes: [], latest: null };
         }
+        /* 时间画像取全天所有发生时刻（首见时刻不代表全部——E2E 实测抓到的 bug：
+           同一天 12:10 与 17:39 各一笔时，17:39 曾被去重掉导致傍晚不触发） */
+        g.minutes.push(mins);
         if (!g.days[date]) {
           g.days[date] = true;    /* 每天只投一票：同日多笔不加权 */
-          g.minutes.push(mins);
         }
         if (!g.latest || date > g.latest.date ||
             (date === g.latest.date && String(tx.time || '') > String(g.latest.time || ''))) {
