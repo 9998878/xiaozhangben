@@ -419,9 +419,12 @@
 
   /* 分类：最长匹配（分类名 + aliases），再看 nl 的别名表（借 nl.parse 拿不到别名表，这里自带一份最小集合） */
   var EXTRA_ALIASES = {
-    ca_food: ['吃饭', '午饭', '晚饭', '早饭', '外卖', '咖啡', '奶茶', '零食'],
-    ca_transport: ['打车', '地铁', '公交', '高铁', '油费', '停车', '加油'],
-    ca_shopping: ['购物', '网购', '买衣服', '超市'],
+    /* 2.29.2：品牌别名扩充（竞品口径）——与 nl.js CATEGORY_ALIASES 同步 */
+    ca_food: ['吃饭', '午饭', '晚饭', '早饭', '外卖', '咖啡', '奶茶', '零食',
+      '麦当劳', '肯德基', '星巴克', '瑞幸', '喜茶', '奈雪', '烧烤', '火锅', '美团', '饿了么'],
+    ca_transport: ['打车', '地铁', '公交', '高铁', '油费', '停车', '加油',
+      '滴滴', '曹操', '叫车', '网约车', '火车票'],
+    ca_shopping: ['购物', '网购', '买衣服', '超市', '淘宝', '京东', '拼多多', '盒马', '山姆', '电商'],
     ca_home: ['房租', '水电', '物业', '燃气', '宽带'],
     ca_fun: ['电影', '游戏', '演出', '会员', '旅游'],
     ca_health: ['看病', '买药', '体检'],
@@ -430,7 +433,7 @@
     ca_daily: ['日用', '纸巾', '洗衣液'],
     ca_snack: ['奶茶', '甜品', '蛋糕'],
     /* 2.28.2：ca_veg 是 ca_veggie（蔬菜）改名前的残留——死键让 买菜/菜市场 永远路由失败 */
-    ca_veggie: ['买菜', '菜市场'],
+    ca_veggie: ['买菜', '菜市场', '水果', '生鲜'],
     /* 2.26.9 扩充分类：与种子/nl 词表同步（礼物/随礼已从 ca_social 摘除归新分类） */
     ca_books: ['书籍', '买书', '图书', '小说', '漫画', '纸质书', '电子书'],
     ca_gift_money: ['礼金', '随礼', '份子钱', '喜宴', '红包支出'],
@@ -552,14 +555,29 @@
   }
 
   /* 查询用日期范围 */
+  /* 周末锚点：周六（2.29.2 补齐竞品口径——「上周末/本周末/下周末」此前会静默落回本月） */
+  function weekendRange(cx, offset) {
+    var wr = weekRange(cx, offset);
+    var sat = addDays(wr.from, 5);
+    var tag = offset === 0 ? '本' : (offset === -1 ? '上' : '下');
+    return { key: offset === 0 ? 'weekend' : (offset === -1 ? 'lweekend' : 'nweekend'), from: sat, to: sat, label: tag + '周末（' + sat.slice(5).replace('-', '月') + '）' };
+  }
+
   function resolveRange(text, cx) {
     var s = String(text || '');
     var today = cx.today;
+    /* 顺序即正确性：长词必须先于其子串判定（大前天<前天、上周末<周末<本周、上上周<上周） */
     if (/今天|今日/.test(s)) { return { key: 'today', from: today, to: today, label: '今天' }; }
     if (/昨天|昨日/.test(s)) { var y = addDays(today, -1); return { key: 'yesterday', from: y, to: y, label: '昨天' }; }
+    if (/大前天/.test(s)) { var d3 = addDays(today, -3); return { key: 'd3', from: d3, to: d3, label: '大前天' }; }
     if (/前天/.test(s)) { var q = addDays(today, -2); return { key: 'before', from: q, to: q, label: '前天' }; }
+    if (/上周末/.test(s)) { return weekendRange(cx, -1); }
+    if (/下周末/.test(s)) { return weekendRange(cx, 1); }
+    if (/本周末|这周末|周末/.test(s)) { return weekendRange(cx, 0); }
+    if (/上上周/.test(s)) { return weekRange(cx, -2); }
     if (/本周|这周|这星期/.test(s)) { return weekRange(cx, 0); }
     if (/上周|上个星期|上星期/.test(s)) { return weekRange(cx, -1); }
+    if (/上上个月|上上月/.test(s)) { return monthRangeOf(cx, -2); }
     if (/上个月|上月/.test(s)) { return monthRangeOf(cx, -1); }
     if (/这个月|本月|这月/.test(s)) { return monthRangeOf(cx, 0); }
     if (/今年|本年/.test(s)) {
@@ -569,6 +587,10 @@
     if (/去年/.test(s)) {
       var y1 = String(Number(today.slice(0, 4)) - 1);
       return { key: 'lyear', from: y1 + '-01-01', to: y1 + '-12-31', label: y1 + ' 年' };
+    }
+    if (/前年/.test(s)) {
+      var y2 = String(Number(today.slice(0, 4)) - 2);
+      return { key: 'lyear2', from: y2 + '-01-01', to: y2 + '-12-31', label: y2 + ' 年' };
     }
     if (/近\s*7\s*天|最近一周|近一周/.test(s)) { return { key: '7d', from: addDays(today, -6), to: today, label: '近 7 天' }; }
     if (/近\s*30\s*天|最近一个月|近一月/.test(s)) { return { key: '30d', from: addDays(today, -29), to: today, label: '近 30 天' }; }
