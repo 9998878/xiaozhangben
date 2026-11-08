@@ -623,21 +623,21 @@ test('6.5 index.html SYSTEM_CATEGORY_KEYS 字面量含 9 个新增 icon key', fu
 
 /* ============================== 用例 7：版本一致性 ============================== */
 
-section('用例 7：版本号 2.28.9 三处一致，无旧版本残留');
+section('用例 7：版本号 2.28.10 三处一致，无旧版本残留');
 
-test('7.1 index.html 含 XZB.version = \'2.28.9\'', function () {
-  check(/XZB\.version\s*=\s*'2\.28\.9'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.9\'');
+test('7.1 index.html 含 XZB.version = \'2.28.10\'', function () {
+  check(/XZB\.version\s*=\s*'2\.28\.10'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.28.10\'');
 });
 
-test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.9\' 且 CACHE_LABEL 含 2.28.9', function () {
-  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.9'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.9');
+test('7.2 sw.js CACHE_NAME=\'xzb2-v2.28.10\' 且 CACHE_LABEL 含 2.28.10', function () {
+  check(/CACHE_NAME\s*=\s*'xzb2-v2\.28\.10'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.28.10');
   const m = /CACHE_LABEL\s*=\s*'([^']*)'/.exec(SW_JS);
   check(m, 'sw.js 找不到 CACHE_LABEL');
-  check(m[1].indexOf('2.28.9') >= 0, 'CACHE_LABEL 不含 2.28.9：' + m[1]);
+  check(m[1].indexOf('2.28.10') >= 0, 'CACHE_LABEL 不含 2.28.10：' + m[1]);
 });
 
-test('7.3 版本载体里无上一版 2.28.8 残留', function () {
-  const old = '2.28.' + String.fromCharCode(56); // 上一发布版 2.28.8
+test('7.3 版本载体里无上一版 2.28.9 残留', function () {
+  const old = '2.28.' + String.fromCharCode(57); // 上一发布版 2.28.9
   check(INDEX_HTML.indexOf("XZB.version = '" + old + "'") < 0, 'index.html 仍有旧 XZB.version');
   check(SW_JS.indexOf('xzb2-v' + old) < 0, 'sw.js CACHE_NAME 仍含旧版本');
   check(SW_JS.indexOf('小账本2-v' + old) < 0, 'sw.js CACHE_LABEL 仍含旧版本');
