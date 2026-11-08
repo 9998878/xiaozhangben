@@ -2631,6 +2631,7 @@
       '9 金额无法确定输出 need_clarify 并问一句，不要猜。',
       '10 分类拿不准留 ""，不要塞「其他」。',
       '11 听不懂或非记账请求输出 need_clarify。',
+      '12 用户没提账户时 accountId 留 ""，禁止追问「用哪个账户」（系统会自动用默认账户）；只有金额无法确定或一次超过 20 笔时才 need_clarify。',
       '',
       '今天：<TODAY>',
       '账本：<BOOK>',
@@ -3281,6 +3282,36 @@
 
   /* ---------- intent 级装配 ---------- */
 
+  /* 2.29.2：账户类补问判定——免费模型爱为「没提账户」追问「用哪个账户」。
+     账户本来就有默认口径（defaultAccountId），问了也白问；且这类补问的选项
+     （ac_* / 账户名）被点回去会当成新话头落进聊天兜底，纯属添乱。一律不问。 */
+  function isAccountClarify(proposal, ctx) {
+    var src = proposal && proposal.clarify && typeof proposal.clarify === 'object' && !Array.isArray(proposal.clarify) ? proposal.clarify : null;
+    if (!src) { return false; }
+    var q = String(src.question || '');
+    var opts = Array.isArray(src.options) ? src.options : [];
+    var names = {};
+    (ctx.liveAccounts || []).forEach(function (a) {
+      if (a && a.name) { names[String(a.name)] = true; }
+    });
+    var i;
+    var valid = 0;
+    var idHits = 0;
+    var nameHits = 0;
+    for (i = 0; i < opts.length; i += 1) {
+      var one = opts[i];
+      if (!one || typeof one !== 'object') { continue; }
+      var v = String(one.value || '');
+      var l = String(one.label || v);
+      if (!v && !l) { continue; }
+      valid += 1;
+      if (/^ac_/i.test(v)) { idHits += 1; }
+      if (names[l] || names[v]) { nameHits += 1; }
+    }
+    if (valid >= 2 && (idHits === valid || nameHits === valid)) { return true; }
+    return /哪个账户|哪个账号|哪个钱包|哪张卡/.test(q);
+  }
+
   function remoteClarify(proposal) {
     var src = proposal.clarify && typeof proposal.clarify === 'object' && !Array.isArray(proposal.clarify) ? proposal.clarify : null;
     var question = src && typeof src.question === 'string' ? short(src.question.replace(/\s+/g, ' ').trim(), 80) : '';
@@ -3561,6 +3592,16 @@
     var proposal = res.proposal;
     var intent = typeof proposal.intent === 'string' ? proposal.intent : '';
     if (intent === 'need_clarify') {
+      /* 2.29.2：账户类补问不问——回落本地解析（本地会填默认账户，直接出预览/直记）。
+         mode 用 'local'：这不是云端失败，不得套「回落」提示。 */
+      if (isAccountClarify(proposal, ctx)) {
+        var localFall = null;
+        try { localFall = respond(text, state, ctx); } catch (error) { localFall = null; }
+        if (localFall && localFall.reply) {
+          return { state: localFall.state, reply: localFall.reply, mode: 'local', reason: '' };
+        }
+        return null;
+      }
       var ask = remoteClarify(proposal);
       if (!ask) { return null; }
       return { state: cloneState(state), reply: ask, mode: 'online', reason: '' };

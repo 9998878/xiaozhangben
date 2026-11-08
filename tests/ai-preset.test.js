@@ -418,6 +418,51 @@ regCase('6.1 同一句两次 parseCreate：plan id 与 tx id 都不同（直记+
   check(r1.plan.items[0].id !== r2.plan.items[0].id, 'tx id 不得相同（否则撞软删记录）');
 });
 
+regCase('6.2 模型问「用哪个账户」一律不问：回落本地（默认账户口径，用户实测主诉）', async function () {
+  seedPresetConfig();
+  const res = await withNet(function () {
+    return Promise.resolve({
+      status: 200,
+      text: function () {
+        return Promise.resolve(chatEnvelope(JSON.stringify({
+          intent: 'need_clarify',
+          clarify: {
+            question: '请问使用哪个账户？',
+            options: [
+              { label: '现金', value: 'ac_cash' },
+              { label: '微信', value: 'ac_wechat' },
+              { label: '支付宝', value: 'ac_alipay' }
+            ]
+          }
+        })));
+      }
+    });
+  }, true, function () {
+    return llm.respondRemote('转账 500', {}, {
+      db: {
+        accounts: [
+          { id: 'ac_cash', name: '现金', type: 'cash' },
+          { id: 'ac_wechat', name: '微信', type: 'wechat' },
+          { id: 'ac_alipay', name: '支付宝', type: 'alipay' }
+        ],
+        categories: []
+      },
+      today: '2026-11-08'
+    });
+  });
+  checkEq(res && res.mode, 'local', '账户类补问应回落本地（不得把模型的补问原样抛给用户）');
+  checkEq(res.reply && res.reply.kind, 'clarify', '转账缺转入账户应由本地补问');
+  check((res.reply.text || '').indexOf('转账') >= 0, '本地补问文案应到位');
+  const opt0 = res.reply.options && res.reply.options[0];
+  check(!!opt0 && String(opt0.value).indexOf('ac_') === 0, '本地补问选项应是本机账户 id（点回去能被 pending 正确接管）');
+});
+
+regCase('6.3 源码锁：提示词禁止问账户 + isAccountClarify 兜底在位', function () {
+  check(CORE_JS.indexOf('禁止追问「用哪个账户」') >= 0, '系统提示词应禁止账户补问（规则 12）');
+  check(CORE_JS.indexOf('function isAccountClarify(proposal, ctx)') >= 0, '应有账户补问判定');
+  check(CORE_JS.indexOf('if (isAccountClarify(proposal, ctx))') >= 0, 'need_clarify 分支应先过账户判定');
+});
+
 /* ============================== 汇总 ============================== */
 
 async function main() {
