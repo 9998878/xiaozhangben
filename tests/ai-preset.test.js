@@ -397,6 +397,27 @@ regCase('5.6 测试连接对免费预设放宽到 20s（推理模型探针 6s �
     'llmTest 应对预设端点传 LLM_PLAN_TIMEOUT_MS');
 });
 
+/* ============================== 用例 6：同句再记不撞已撤销的软删 id ============================== */
+
+section('用例 6：create 计划 id 每次提交带 nonce（记→撤→再记不得撞 E_AS_CONFLICT_ID）');
+
+regCase('6.1 同一句两次 parseCreate：plan id 与 tx id 都不同（直记+撤销后的高频路径）', function () {
+  const cx = asst.contextOf({
+    db: {
+      accounts: [{ id: 'acc_cash', name: '现金', type: 'cash' }],
+      categories: [{ id: 'ca_food', name: '吃饭', kind: 'expense' }],
+      transactions: []
+    },
+    today: '2026-11-08'
+  });
+  const r1 = asst.parseCreate('奶茶 12 现金', cx);
+  const r2 = asst.parseCreate('奶茶 12 现金', cx);
+  checkEq(r1.ok, true, '第一次应解析成功');
+  checkEq(r2.ok, true, '第二次应解析成功');
+  check(r1.plan.id !== r2.plan.id, '两次提交 plan id 不得相同');
+  check(r1.plan.items[0].id !== r2.plan.items[0].id, 'tx id 不得相同（否则撞软删记录）');
+});
+
 /* ============================== 汇总 ============================== */
 
 async function main() {

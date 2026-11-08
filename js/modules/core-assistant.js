@@ -901,6 +901,16 @@
 
   /* ============================== 解析入口 ============================== */
 
+  /* 2.29.2：每次提交一枚 nonce——plan id 若只由「原话+日期」指纹生成，同一句
+     记→撤销（软删留 id）→再记 会撞 E_AS_CONFLICT_ID（直记+撤销让这条路变成高频）。
+     重试复用只针对同一个 plan 对象（草稿/重确认），不受影响。 */
+  var submitSeq = 0;
+
+  function submitNonce() {
+    submitSeq += 1;
+    return 's' + submitSeq + 't' + Date.now();
+  }
+
   function parseCreate(text, cx) {
     var segments = splitSegments(text);
     if (!segments.length) {
@@ -909,7 +919,7 @@
     if (segments.length > MAX_BATCH) {
       return { ok: false, code: E.BATCH_TOO_LARGE, message: M.E_AS_BATCH_TOO_LARGE };
     }
-    var planId = fingerprint(text, cx, '');
+    var planId = fingerprint(text, cx, submitNonce());
     var plan = {
       id: planId,
       kind: 'create',
