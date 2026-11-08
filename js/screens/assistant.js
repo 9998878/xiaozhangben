@@ -1132,7 +1132,8 @@
       endBusy();
       var reply = (out && out.reply) || { kind: 'hint', text: '我这边没有拿到结果，再说一次试试。' };
       session.core = (out && out.state) || session.core;
-      var mode = out && out.mode === 'online' ? 'online' : 'fallback';
+      /* 2.29.2：'local' 是本地快车道（鲨鱼式秒回），不是回落——不得套「回落」文案 */
+      var mode = out && (out.mode === 'online' || out.mode === 'local') ? out.mode : 'fallback';
       var reason = (out && out.reason) || 'bad';
       setMode(mode, mode === 'online' ? '' : reason);
       afterReply(raw, reply, { mode: mode, reason: reason });

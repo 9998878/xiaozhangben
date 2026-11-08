@@ -2821,7 +2821,9 @@
     } catch (error) {
       return Promise.resolve({ ok: false, code: E.NET_CONFIG });
     }
-    return httpOnce(cfg, body).then(function (res) {
+    /* 免费预设是推理模型（gpt-oss-20b），16 token 探针也要 10 秒上下——沿用 6s 会把
+       「正在生成」误判成超时（与 2.26.11 llmPlan 的 6s 门同一类病），预设端点走 20s。 */
+    return httpOnce(cfg, body, aiIsPreset(cfg) ? LLM_PLAN_TIMEOUT_MS : LLM_TIMEOUT_MS).then(function (res) {
       if (!res || !res.ok) {
         /* reason 透传：5xx（server）与 429（rate）同码不同因，设置页文案要能区分（2.28.1） */
         return { ok: false, code: (res && res.code) || E.NET_BAD, reason: res && res.reason };
@@ -3475,6 +3477,25 @@
     });
   }
 
+  /* ---------- 本地快车道（2.29.2，竞品吸收：鲨鱼记账「3 秒记一笔」） ----------
+   * 联网开启也不再每句都等云端：明确记账句（intent=create）先跑本地解析，
+   * 整批干净（金额齐、无补问项）就直接秒回预览卡——零延迟、零限流，预览卡
+   * 本身就是纠错口。本地拿不准（缺金额/多笔画分不清/类型冲突）的难句才交给
+   * 模型。查询/改/删不上快车道：本地日期口径有盲区（如「上上周」），答错比
+   * 答慢更伤，维持云端优先。 */
+  function fastLocalReply(text, state, cx) {
+    if (detectIntent(text) !== 'create') { return null; }
+    var out = null;
+    try {
+      out = respond(text, state, cx);
+    } catch (error) {
+      return null;
+    }
+    var reply = out && out.reply;
+    if (!reply || reply.kind !== 'preview' || reply.canConfirm !== true) { return null; }
+    return { state: out.state, reply: reply, mode: 'local', reason: '' };
+  }
+
   /* respondRemote(text, state, cx) → Promise<{state, reply, mode:'online'|'local-fallback', reason}>
    * 软提示（LLM_SOFT_MS，2.26.11 起 8s）由界面消费；这里只负责硬 20s 兜底与回落，永不 reject。 */
   function respondRemote(text, state, cx) {
@@ -3492,6 +3513,12 @@
          不为这类句子白等一次解析）；失败照常回落本地。 */
       if (detectIntent(text) === 'unknown') {
         chatFallback(text, state, ctx, resolve, cfg);
+        return;
+      }
+      /* 2.29.2：本地快车道——简单记账句秒回，不吃云端延迟与限流 */
+      var fast = fastLocalReply(text, state, ctx);
+      if (fast) {
+        resolve(fast);
         return;
       }
       var payload = {

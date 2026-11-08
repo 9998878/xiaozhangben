@@ -262,7 +262,7 @@ regCase('4.2 聊天出口失败（限流）→ 回落本地「没听懂」，绝
   check((res.reply.text || '').indexOf('听不懂') >= 0, '应为本地的「没听懂」文案');
 });
 
-regCase('4.3 明确记账句不走聊天：仍发解析请求（system 含「记账解析器」）', async function () {
+regCase('4.3 难句（转账缺转入账户）不走快车道：仍发解析请求（system 含「记账解析器」）', async function () {
   seedPresetConfig();
   let bodies = [];
   const res = await withNet(function (url, options) {
@@ -271,17 +271,60 @@ regCase('4.3 明确记账句不走聊天：仍发解析请求（system 含「记
       status: 200,
       text: function () {
         return Promise.resolve(chatEnvelope(JSON.stringify({
-          intent: 'create',
-          items: [{ type: 'expense', amountCents: 3500, accountId: '', toAccountId: '', categoryId: '', date: '', time: '', note: '午饭' }]
+          intent: 'need_clarify',
+          clarify: { question: '转到哪个账户？', options: [] }
         })));
       }
     });
   }, true, function () {
-    return llm.respondRemote('午饭 35 微信', {}, { db: { accounts: [{ id: 'acc_wechat', name: '微信', type: 'wechat' }], categories: [] }, today: '2026-11-08' });
+    return llm.respondRemote('转账 500', {}, { db: { accounts: [{ id: 'acc_wechat', name: '微信', type: 'wechat' }, { id: 'acc_alipay', name: '支付宝', type: 'alipay' }], categories: [] }, today: '2026-11-08' });
   });
   checkEq(bodies.length, 1, '应恰好一次出站请求');
   check(bodies[0].indexOf('记账解析器') >= 0, '应走解析提示词而非聊天');
-  check((res.reply || {}).kind !== 'chat', '记账句不得落入聊天出口');
+  check((res.reply || {}).kind !== 'chat', '难句不得落入聊天出口');
+});
+
+regCase('4.6 本地快车道：干净记账句秒回预览（零出站、mode=local）', async function () {
+  seedPresetConfig();
+  let calls = 0;
+  const res = await withNet(function () {
+    calls += 1;
+    return Promise.reject(new Error('快车道不得出站'));
+  }, true, function () {
+    return llm.respondRemote('午饭 35 微信', {}, {
+      db: {
+        accounts: [{ id: 'acc_wechat', name: '微信', type: 'wechat' }],
+        categories: [{ id: 'ca_food', name: '吃饭', kind: 'expense' }]
+      },
+      today: '2026-11-08'
+    });
+  });
+  checkEq(calls, 0, '干净记账句不得出站');
+  checkEq(res && res.mode, 'local', '快车道应为 local 模式');
+  checkEq(res.reply && res.reply.kind, 'preview', '应直接出预览卡');
+  checkEq(res.reply && res.reply.canConfirm, true, '预览应可直接确认');
+  checkEq(res.reply.rows && res.reply.rows[0] && res.reply.rows[0].categoryText, '吃饭', '分类应本地命中');
+  checkEq(res.reply.rows && res.reply.rows[0] && res.reply.rows[0].accountText, '微信', '账户应本地命中');
+});
+
+regCase('4.7 缺金额的句子不上快车道：照旧走解析补问', async function () {
+  seedPresetConfig();
+  let calls = 0;
+  await withNet(function () {
+    calls += 1;
+    return Promise.resolve({
+      status: 200,
+      text: function () {
+        return Promise.resolve(chatEnvelope(JSON.stringify({
+          intent: 'need_clarify',
+          clarify: { question: '花了多少？', options: [] }
+        })));
+      }
+    });
+  }, true, function () {
+    return llm.respondRemote('午饭 35，打车', {}, { db: { accounts: [], categories: [] }, today: '2026-11-08' });
+  });
+  checkEq(calls, 1, '难句应出站解析');
 });
 
 regCase('4.4 聊天回复清洗：围栏与包裹引号剥掉，超长截断', async function () {
@@ -347,6 +390,11 @@ regCase('5.5 核心导出：preset/isPreset 挂在 llm 命名空间', function (
   check(CORE_JS.indexOf('isPreset: function ()') >= 0, 'llm.isPreset 应导出');
   checkEq(typeof llm.preset, 'function', 'preset 可调');
   checkEq(typeof llm.isPreset, 'function', 'isPreset 可调');
+});
+
+regCase('5.6 测试连接对免费预设放宽到 20s（推理模型探针 6s 门误杀，实测抓到）', function () {
+  check(CORE_JS.indexOf('aiIsPreset(cfg) ? LLM_PLAN_TIMEOUT_MS : LLM_TIMEOUT_MS') >= 0,
+    'llmTest 应对预设端点传 LLM_PLAN_TIMEOUT_MS');
 });
 
 /* ============================== 汇总 ============================== */
