@@ -45,6 +45,9 @@
      6-10s 才吐完第一个字，共用一个 6s 会把「正在生成」误判成失败并静默回落本地
      （用户主诉：测试连接能过，小助手还是本地——回落总发生在第 5-6 秒）。 */
   var LLM_PLAN_TIMEOUT_MS = 20000;
+  /* 2.29.2：免费预设（OVH 匿名档）正常 2-4 秒，偶发排队会拖满超时——预设解析
+     单独用 12s 上限，排队时尽快回落本地确认卡，不陪它等满 20s。 */
+  var LLM_PRESET_PLAN_TIMEOUT_MS = 12000;
   var LLM_SOFT_MS = 8000;
   var LLM_BUDGET_MS = 24000;
   /* 重试脚手架保留但 LLM_RETRY=0（关闭）：可重试错误的重试已上移到 httpOnce（400 剥可选字段）
@@ -2820,9 +2823,9 @@
     var i = 0;
     function attempt() {
       return httpOnce(cfg, buildFor(models[i]), timeoutMs).then(function (res) {
-        /* 限流/服务故障/超时都切下一个模型（OVH 匿名档按模型计限流桶，
-           偶发排队不该让用户白等整个超时窗） */
-        if (res && (res.retryable || res.code === E.NET_TIMEOUT) && i < models.length - 1) {
+        /* 只有限流/服务故障（快速失败）才切下一个模型；超时说明整条链路都在排队，
+           切模型只会把最坏等待翻倍，直接回落本地更快（自测实测） */
+        if (res && res.retryable && res.code !== E.NET_TIMEOUT && i < models.length - 1) {
           i += 1;
           return attempt();
         }
@@ -2868,7 +2871,7 @@
     function run() {
       return httpChain(cfg, function (model) {
         return fitBody(cfg, payload, model).body;
-      }, LLM_PLAN_TIMEOUT_MS).then(function (res) {
+      }, aiIsPreset(cfg) ? LLM_PRESET_PLAN_TIMEOUT_MS : LLM_PLAN_TIMEOUT_MS).then(function (res) {
         if (res && res.ok) {
           var parsed = readEnvelope(res.json);
           if (!parsed.ok) {

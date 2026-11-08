@@ -453,6 +453,8 @@ regCase('5.5 核心导出：preset/isPreset 挂在 llm 命名空间', function (
 regCase('5.6 测试连接对免费预设放宽到 20s（推理模型探针 6s 门误杀，实测抓到）', function () {
   check(CORE_JS.indexOf('aiIsPreset(cfg) ? LLM_PLAN_TIMEOUT_MS : LLM_TIMEOUT_MS') >= 0,
     'llmTest 应对预设端点传 LLM_PLAN_TIMEOUT_MS');
+  check(CORE_JS.indexOf('aiIsPreset(cfg) ? LLM_PRESET_PLAN_TIMEOUT_MS : LLM_PLAN_TIMEOUT_MS') >= 0,
+    'llmPlan 对预设端点走 12s 上限（排队尽快回落，实测抓到）');
 });
 
 regCase('4.8 查询快车道：带显式时间词的查询本地秒答（零出站）', async function () {
