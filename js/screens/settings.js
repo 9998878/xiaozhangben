@@ -3861,7 +3861,7 @@
     wrap.appendChild(presetRow);
     wrap.appendChild(h('p', {
       className: 's-settings-group__note',
-      text: '免费档限流（约 45 秒一条），忙时自动改用本地解析。想要更强更稳：siliconflow.cn 免费注册（送 2000 万 tokens），接口地址改填 https://api.siliconflow.cn/v1，模型名如 Qwen/Qwen3-8B，再粘贴密钥。'
+      text: '免费档每模型每分钟 2 次，主模型限流会自动换备用模型，忙时自动改用本地解析。想要更强更稳：siliconflow.cn 免费注册（送 2000 万 tokens），接口地址改填 https://api.siliconflow.cn/v1，模型名如 Qwen/Qwen3-8B，再粘贴密钥。'
     }));
 
     var status = h('p', { className: 's-settings-note', text: '还没测试过', aria: { live: 'polite' } });

@@ -159,11 +159,42 @@ section('用例 1：免密钥预设视同配置齐全，自定义服务仍要密
 
 regCase('1.1 preset() 视图：地址/模型/免密钥标记齐全，id 稳定', function () {
   const p = llm.preset();
-  checkEq(p.id, 'pollinations-free', 'id');
+  checkEq(p.id, 'ovh-free', 'id');
   check(p.baseURL.indexOf('https://') === 0, 'baseURL 应为 https');
   check(p.baseURL.indexOf('chat/completions') < 0, 'baseURL 不含端点后缀（由 endpointOf 兜底）');
   check(!!p.model, 'model 非空');
   checkEq(p.keyless, true, 'keyless 标记');
+});
+
+regCase('1.1b 旧 Pollinations 免 key 配置自动迁移到新预设（带密钥的不动）', function () {
+  ls.removeItem(AI_KEY_VALUE);
+  llm.setConfig({ baseURL: 'https://text.pollinations.ai/openai', model: 'openai', key: '' });
+  llm.setConfig({ enabled: true });
+  llm.setConfig({ noticeAt: Date.now() });
+  checkEq(llm.isPreset(), true, '旧免 key 配置应迁移命中新预设');
+  const cfg = llm.getConfig().cfg;
+  check(cfg.baseURL.indexOf('oai.endpoints.kepler.ai.cloud.ovh.net') >= 0, '应迁移到 OVH');
+  checkEq(cfg.model, llm.preset().model, '模型应迁移');
+  llm.setConfig({ key: 'sk-pollen-user-key' });
+  checkEq(llm.isPreset(), false, '带密钥的 Pollinations 自定义配置不迁移');
+});
+
+regCase('1.1c 模型链：主模型限流自动切备用模型（第二次成功）', async function () {
+  seedPresetConfig();
+  const models = [];
+  const res = await withNet(function (url, options) {
+    const body = JSON.parse(options.body);
+    models.push(body.model);
+    if (models.length === 1) {
+      return Promise.resolve({ status: 429, text: function () { return Promise.resolve('{}'); } });
+    }
+    return Promise.resolve({ status: 200, text: function () { return Promise.resolve(chatEnvelope(JSON.stringify({ intent: 'need_clarify', clarify: { question: '金额是多少？', options: [] } }))); } });
+  }, true, function () {
+    return llm.plan({ raw: '记一笔午饭', today: '2026-11-08', bookId: 'bk_main', accounts: [], categories: [] });
+  });
+  checkEq(models.length, 2, '应恰好尝试两个模型');
+  checkEq(models[0], llm.preset().model, '第一个应是主模型');
+  checkEq(res && res.ok, true, '备用模型应成功');
 });
 
 regCase('1.2 预设 + 开关 + 已告知：ready()=true（免密钥也算配置齐）', function () {
@@ -401,7 +432,7 @@ regCase('5.2 开关门与占位符认得免密钥预设', function () {
 });
 
 regCase('5.3 免费档限流与升级指引文案在位（siliconflow）', function () {
-  check(SETTINGS_JS.indexOf('45 秒一条') >= 0, '应说明限流');
+  check(SETTINGS_JS.indexOf('每模型每分钟 2 次') >= 0, '应说明限流口径');
   check(SETTINGS_JS.indexOf('siliconflow.cn') >= 0, '应有升级指引');
   check(SETTINGS_JS.indexOf('https://api.siliconflow.cn/v1') >= 0, '应给出硅基流动地址');
 });

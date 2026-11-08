@@ -62,11 +62,18 @@
   var LLM_NAME_MAX = 24;
   var LLM_MAX_CENTS = 999999999999;
 
-  /* 2.29.2：内置免费预设（免密钥档）。设置页「一键应用免费模型」只写 baseURL/model
-     并清空密钥；该服务免密钥档限流（约 45 秒一条、单条 10-20 秒），忙时/失败自动
-     回落本地解析，绝不阻塞记账。端点走 endpointOf 兜底成 /openai/chat/completions。 */
+  /* 2.29.2：内置免费预设（免密钥档）。OVH AI Endpoints 匿名层：免 key、CORS 全开、
+     每模型 2 次/分钟——主用非推理 Llama-3.3-70B（实测解析 2 秒级），限流时链内
+     自动切 Qwen3.5-9B 兜底；忙时/失败照旧回落本地解析，绝不阻塞记账。
+     2.29.2 末期：原 Pollinations 匿名档（gpt-oss-20b 推理模型，10-20s + 45s 限流）
+     因过慢被替换，旧配置在读入时自动迁移（见 LEGACY_PRESET）。 */
   var AI_PRESET = {
-    id: 'pollinations-free',
+    id: 'ovh-free',
+    baseURL: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1',
+    model: 'Meta-Llama-3_3-70B-Instruct',
+    models: ['Meta-Llama-3_3-70B-Instruct', 'Qwen3.5-9B']
+  };
+  var LEGACY_PRESET = {
     baseURL: 'https://text.pollinations.ai/openai',
     model: 'openai'
   };
@@ -2288,6 +2295,12 @@
     cfg.baseURL = aiNormalizeURL(raw.baseURL);
     cfg.model = aiTrim(raw.model, AI_MAX_MODEL);
     cfg.key = aiTrim(raw.key, AI_MAX_KEY);
+    /* 2.29.2：旧 Pollinations 免 key 配置静默迁移到 OVH 预设（带密钥的自定义
+       配置不动——那是用户自己在用 Pollen key 的场景）。 */
+    if (!cfg.key && cfg.baseURL === LEGACY_PRESET.baseURL && cfg.model === LEGACY_PRESET.model) {
+      cfg.baseURL = AI_PRESET.baseURL;
+      cfg.model = AI_PRESET.model;
+    }
     if (raw.redact === 'none' || raw.redact === 'names') { cfg.redact = raw.redact; }
     var at = Number(raw.noticeAt);
     if (isFinite(at) && at > 0) { cfg.noticeAt = at; }
@@ -2754,9 +2767,9 @@
       .replace('<CATEGORIES>', pairText(cats, true));
   }
 
-  function buildBody(cfg, raw, accts, cats, today, bookId) {
+  function buildBody(cfg, model, raw, accts, cats, today, bookId) {
     return JSON.stringify({
-      model: cfg.model,
+      model: model || cfg.model,
       temperature: 0,
       max_tokens: LLM_MAX_TOKENS,
       response_format: { type: 'json_object' },
@@ -2768,14 +2781,14 @@
   }
 
   /* 体积兜底：先砍分类清单，再砍账户清单，最后砍原话（硬截断），保证 ≤4KB */
-  function fitBody(cfg, payload) {
+  function fitBody(cfg, payload, modelOverride) {
     var p = payload && typeof payload === 'object' ? payload : {};
     var raw = short(norm(p.raw || ''), LLM_MAX_RAW);
     var accts = accountPairs(p.accounts);
     var cats = categoryPairs(p.categories);
     var today = short(String(p.today || todayStr()), 10);
     var bookId = short(String(p.bookId || ''), 40);
-    var body = buildBody(cfg, raw, accts, cats, today, bookId);
+    var body = buildBody(cfg, modelOverride, raw, accts, cats, today, bookId);
     var guard = 0;
     while (byteLen(body) > LLM_MAX_BODY && guard < 16) {
       guard += 1;
@@ -2790,9 +2803,33 @@
         accts = [];
         raw = raw.slice(0, 16);
       }
-      body = buildBody(cfg, raw, accts, cats, today, bookId);
+      body = buildBody(cfg, modelOverride, raw, accts, cats, today, bookId);
     }
     return { body: body, raw: raw };
+  }
+
+  /* 2.29.2：免费预设的模型链——主模型限流/服务故障时自动切下一个
+     （OVH 匿名档限流按模型计，2 次/分钟/模型，链内多模型=变相扩容）。 */
+  function modelChainOf(cfg) {
+    if (aiIsPreset(cfg) && AI_PRESET.models && AI_PRESET.models.length) { return AI_PRESET.models; }
+    return [cfg.model];
+  }
+
+  function httpChain(cfg, buildFor, timeoutMs) {
+    var models = modelChainOf(cfg);
+    var i = 0;
+    function attempt() {
+      return httpOnce(cfg, buildFor(models[i]), timeoutMs).then(function (res) {
+        /* 限流/服务故障/超时都切下一个模型（OVH 匿名档按模型计限流桶，
+           偶发排队不该让用户白等整个超时窗） */
+        if (res && (res.retryable || res.code === E.NET_TIMEOUT) && i < models.length - 1) {
+          i += 1;
+          return attempt();
+        }
+        return res;
+      });
+    }
+    return attempt();
   }
 
   /* ---------- llm.plan / llm.test ---------- */
@@ -2826,11 +2863,12 @@
     if (gate) {
       return Promise.resolve({ ok: false, code: gate, retryable: false, status: 0 });
     }
-    var fit = fitBody(cfg, payload);
     var started = Date.now();
     var attempt = 0;
     function run() {
-      return httpOnce(cfg, fit.body, LLM_PLAN_TIMEOUT_MS).then(function (res) {
+      return httpChain(cfg, function (model) {
+        return fitBody(cfg, payload, model).body;
+      }, LLM_PLAN_TIMEOUT_MS).then(function (res) {
         if (res && res.ok) {
           var parsed = readEnvelope(res.json);
           if (!parsed.ok) {
@@ -2876,9 +2914,15 @@
     } catch (error) {
       return Promise.resolve({ ok: false, code: E.NET_CONFIG });
     }
-    /* 免费预设是推理模型（gpt-oss-20b），16 token 探针也要 10 秒上下——沿用 6s 会把
-       「正在生成」误判成超时（与 2.26.11 llmPlan 的 6s 门同一类病），预设端点走 20s。 */
-    return httpOnce(cfg, body, aiIsPreset(cfg) ? LLM_PLAN_TIMEOUT_MS : LLM_TIMEOUT_MS).then(function (res) {
+    /* 免费预设走 20s 门 + 模型链（主模型限流自动切下一个）；自定义服务维持 6s 单模型。 */
+    return httpChain(cfg, function (model) {
+      return JSON.stringify({
+        model: model,
+        temperature: 0,
+        max_tokens: 16,
+        messages: [{ role: 'user', content: '回复一个 JSON 对象：{"ok":true}' }]
+      });
+    }, aiIsPreset(cfg) ? LLM_PLAN_TIMEOUT_MS : LLM_TIMEOUT_MS).then(function (res) {
       if (!res || !res.ok) {
         /* reason 透传：5xx（server）与 429（rate）同码不同因，设置页文案要能区分（2.28.1） */
         return { ok: false, code: (res && res.code) || E.NET_BAD, reason: res && res.reason };
@@ -2902,27 +2946,28 @@
     if (gate) { return Promise.resolve({ ok: false, code: gate, retryable: false, status: 0 }); }
     var list = Array.isArray(messages) ? messages : [];
     if (!list.length) { return Promise.resolve({ ok: false, code: E.NET_BAD, retryable: false, status: 0 }); }
-    var body = {
-      model: cfg.model,
-      temperature: 0,
-      max_tokens: Number(o.maxTokens) > 0 ? Math.floor(Number(o.maxTokens)) : LLM_MAX_TOKENS,
-      response_format: { type: 'json_object' },
-      messages: list
-    };
     var extra = o.extraBody;
-    if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
-      for (var k in extra) {
-        if (Object.prototype.hasOwnProperty.call(extra, k)) { body[k] = extra[k]; }
-      }
-    }
-    var bodyStr;
-    try {
-      bodyStr = JSON.stringify(body);
-    } catch (error) {
-      return Promise.resolve({ ok: false, code: E.NET_BAD, retryable: false, status: 0 });
-    }
     var timeoutMs = Number(o.timeoutMs) > 0 ? Number(o.timeoutMs) : LLM_TIMEOUT_MS;
-    return httpOnce(cfg, bodyStr, timeoutMs);
+    /* 2.29.2：模型链——预设限流时自动切下一个模型 */
+    return httpChain(cfg, function (model) {
+      var body = {
+        model: model,
+        temperature: 0,
+        max_tokens: Number(o.maxTokens) > 0 ? Math.floor(Number(o.maxTokens)) : LLM_MAX_TOKENS,
+        response_format: { type: 'json_object' },
+        messages: list
+      };
+      if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
+        for (var k in extra) {
+          if (Object.prototype.hasOwnProperty.call(extra, k)) { body[k] = extra[k]; }
+        }
+      }
+      try {
+        return JSON.stringify(body);
+      } catch (error) {
+        return '';
+      }
+    }, timeoutMs);
   }
 
   /* ---------- 值域校验（V9~V14） ---------- */
@@ -3541,13 +3586,14 @@
         { role: 'user', content: short(norm(text), LLM_MAX_RAW) }
       ]
     };
-    var bodyStr = '';
-    try { bodyStr = JSON.stringify(body); } catch (error) { bodyStr = ''; }
-    if (!bodyStr) {
+    try { JSON.stringify(body); } catch (error) {
       resolve(localReply(text, state, cx, 'bad'));
       return;
     }
-    httpOnce(cfg, bodyStr, LLM_PLAN_TIMEOUT_MS).then(function (res) {
+    httpChain(cfg, function (model) {
+      body.model = model;
+      return JSON.stringify(body);
+    }, LLM_PLAN_TIMEOUT_MS).then(function (res) {
       if (res && res.ok && res.json && res.json.choices && res.json.choices.length) {
         var cleaned = chatClean(contentOf(res.json.choices[0]));
         if (cleaned) {

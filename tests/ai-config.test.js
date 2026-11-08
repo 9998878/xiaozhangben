@@ -355,8 +355,10 @@ regCase('7.1 常量分层：测试连接仍 6s，记账解析 20s', function () 
     'LLM_PLAN_TIMEOUT_MS 应 >= 15000，实际 ' + AS.LLM_PLAN_TIMEOUT_MS);
 });
 
-regCase('7.2 源码：llmPlan 把 LLM_PLAN_TIMEOUT_MS 显式传给 httpOnce（防回退到默认 6s）', function () {
-  check(CORE_JS.indexOf('httpOnce(cfg, fit.body, LLM_PLAN_TIMEOUT_MS)') >= 0,
+regCase('7.2 源码：llmPlan 把 LLM_PLAN_TIMEOUT_MS 显式传给传输层（防回退到默认 6s）', function () {
+  /* 2.29.2：传输层升级为 httpChain（模型链），超时参数语义不变 */
+  check(CORE_JS.indexOf('httpOnce(cfg, fit.body, LLM_PLAN_TIMEOUT_MS)') >= 0 ||
+        CORE_JS.indexOf('}, LLM_PLAN_TIMEOUT_MS).then') >= 0,
     'llmPlan 未显式传解析超时，仍会吃默认 6s');
 });
 
