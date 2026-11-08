@@ -187,6 +187,42 @@ test('Q:回归——旧口径不回归（昨天/上周/上个月/近7天）', fu
   checkEq(rangeOf('近7天花了多少').from, '2026-10-31', '近7天起点');
 });
 
+/* ============================== 用例 3：兜底分类的相似账判定（备注比对） ============================== */
+
+section('用例 3：兜底分类（其他）的相似账需备注相似——麻辣烫50 与 烧鹅饭50 不得误报');
+
+const DUP_BOOKS = [{ id: 'bk_main', name: '默认账本', kind: 'expense' }];
+const DUP_ACCOUNTS = [{ id: 'ac_wechat', name: '微信', type: 'wechat' }];
+function txOf(note, cents) {
+  return {
+    id: 'tx_dup_' + note, bookId: 'bk_main', type: 'expense', date: TODAY,
+    amountCents: cents, categoryId: 'ca_other_expense', note: note, deleted: false
+  };
+}
+
+test('D:麻辣烫50 已在库 → 再记 烧鹅饭50 不误报相似', function () {
+  const cx = asst.contextOf({ db: { books: DUP_BOOKS, accounts: DUP_ACCOUNTS, categories: schema.seedData().categories, transactions: [txOf('麻辣烫', 5000)] }, today: TODAY });
+  const r = asst.parseCreate('烧鹅饭50', cx);
+  checkEq(r.ok, true, '解析应成功');
+  checkEq(r.plan.items[0].categoryId, 'ca_other_expense', '烧鹅饭应落兜底分类');
+  check(!r.plan.items[0].dupOf, '备注不相似不得报相似账');
+});
+
+test('D:烧鹅饭50 已在库 → 再记 烧鹅饭50 应报相似', function () {
+  const cx = asst.contextOf({ db: { books: DUP_BOOKS, accounts: DUP_ACCOUNTS, categories: schema.seedData().categories, transactions: [txOf('烧鹅饭', 5000)] }, today: TODAY });
+  const r = asst.parseCreate('烧鹅饭50', cx);
+  checkEq(r.plan.items[0].dupOf, 'tx_dup_烧鹅饭', '同句重复应报相似账');
+});
+
+test('D:具体分类不受影响——午饭35 已在库 → 再记 午饭35 仍报相似', function () {
+  const cx = asst.contextOf({
+    db: { books: DUP_BOOKS, accounts: DUP_ACCOUNTS, categories: schema.seedData().categories, transactions: [{ id: 'tx_dup_lunch', bookId: 'bk_main', type: 'expense', date: TODAY, amountCents: 3500, categoryId: 'ca_food', note: '午饭', deleted: false }] },
+    today: TODAY
+  });
+  const r = asst.parseCreate('午饭 35', cx);
+  checkEq(r.plan.items[0].dupOf, 'tx_dup_lunch', '具体分类的相似判定口径不变');
+});
+
 /* ============================== 汇总 ============================== */
 
 console.log('\n通过 ' + passCount + ' / 失败 ' + failCount);

@@ -965,7 +965,18 @@
     return { ok: true, plan: plan, segments: segments };
   }
 
-  /* 相似账：同账本 + 同日期 + 同类型 + 同金额 + 同分类（严格口径，用户已确认） */
+  /* 兜底分类的备注相似：两笔都只是「其他」时，同日同金额不代表同一笔
+     （麻辣烫50 和 烧鹅饭50 会被误报相似——用户实测主诉），备注有包含
+     关系（≥2 字）才认作相似。 */
+  function noteSimilar(a, b) {
+    var x = String(a || '').replace(/[\s，。；;、,.!！?？]+/g, '');
+    var y = String(b || '').replace(/[\s，。；;、,.!！?？]+/g, '');
+    if (x.length < 2 || y.length < 2) { return false; }
+    return x === y || x.indexOf(y) >= 0 || y.indexOf(x) >= 0;
+  }
+
+  /* 相似账：同账本 + 同日期 + 同类型 + 同金额 + 同分类（严格口径，用户已确认）；
+     兜底分类（其他）额外要求备注相似（2.29.2） */
   function markDuplicates(plan, cx) {
     var list = (cx.db.transactions || []).filter(function (tx) { return tx && tx.deleted !== true; });
     for (var i = 0; i < plan.items.length; i += 1) {
@@ -978,6 +989,7 @@
         if (tx.date !== item.date) { continue; }
         if (Number(tx.amountCents) !== item.amountCents) { continue; }
         if ((tx.categoryId || '') !== (item.categoryId || '')) { continue; }
+        if (OTHER_CATEGORY_IDS[item.categoryId || ''] && !noteSimilar(item.note, tx.note)) { continue; }
         item.dupOf = tx.id;
         break;
       }
@@ -2430,7 +2442,10 @@
   }
 
   function mapStatus(status, res) {
-    if (status === 429) {
+    if (status === 429 || status === 402) {
+      /* 2.29.2：402 一并归限流——免费档的 402 是 FREE_LIMIT（约 45 秒一条），
+         归进「配置不合法」桶会让界面谎报「未启用在线模型」（用户实测主诉：
+         开着开关却被告知未启用）。 */
       return { ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res), reason: 'rate' };
     }
     if (status >= 500) {

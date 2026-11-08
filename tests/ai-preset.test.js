@@ -486,6 +486,24 @@ regCase('4.10 本地认不出的分类（炒土鸡）不上快车道：升级给
   checkEq(row && row.categoryText, '餐饮', '模型应把炒土鸡定为餐饮而不是其他');
 });
 
+regCase('4.11 免费档 402 归位为限流：回落原因 rate，不得谎报「未启用在线模型」（用户实测主诉）', async function () {
+  seedPresetConfig();
+  withNl(0.6, 'ca_other_expense');
+  const res = await withNet(function () {
+    return Promise.resolve({ status: 402, text: function () { return Promise.resolve(JSON.stringify({ status: 402, error: { code: 'FREE_LIMIT', message: 'Free limit reached: 1 reply every 45 seconds per IP' } })); } });
+  }, true, function () {
+    return llm.respondRemote('烧鹅饭50', {}, {
+      db: {
+        accounts: [{ id: 'ac_wechat', name: '微信', type: 'wechat' }],
+        categories: [{ id: 'ca_other_expense', name: '其他', kind: 'expense' }]
+      },
+      today: '2026-11-08'
+    });
+  });
+  checkEq(res && res.reason, 'rate', '402 应归位限流（此前误报「未启用在线模型」）');
+  withoutNl();
+});
+
 /* ============================== 用例 6：同句再记不撞已撤销的软删 id ============================== */
 
 section('用例 6：create 计划 id 每次提交带 nonce（记→撤→再记不得撞 E_AS_CONFLICT_ID）');
