@@ -289,6 +289,7 @@
   function pushTurn(turn) {
     session.turns.push(turn);
     if (session.turns.length > MAX_TURNS) { session.turns.splice(0, session.turns.length - MAX_TURNS); }
+    if (window.__xzbTest) { try { window.__xzbTest(turn); } catch (error) { /* 测试钩子绝不影响应用 */ } }
   }
 
   /* ============================== 渲染：外壳 ============================== */
