@@ -418,6 +418,8 @@
       keypadOpen: false,
       busy: false,
       reimburse: false,
+      /* 不计收支（2.28.10）：只影响统计口径，余额照常；转账不适用（UI 隐藏 + schema 强转 false） */
+      excludeStats: false,
       /* 照片：屏内草稿（数据流 5）。既有项与新增项同放这里，既有在前、新增在后（裁决 14）。
          唯一实现名 pendingPhotos（PLAN 裁决 11/13；UI.md 旧文的 state.photos 是笔误）。 */
       pendingPhotos: []
@@ -438,6 +440,7 @@
       state.note = typeof editing.note === 'string' ? editing.note.slice(0, noteMax) : '';
       state.tags = arr(editing.tags).slice(0, limitedTags.count);
       state.reimburse = editing.reimburse === 'pending' || editing.reimburse === 'done';
+      state.excludeStats = editing.excludeStats === true;
       /* 编辑模式不改默认：历史智能建议只服务新建（2.28.9） */
       state.categoryTouched = true;
     } else if (prefill) {
@@ -521,6 +524,20 @@
     reimburseBlock.appendChild(reimburseHint);
     reimburseBlock.appendChild(reimburseSwitch);
     wrap.appendChild(reimburseBlock);
+
+    /* 不计收支（2.28.10，吸收 BeeCount excludeFromStats）：还贷/代付/大额一次性支出
+       照常记余额与流水，但不进预算、统计、月度解读；转账不适用（隐藏 + schema 强转 false） */
+    var excludeBlock = make('div', 's-add-exclude');
+    var excludeLabel = make('span', 's-add-exclude__label', '不计收支');
+    var excludeHint = make('span', 's-add-exclude__hint', '只记余额，不进统计与预算');
+    var excludeSwitch = button('c-switch s-add-exclude__switch', '');
+    excludeSwitch.setAttribute('role', 'switch');
+    excludeSwitch.setAttribute('aria-checked', 'false');
+    excludeSwitch.setAttribute('aria-label', '不计收支');
+    excludeBlock.appendChild(excludeLabel);
+    excludeBlock.appendChild(excludeHint);
+    excludeBlock.appendChild(excludeSwitch);
+    wrap.appendChild(excludeBlock);
 
     /* 标签 */
     var tagBlock = make('div', 's-add-tags');
@@ -640,6 +657,7 @@
        photoBlock 只在构建期创建一次，打开备注时 appendChild 移动进去（移动不产生副本），
        关闭后节点仍留在弹层 DOM 里，下次打开被重新移动复用。 */
     extrasBody.appendChild(reimburseBlock);
+    extrasBody.appendChild(excludeBlock);
     extrasBody.appendChild(tagBlock);
     wrap.appendChild(extrasBlock);
 
@@ -932,7 +950,9 @@
       gridBlock.hidden = isTransfer;
       tagBlock.hidden = isTransfer;
       reimburseBlock.hidden = state.type !== 'expense';
+      excludeBlock.hidden = state.type === 'transfer';
       reimburseSwitch.setAttribute('aria-checked', state.reimburse ? 'true' : 'false');
+      excludeSwitch.setAttribute('aria-checked', state.excludeStats ? 'true' : 'false');
       root.setAttribute('data-type', state.type);
       syncProps();
       renderGrid();
@@ -3035,6 +3055,7 @@
         tags: state.tags.slice(0, limitedTags.count),
         source: source,
         reimburse: state.type === 'expense' && state.reimburse ? 'pending' : 'none',
+        excludeStats: state.type !== 'transfer' && !!state.excludeStats,
         reimburseAt: state.type === 'expense' && state.reimburse
           ? (editing && editing.reimburseAt ? editing.reimburseAt : dates.nowIso())
           : null,
@@ -3357,6 +3378,11 @@
     reimburseSwitch.addEventListener('click', function () {
       state.reimburse = !state.reimburse;
       reimburseSwitch.setAttribute('aria-checked', state.reimburse ? 'true' : 'false');
+    });
+
+    excludeSwitch.addEventListener('click', function () {
+      state.excludeStats = !state.excludeStats;
+      excludeSwitch.setAttribute('aria-checked', state.excludeStats ? 'true' : 'false');
     });
 
     /* 标签 */

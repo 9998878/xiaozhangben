@@ -3680,6 +3680,7 @@
       var tx = list[i];
       if (!tx || tx.deleted === true) { continue; }
       if (cx.bookId && tx.bookId !== cx.bookId) { continue; }
+      if (tx.excludeStats === true) { continue; }  /* 不计收支（2.28.10）：问答口径与统计一致 */
       var date = String(tx.date || '');
       if (date < from || date > to) { continue; }
       var cents = Math.round(Number(tx.amountCents) || 0);

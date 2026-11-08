@@ -373,6 +373,10 @@
 
       if (mk === mKey && tx.reimburse === 'pending') { pendingReimburseCount += 1; }
 
+      /* 不计收支（2.28.10）：数值聚合跳过；txCount/报销计数/记账日已先行计入——
+         「记了账但不进消费统计」，空账期判定与报销提醒不受影响 */
+      if (tx.excludeStats === true) { continue; }
+
       if (!bucket) { continue; }
 
       if (type === TYPE_EXPENSE) {
