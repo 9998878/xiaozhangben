@@ -1091,6 +1091,20 @@
   function sectionAppearance(ctx) {
     /* 震动开关按平台出现（iOS Safari 无 navigator.vibrate）；2.11.1 起点按即震。 */
     var rows = [themeRow(ctx)];
+    /* 金额眼罩（2.30.0，收尾半成品 hideAmounts）：全局口径在 Core.money.formatCents
+       与 ui kit money 双点生效；存 db.settings（state.ui 由 commit 内同步） */
+    rows.push(switchRow(ctx, {
+      icon: 'eye-off',
+      title: '隐藏金额',
+      sub: '所有金额显示为 ••••，再点一次恢复',
+      checked: (function () {
+        var db = dbOf(ctx);
+        return !!(db && db.settings && db.settings.hideAmounts === true);
+      })(),
+      onChange: function (next) {
+        return commitSetting(ctx, 'hideAmounts', next, next ? '已隐藏全部金额' : '已恢复金额显示');
+      }
+    }));
     var haptics = XZB.ui && XZB.ui.haptics;
     var hapticsOk = !!(haptics && typeof haptics.supported === 'function' && haptics.supported());
     if (hapticsOk) {

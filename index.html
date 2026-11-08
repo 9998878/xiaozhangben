@@ -14158,6 +14158,12 @@ textarea::selection {
   function formatCents(cents, opts) {
     opts = opts || {};
     if (opts.hidden === true) { return '\u2022\u2022\u2022\u2022'; }
+    /* 金额眼罩（2.30.0，收尾半成品）：设置开启后全部金额显示统一打码。
+       防御式读取（Node 沙箱/异常不阻断显示）；余额计算等非展示路径不走这里。 */
+    try {
+      var uiState = (typeof XZB !== 'undefined') && XZB && XZB.app && XZB.app.state && XZB.app.state.ui;
+      if (uiState && uiState.hideAmounts === true) { return '\u2022\u2022\u2022\u2022'; }
+    } catch (error) { /* 掩码判定失败不阻断显示 */ }
 
     var n = Number(cents);
     if (!isFinite(n)) { n = 0; }
@@ -27849,6 +27855,15 @@ textarea::selection {
     if (TONES[o.tone]) { wrap.classList.add('c-money--' + o.tone); }
     if (o.block) { wrap.classList.add('c-money--block'); }
 
+    if (!o.hidden) {
+      /* 金额眼罩（2.30.0）：全局口径与 formatCents 一致（防御式读取） */
+      try {
+        var uiState = XZB && XZB.app && XZB.app.state && XZB.app.state.ui;
+        if (uiState && uiState.hideAmounts === true) {
+          o = Object.assign({}, o, { hidden: true });
+        }
+      } catch (error) { /* 掩码判定失败不阻断显示 */ }
+    }
     if (o.hidden) {
       wrap.appendChild(el('span', { className: 'c-money__int', text: '••••' }));
       return wrap;
@@ -32688,7 +32703,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.29.1';
+  XZB.version = '2.30.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
