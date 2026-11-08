@@ -1685,7 +1685,7 @@
     }
     body.appendChild(noteBlock(
       (parsed.source === 'wechat' ? '识别为微信支付账单' : '识别为支付宝账单') +
-      '；解析在这台手机上完成，不联网。只新增流水，不改动现有数据。',
+      '；解析在这台手机上完成，不联网。只新增流水，不改动现有数据；没有识别到分类的账单会归到「其他」。',
       's-settings-sheet__lead'
     ));
 
@@ -1787,6 +1787,19 @@
       var books = listOf(db, 'books').filter(function (b) { return b && b.archived !== true; });
       bookId = books.length ? books[0].id : '';
     }
+    /* 账单 CSV 没有小账本分类：支出落到「其他支出」、收入落到「其他收入」（系统分类，
+       与 ai-insights 的未分类口径同源），避免 E_TX_CATEGORY_REQUIRED 整库校验失败 */
+    var cats = listOf(db, 'categories');
+    var fallbackCategory = function (kind) {
+      var want = kind === 'income' ? 'ca_other_income' : 'ca_other_expense';
+      for (var c = 0; c < cats.length; c++) {
+        if (cats[c] && cats[c].id === want && cats[c].kind === kind) { return want; }
+      }
+      for (var k = 0; k < cats.length; k++) {
+        if (cats[k] && cats[k].kind === kind) { return cats[k].id; }
+      }
+      return '';
+    };
     live.busy = true;
     var pending;
     try {
@@ -1800,7 +1813,7 @@
             amountCents: row0.amountCents,
             accountId: accountId,
             toAccountId: null,
-            categoryId: null,
+            categoryId: fallbackCategory(row0.type),
             date: row0.date,
             time: row0.time || '12:00',
             note: row0.note || '',
