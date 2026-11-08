@@ -62,6 +62,15 @@
   var LLM_NAME_MAX = 24;
   var LLM_MAX_CENTS = 999999999999;
 
+  /* 2.29.2：内置免费预设（免密钥档）。设置页「一键应用免费模型」只写 baseURL/model
+     并清空密钥；该服务免密钥档限流（约 45 秒一条、单条 10-20 秒），忙时/失败自动
+     回落本地解析，绝不阻塞记账。端点走 endpointOf 兜底成 /openai/chat/completions。 */
+  var AI_PRESET = {
+    id: 'pollinations-free',
+    baseURL: 'https://text.pollinations.ai/openai',
+    model: 'openai'
+  };
+
   var E = {
     NO_AMOUNT: 'E_AS_NO_AMOUNT',
     AMBIGUOUS_ACCOUNT: 'E_AS_AMBIGUOUS_ACCOUNT',
@@ -2266,13 +2275,19 @@
     return '••••' + key.slice(-4);
   }
 
+  /* 2.29.2：免费预设（免密钥）判定——地址与模型都等于内置预设且没贴密钥时，
+     不要求 key；一旦贴了密钥或改了地址/模型，立即回到「三样齐」的旧口径。 */
+  function aiIsPreset(cfg) {
+    return !!cfg && cfg.baseURL === AI_PRESET.baseURL && cfg.model === AI_PRESET.model && !cfg.key;
+  }
+
   function aiConfigured(cfg) {
-    return !!(cfg.baseURL && cfg.model && cfg.key);
+    return !!(cfg.baseURL && cfg.model && (cfg.key || aiIsPreset(cfg)));
   }
 
   function llmReady() {
     var cfg = aiRead();
-    return cfg.enabled === true && !!cfg.key && Number(cfg.noticeAt) > 0;
+    return cfg.enabled === true && aiConfigured(cfg) && Number(cfg.noticeAt) > 0;
   }
 
   function llmConfigView() {
@@ -2458,12 +2473,13 @@
       }, Number(timeoutMs) > 0 ? Number(timeoutMs) : LLM_TIMEOUT_MS);
 
       function send(currentBody) {
+        /* 2.29.2：无密钥（内置免费预设）时整个省掉 Authorization——实测该档发
+           「Bearer 空」或假 key 会被按无效密钥 401，比不带头的匿名通道更严。 */
+        var headers = { 'Content-Type': 'application/json' };
+        if (cfg.key) { headers.Authorization = 'Bearer ' + cfg.key; }
         var options = {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + cfg.key
-          },
+          headers: headers,
           body: currentBody,
           credentials: 'omit',
           cache: 'no-store',
@@ -3393,6 +3409,72 @@
     }
   }
 
+  /* ---------- 自由对话兜底（2.29.2） ----------
+   * 本地听不懂的句子（无金额、无改/删/查特征）不再硬回「没听懂」：联网就绪时把
+   * 当轮原话交给模型自然回答。仍然只发这一句话（不发账户/分类名单），失败照常
+   * 回落本地——与 respondRemote 同一个「绝不静默」口径。 */
+  var CHAT_MAX_REPLY = 300;
+
+  function chatSystemText(today) {
+    return [
+      '你是「小账本」App 里的记账小助手，跟用户用中文聊天。',
+      '只聊记账、花销、省钱习惯、预算、App 使用相关的话题；别的话题礼貌地引回记账。',
+      '你拿不到用户的任何账目数据，不要编造数字，也不要假装查过账。',
+      '用户想记账或查账时，提醒他直接说一句话，例如「午饭 35 微信」「这个月餐饮花了多少」。',
+      '回答口语化、友好，一般不超过 80 字；不提供投资、借贷、博彩类建议。',
+      '今天：' + String(today || '')
+    ].join('\n');
+  }
+
+  /* 模型偶尔会带围栏/引号/前后空行，聊天回复只留干净的短文本 */
+  function chatClean(text) {
+    var s = String(text || '').trim();
+    s = s.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim();
+    if (s.length > 1) {
+      var head = s.charAt(0);
+      var tail = s.charAt(s.length - 1);
+      if ((head === '"' && tail === '"') || (head === '「' && tail === '」')) {
+        s = s.slice(1, -1).trim();
+      }
+    }
+    s = s.replace(/\s*\n+\s*/g, ' ').replace(/ {2,}/g, ' ').trim();
+    if (!s) { return ''; }
+    return short(s, CHAT_MAX_REPLY);
+  }
+
+  function chatFallback(text, state, cx, resolve, cfg) {
+    var body = {
+      model: cfg.model,
+      temperature: 0,
+      max_tokens: 800,
+      messages: [
+        { role: 'system', content: chatSystemText(cx.today) },
+        { role: 'user', content: short(norm(text), LLM_MAX_RAW) }
+      ]
+    };
+    var bodyStr = '';
+    try { bodyStr = JSON.stringify(body); } catch (error) { bodyStr = ''; }
+    if (!bodyStr) {
+      resolve(localReply(text, state, cx, 'bad'));
+      return;
+    }
+    httpOnce(cfg, bodyStr, LLM_PLAN_TIMEOUT_MS).then(function (res) {
+      if (res && res.ok && res.json && res.json.choices && res.json.choices.length) {
+        var cleaned = chatClean(contentOf(res.json.choices[0]));
+        if (cleaned) {
+          resolve({
+            state: cloneState(state),
+            reply: { kind: 'chat', text: cleaned },
+            mode: 'online',
+            reason: ''
+          });
+          return;
+        }
+      }
+      resolve(localReply(text, state, cx, reasonOf(res && res.code, res)));
+    });
+  }
+
   /* respondRemote(text, state, cx) → Promise<{state, reply, mode:'online'|'local-fallback', reason}>
    * 软提示（LLM_SOFT_MS，2.26.11 起 8s）由界面消费；这里只负责硬 20s 兜底与回落，永不 reject。 */
   function respondRemote(text, state, cx) {
@@ -3404,6 +3486,12 @@
         var gateReason = cfg.enabled !== true ? 'disabled'
           : (!aiConfigured(cfg) ? 'config' : 'privacy');
         resolve(localReply(text, state, ctx, gateReason));
+        return;
+      }
+      /* 2.29.2：自由对话兜底——本地意图听不懂的句子直接走聊天出口（先本地判意图，
+         不为这类句子白等一次解析）；失败照常回落本地。 */
+      if (detectIntent(text) === 'unknown') {
+        chatFallback(text, state, ctx, resolve, cfg);
         return;
       }
       var payload = {
@@ -3555,7 +3643,12 @@
       chat: llmChat,
       plan: llmPlan,
       buildPlan: buildPlan,
-      respondRemote: respondRemote
+      respondRemote: respondRemote,
+      /* 2.29.2：内置免费预设视图 + 当前配置是否命中预设（供设置页一键应用与开关门判定） */
+      preset: function () {
+        return { id: AI_PRESET.id, baseURL: AI_PRESET.baseURL, model: AI_PRESET.model, keyless: true };
+      },
+      isPreset: function () { return aiIsPreset(aiRead()); }
     },
     respondRemote: respondRemote
   };

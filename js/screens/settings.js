@@ -3823,6 +3823,36 @@
     head.appendChild(t('h2', 's-settings-group__title', '接口与密钥'));
     wrap.appendChild(head);
 
+    /* 2.29.2：内置免费模型一键应用——只写地址/模型并清空密钥（免密钥档，限流约 45s 一条）；
+       「开启在线模型」与隐私告知仍要手动，尊重 A28 出站门。 */
+    var presetBtn = h('button', {
+      className: 'c-btn c-btn--secondary', type: 'button',
+      text: '一键应用免费模型（免密钥）',
+      aria: { label: '一键应用内置免费模型，免密钥' }
+    });
+    presetBtn.addEventListener('click', function () {
+      var api = llmApi();
+      if (!api || typeof api.setConfig !== 'function' || typeof api.preset !== 'function') { return; }
+      var p = api.preset();
+      var res = null;
+      try { res = api.setConfig({ baseURL: p.baseURL, model: p.model, key: '' }); } catch (error) { res = null; }
+      if (!res || res.ok !== true) {
+        status.textContent = '没保存：应用免费模型失败，请重试';
+        return;
+      }
+      inputs.baseURL.value = p.baseURL;
+      inputs.model.value = p.model;
+      markKey();
+      status.textContent = '已应用免费模型：同意隐私告知并打开「开启在线模型」即可用';
+    });
+    var presetRow = h('div', { className: 's-settings-actions' });
+    presetRow.appendChild(presetBtn);
+    wrap.appendChild(presetRow);
+    wrap.appendChild(h('p', {
+      className: 's-settings-group__note',
+      text: '免费档限流（约 45 秒一条），忙时自动改用本地解析。想要更强更稳：siliconflow.cn 免费注册（送 2000 万 tokens），接口地址改填 https://api.siliconflow.cn/v1，模型名如 Qwen/Qwen3-8B，再粘贴密钥。'
+    }));
+
     var status = h('p', { className: 's-settings-note', text: '还没测试过', aria: { live: 'polite' } });
     var inputs = {};
     var fields = h('div', { className: 's-settings-sheet' });
@@ -3850,13 +3880,19 @@
     }
     wrap.appendChild(fields);
 
-    /* getConfig 只回掩码 ••••尾4：用户不回改就不覆盖真 key。 */
+    /* getConfig 只回掩码 ••••尾4：用户不回改就不覆盖真 key。
+       2.29.2：免密钥预设生效时占位符明说「免密钥」，不再诱导用户去找密钥。 */
     function markKey() {
       var saved = llmCfg() || {};
+      var api = llmApi();
       inputs.key.value = '';
-      inputs.key.placeholder = saved.hasKey === true
-        ? '已保存 ' + (saved.keyMasked || '••••')
-        : '粘到这里，只存这台手机';
+      if (saved.hasKey === true) {
+        inputs.key.placeholder = '已保存 ' + (saved.keyMasked || '••••');
+      } else if (api && typeof api.isPreset === 'function' && api.isPreset()) {
+        inputs.key.placeholder = '免密钥 · 内置免费档';
+      } else {
+        inputs.key.placeholder = '粘到这里，只存这台手机';
+      }
     }
     markKey();
 
@@ -3892,20 +3928,25 @@
        非法地址不再能开启开关，开关态与生效配置不脱节。 */
     function configComplete(map) {
       var saved = llmCfg() || {};
+      var api = llmApi();
+      /* 2.29.2：内置免费预设（免密钥）也算配置齐全；自定义服务仍要求密钥 */
+      var presetOk = !!(api && typeof api.isPreset === 'function' && api.isPreset());
       var typed = String(map.key.value || '');
       var hasKey = saved.hasKey === true || (typed !== '' && typed.indexOf('••••') !== 0);
       var addr = String(map.baseURL.value || '').trim();
       return /^https?:\/\/\S+$/i.test(addr)
         && String(map.model.value || '').trim() !== ''
-        && hasKey;
+        && (hasKey || presetOk);
     }
 
     function focusFirstMissing(map) {
       var saved = llmCfg() || {};
+      var api = llmApi();
+      var presetOk = !!(api && typeof api.isPreset === 'function' && api.isPreset());
       var typed = String(map.key.value || '');
       var missing = String(map.baseURL.value || '').trim() === '' ? 'baseURL'
         : (String(map.model.value || '').trim() === '' ? 'model'
-          : ((saved.hasKey === true || (typed !== '' && typed.indexOf('••••') !== 0)) ? '' : 'key'));
+          : ((saved.hasKey === true || (typed !== '' && typed.indexOf('••••') !== 0) || presetOk) ? '' : 'key'));
       if (missing && map[missing] && typeof map[missing].focus === 'function') { map[missing].focus(); }
     }
 
@@ -3974,7 +4015,7 @@
       /* A28：测试连接是出站请求，未同意隐私告知（noticeAt=0）不发。
          提前说明真实缺口，不再沿用「要填齐」的误导文案（2.26.9 修复）。 */
       if (Number((llmCfg() || {}).noticeAt) <= 0) {
-        status.textContent = '三项已填齐。先在上方同意隐私告知，再测试连接';
+        status.textContent = '配置已就绪。先在上方同意隐私告知，再测试连接';
         return;
       }
       busy = true;
