@@ -47,4 +47,30 @@ Pages 约 1 分钟后更新。
 
 ## 回滚
 
-`git revert <commit>` 后 push。版本号和缓存名也一并回退，旧 SW 才会重新接管。
+原则：**回滚 = 反向发版**。SW 对 JS 是 cacheFirst，只把代码退回去没用——线上用户会一直命中旧缓存，必须走一遍"版本变化"才能让新 SW 接管。
+
+标准步骤（每个功能一个独立 commit，所以能精确退）：
+
+```bash
+# 1) 找到要退的 commit（发版时打了 tag：git tag v2.28.9）
+git log --oneline -5          # 或 git tag -l
+
+# 2) revert（可能多个 commit，按从新到旧依次 revert）
+git revert <sha>              # 冲突时逐个解决；不要 reset --hard push 过的提交
+
+# 3) 版本三处改成新的回滚版本号（建议直接 +0.0.1，如 2.28.9 → 2.28.10；
+#    复用旧版本号会导致 CACHE_NAME 撞名，用户卡在旧缓存）
+#    - index.html 的 XZB.version
+#    - sw.js 的 CACHE_LABEL / CACHE_NAME（+ 头部注释里的版本串）
+#    - tests/category-expansion.test.js 用例 7.1/7.2 转义正则
+
+# 4) CHANGELOG 顶部加一条「回滚」词条说明原因
+
+# 5) node scripts/test.js && node scripts/check.js 全绿后 push
+git push origin main
+curl -s "https://9998878.github.io/xiaozhangben/sw.js?t=$(date +%s)" | grep CACHE_NAME
+```
+
+数据安全：schema 新字段一律带默认值向后兼容（老代码读新数据仅丢未知字段不报错）；回滚丢字段前提醒用户先导出 JSON 备份；本机自动快照（IndexedDB `STORE_SNAPSHOTS`）是最后兜底。
+
+约定（2026-11-08 起）：push 前两道闸门——test+check 全绿、用户看过截图；不满足不 push，没 push 就不存在线上回滚。

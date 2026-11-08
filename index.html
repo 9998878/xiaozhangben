@@ -14921,6 +14921,8 @@ textarea::selection {
       categoryId: str(raw.categoryId, ''),
       amountCents: toAmount(raw.amountCents, 0),
       thresholdPct: toInt(raw.thresholdPct, 80),
+      /* 结转上月剩余（2.28.9，只滚结余；老数据无此键 → false，向后兼容） */
+      carryover: toBool(raw.carryover, false),
       createdAt: base.createdAt,
       updatedAt: base.updatedAt
     };
@@ -21055,6 +21057,26 @@ textarea::selection {
       byCategory[categoryId] = (byCategory[categoryId] || 0) + amount;
     });
 
+    /* 结转（2.28.9，口径=只滚结余：上月同分类预算的剩余滚入本月可用额度，超支不追）。
+       总预算不结转（totalCents 口径不变）。上月数据只在该月存在预算行时参与。 */
+    var prevMonth = prevMonthOf(m);
+    var prevRange = prevMonth ? monthRangeOf(prevMonth) : { start: '', end: '' };
+    var prevByCategory = Object.create(null);
+    var prevLimitByCategory = Object.create(null);
+    if (prevRange.start) {
+      walk(model, { mode: 'one', bookId: bookId }, function (tx, type, amount, date) {
+        if (type !== TYPE_EXPENSE) { return; }
+        if (date < prevRange.start || date > prevRange.end) { return; }
+        var categoryId = typeof tx.categoryId === 'string' ? tx.categoryId : '';
+        prevByCategory[categoryId] = (prevByCategory[categoryId] || 0) + amount;
+      });
+      for (var p = 0; p < model.categoryBudgets.length; p++) {
+        var pcb = model.categoryBudgets[p];
+        if (!pcb || pcb.bookId !== bookId || pcb.month !== prevMonth) { continue; }
+        prevLimitByCategory[typeof pcb.categoryId === 'string' ? pcb.categoryId : ''] = intOf(pcb.amountCents);
+      }
+    }
+
     var categoryIndex = indexById(model.categories);
     var items = [];
     for (var c = 0; c < model.categoryBudgets.length; c++) {
@@ -21063,17 +21085,25 @@ textarea::selection {
       var limitCents = intOf(cb.amountCents);
       var categoryId = typeof cb.categoryId === 'string' ? cb.categoryId : '';
       var spent = byCategory[categoryId] || 0;
+      var carryoverCents = 0;
+      if (cb.carryover === true && prevRange.start) {
+        carryoverCents = Math.max(0, (prevLimitByCategory[categoryId] || 0) - (prevByCategory[categoryId] || 0));
+      }
+      var availableCents = limitCents + carryoverCents;
       var threshold = intOf(cb.thresholdPct);
       if (threshold < 50 || threshold > 100) { threshold = WARN_PCT; }
-      var rate = limitCents > 0 ? round1(spent / limitCents * 100) : 0;
+      /* 进度/超支口径 = 可用额度（分配+结转）；limitCents 保留原义=本月分配 */
+      var rate = availableCents > 0 ? round1(spent / availableCents * 100) : 0;
       var category = categoryIndex[categoryId];
       items.push({
         categoryId: categoryId,
         name: category && category.name ? String(category.name) : '未分类',
         limitCents: limitCents,
         spentCents: spent,
+        carryoverCents: carryoverCents,
+        availableCents: availableCents,
         pct: rate,
-        state: budgetState(limitCents, rate, threshold),
+        state: budgetState(availableCents, rate, threshold),
         /* 仅为排序使用的内部字段，输出前删除 */
         __sort: limitCents
       });

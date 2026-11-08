@@ -864,7 +864,11 @@
   }
 
   function buildCategoryRow(ctx, bookId, item, entity) {
-    var limit = Math.max(0, Number(item.limitCents) || 0);
+    var allocated = Math.max(0, Number(item.limitCents) || 0);
+    /* 结转口径（2.28.9）：进度/超支/读数一律按「可用额度」（分配+结转）算；
+       编辑入口仍传分配额（item.limitCents），改的是分配不是结转结果。 */
+    var limit = Math.max(0, Number(item.availableCents != null ? item.availableCents : item.limitCents) || 0);
+    var carry = Math.max(0, Number(item.carryoverCents) || 0);
     var spent = Math.max(0, Number(item.spentCents) || 0);
     var pct = limit > 0 ? Math.round((spent / limit) * 100) : 0;
     var over = limit > 0 && spent > limit;
@@ -893,8 +897,10 @@
     bar.appendChild(fill);
     barWrap.appendChild(bar);
     main.appendChild(barWrap);
-    /* M10：不只给百分比——直接给「剩余 / 日均还可花」的可行动读数 */
-    main.appendChild(el('span', { className: 's-plan-cat__pace', text: categoryPaceText(limit, spent, over) }));
+    /* M10：不只给百分比——直接给「剩余 / 日均还可花」的可行动读数；有结转时前置说明 */
+    var paceText = categoryPaceText(limit, spent, over);
+    if (carry > 0) { paceText = '含结转 ' + yuanInt(carry).replace('¥', '') + ' 元 · ' + paceText; }
+    main.appendChild(el('span', { className: 's-plan-cat__pace', text: paceText }));
     if (over) {
       main.appendChild(el('span', { className: 's-plan-cat__over', text: '超支 ' + yuanInt(spent - limit).replace('¥', '') + ' 元' }));
     }
@@ -908,7 +914,7 @@
     row.addEventListener('click', function () {
       openCategoryBudgetForm(ctx, bookId, progressMonthOf(item) || P.month, entity || {
         categoryId: item.categoryId,
-        amountCents: limit,
+        amountCents: allocated,
         month: P.month
       });
     });
@@ -1007,10 +1013,26 @@
     var amountBox = amountInput(entity ? entity.amountCents : 0);
     var error = errorNode();
     var editing = !!(entity && entity.id);
+    /* 结转上月剩余（2.28.9，口径=只滚结余；来源 Actual envelope.carryover / Firefly ROLLOVER）。
+       开关复用 add.js 报销开关的 c-switch 写法（CSS 单一真源在 index.html）。 */
+    var carryOn = !!(entity && entity.carryover === true);
+    var carrySwitch = el('button', { className: 'c-switch s-plan-cats__carry', type: 'button' });
+    carrySwitch.setAttribute('role', 'switch');
+    carrySwitch.setAttribute('aria-label', '结转上月剩余');
+    var paintCarry = function () {
+      carrySwitch.setAttribute('aria-checked', carryOn ? 'true' : 'false');
+    };
+    paintCarry();
+    carrySwitch.addEventListener('click', function () {
+      carryOn = !carryOn;
+      paintCarry();
+    });
     var nodes = [
       hintNode(monthLabel(month) + ' 的分类上限'),
       fieldRow('分类', categorySelect),
       fieldRow('预算金额', amountBox, '¥'),
+      fieldRow('结转上月剩余', carrySwitch),
+      hintNode('上月没花完的自动加到本月；超支不追。'),
       hintNode(entity && entity.thresholdPct ? '达到 ' + entity.thresholdPct + '% 时提醒' : '达到 80% 时提醒'),
       error
     ];
@@ -1045,6 +1067,7 @@
         }
         if (found) {
           found.amountCents = cents;
+          found.carryover = carryOn;
           found.updatedAt = nowIso();
           return { value: found.id };
         }
@@ -1052,7 +1075,8 @@
           bookId: bookId,
           month: month,
           categoryId: categoryId,
-          amountCents: cents
+          amountCents: cents,
+          carryover: carryOn
         });
         list.push(created);
         return { value: created.id };
