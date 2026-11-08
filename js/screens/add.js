@@ -265,7 +265,8 @@
     danglingExistingIds: danglingExistingIds,
     selfHealedExistingIds: selfHealedExistingIds,
     pendingRetryText: pendingRetryText,
-    pendingRetryOutcome: pendingRetryOutcome
+    pendingRetryOutcome: pendingRetryOutcome,
+    suggestCategoryByAccount: suggestCategoryByAccount
   });
 
   /* ---------------- DOM 小工具 ---------------- */
@@ -400,6 +401,9 @@
       accountId: '',
       toAccountId: '',
       categoryId: '',
+      /* 历史智能默认（2.28.9）：用户手动选过分类（宫格/现成种类/全部面板）后置 true，
+         之后账户切换不再覆盖用户选择；编辑模式直接置 true。 */
+      categoryTouched: false,
       date: today,
       note: '',
       tags: [],
@@ -426,10 +430,15 @@
       state.note = typeof editing.note === 'string' ? editing.note.slice(0, noteMax) : '';
       state.tags = arr(editing.tags).slice(0, limitedTags.count);
       state.reimburse = editing.reimburse === 'pending' || editing.reimburse === 'done';
+      /* 编辑模式不改默认：历史智能建议只服务新建（2.28.9） */
+      state.categoryTouched = true;
     } else {
       state.type = 'expense';
       state.accountId = defaultAccountId(accounts, app, settings);
-      state.categoryId = defaultCategoryId(state.type, categoriesAll, settings);
+      /* 历史智能默认（2.28.9，源自 MMEX「收款方记住上次分类」/一木「同商家沿用上次分类」）：
+         当前账户+类型最近 3 笔分类一致则直接带出，否则回落设置里的默认分类。 */
+      state.categoryId = suggestCategoryByAccount(db, state.accountId, state.type) ||
+        defaultCategoryId(state.type, categoriesAll, settings);
       state.date = today;
     }
 
@@ -979,6 +988,16 @@
       if (!existsIn(accounts, id)) return;
       state.accountId = id;
       if (state.type === 'transfer' && state.toAccountId === id) state.toAccountId = '';
+      /* 历史智能默认：账户切换时跟随（镜像类型切换 L928 的重置先例；用户手动选过分类则不覆盖）。
+         建议为空时回落默认分类——与"进屏就是这个账户"的初始口径一致。 */
+      if (!state.categoryTouched && state.type !== 'transfer') {
+        var suggested = suggestCategoryByAccount(db, state.accountId, state.type) ||
+          defaultCategoryId(state.type, categoriesAll, settings);
+        if (suggested && suggested !== state.categoryId) {
+          state.categoryId = suggested;
+          renderGrid();
+        }
+      }
       syncProps();
       syncAmount();
     }
@@ -1249,6 +1268,7 @@
             for (var i = 0; i < poolNow.length; i += 1) {
               if (poolNow[i].name === preset.name) {
                 state.categoryId = poolNow[i].id;
+                state.categoryTouched = true;
                 refreshCategoriesFromDb();
                 syncAmount();
                 showToast('「' + preset.name + '」已建过，已选中');
@@ -1259,7 +1279,10 @@
             return;
           }
           refreshCategoriesFromDb();
-          if (res.id) { state.categoryId = res.id; }
+          if (res.id) {
+            state.categoryId = res.id;
+            state.categoryTouched = true;
+          }
           /* 不整屏重绘（会拆掉弹层）：原地同步草稿条，关弹层时 renderGrid 统一去重 */
           syncAmount();
           cell.classList.add('is-added');
@@ -1315,6 +1338,7 @@
       if (!category) return;
       if (category.kind !== state.type) return;
       state.categoryId = id;
+      state.categoryTouched = true;
       renderGrid();
       syncAmount();
     }
@@ -3491,6 +3515,28 @@
       if (categories[i].kind === type) return categories[i].id;
     }
     return '';
+  }
+
+  /* 历史智能默认（2.28.9，吸收自 MMEX「收款方记住上次分类」TrxDialog.cpp 与一木「同商家沿用上次分类」）：
+     当前账户+类型最近 3 笔（跨账本、deleted 除外；转账天然无分类）分类全一致 → 返回该分类 id，
+     否则返回 ''（由调用方回落 defaultCategoryId）。纯函数：只读 db，不写任何状态。 */
+  function suggestCategoryByAccount(db, accountId, type) {
+    var txs = db && Array.isArray(db.transactions) ? db.transactions : [];
+    if (!accountId || !txs.length) return '';
+    var pool = [];
+    for (var i = 0; i < txs.length; i += 1) {
+      var tx = txs[i];
+      if (!tx || tx.deleted === true) continue;
+      if (tx.type !== type || tx.accountId !== accountId) continue;
+      if (typeof tx.categoryId !== 'string' || !tx.categoryId) continue;
+      pool.push({ key: String(tx.date) + ' ' + String(tx.time || ''), id: tx.categoryId });
+    }
+    if (pool.length < 3) return '';
+    pool.sort(function (a, b) {
+      if (a.key !== b.key) return a.key < b.key ? 1 : -1;
+      return 0;
+    });
+    return (pool[0].id === pool[1].id && pool[1].id === pool[2].id) ? pool[0].id : '';
   }
 
   /* ============================================================
