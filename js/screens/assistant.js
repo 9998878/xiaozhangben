@@ -1435,6 +1435,9 @@
       }
       paint();
       scrollToEnd(true);
+      /* 2.29.2：写入后必须刷新横幅——草稿已清，横幅若不刷会一直挂着
+         「上次还有 N 笔没确认」，再点「继续→确认」就撞「这几笔之前已经记过了」（用户实测）。 */
+      refreshBanner();
       /* 2.28.8：撤销历史机制移除，写入成功不再出屏内撤销条。 */
       queueNext();
     }, function () {
@@ -1442,6 +1445,7 @@
       pushTurn({ who: 'bot', text: '写入失败，请再试一次', tone: 'err', mode: 'local' });
       paint();
       scrollToEnd(true);
+      refreshBanner();
       queueNext();
     });
   }
@@ -1465,6 +1469,26 @@
 
     var as = assistant();
     var draft = as && as.draft && as.draft.load ? as.draft.load() : null;
+    /* 2.29.2：草稿自愈——计划里每一笔都已经在库里（未删）说明早写过了，
+       这份草稿是残留，直接清掉不出横幅；否则「继续 → 确认」必撞
+       「这几笔之前已经记过了，没有重复入账」。 */
+    if (draft && draft.plan && draft.plan.kind === 'create' && (draft.plan.items || []).length) {
+      var cxHeal = cxNow();
+      var written = (cxHeal && cxHeal.db && cxHeal.db.transactions) || [];
+      var allDone = true;
+      for (var hi = 0; hi < draft.plan.items.length; hi += 1) {
+        var hid = draft.plan.items[hi] && draft.plan.items[hi].id;
+        var hitTx = null;
+        for (var hj = 0; hj < written.length; hj += 1) {
+          if (written[hj] && written[hj].id === hid) { hitTx = written[hj]; break; }
+        }
+        if (!hitTx || hitTx.deleted === true) { allDone = false; break; }
+      }
+      if (allDone) {
+        if (as.draft.clear) { as.draft.clear(); }
+        draft = null;
+      }
+    }
     var onScreen = false;
     if (draft && draft.plan) {
       onScreen = session.turns.some(function (turn) {
@@ -1504,6 +1528,9 @@
             });
             paint();
             scrollToEnd(true);
+            /* 2.29.2：预览已上屏，横幅必须收掉——否则它一直挂着，
+               再点一次「继续→确认」就会撞「这几笔之前已经记过了」（用户实测）。 */
+            banner.hidden = true;
           }
         }, ['继续'])
       ]);

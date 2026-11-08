@@ -120,5 +120,36 @@ test('3.3 core 快车道仍在位（与 ai-preset 4.6 互为印证）', function
   check(CORE_JS.indexOf("detectIntent(text) !== 'create'") >= 0, '快车道只认 create');
 });
 
+console.log('\n用例 4：横幅与草稿生命周期（用户实测「已记过+横幅残留」修复）');
+
+test('4.1 写入成功/失败后都刷新横幅（草稿已清，横幅不得残留）', function () {
+  const at = ASSISTANT_JS.indexOf('as.execute(confirmPlan, cx).then(');
+  check(at >= 0, 'doConfirm 的 execute 调用应存在');
+  const successQueue = ASSISTANT_JS.indexOf('queueNext();', at);
+  const successRefresh = ASSISTANT_JS.indexOf('refreshBanner();', at);
+  check(successQueue > at && successRefresh > at && successRefresh < successQueue,
+    '成功路径应在 queueNext 之前刷横幅');
+  const failPath = ASSISTANT_JS.indexOf("pushTurn({ who: 'bot', text: '写入失败，请再试一次'", at);
+  check(failPath > at, '失败路径应存在');
+  const failRefresh = ASSISTANT_JS.indexOf('refreshBanner();', failPath);
+  check(failRefresh > failPath && failRefresh - failPath < 400, '失败路径也应刷横幅');
+});
+
+test('4.2 「继续」上屏后收横幅：不得反复挂「上次还有 N 笔没确认」', function () {
+  const cont = ASSISTANT_JS.indexOf("'接着确认上次那批'");
+  check(cont >= 0, '继续按钮应存在');
+  const hide = ASSISTANT_JS.indexOf('banner.hidden = true;', cont);
+  check(hide > cont && hide - cont < 1600, '继续把预览推上屏后应把横幅收掉');
+});
+
+test('4.3 横幅自愈：草稿里的每一笔都已入库（未删）时清掉草稿不出横幅', function () {
+  check(ASSISTANT_JS.indexOf('草稿自愈') >= 0, '应有自愈逻辑注释锚点');
+  const heal = ASSISTANT_JS.indexOf('草稿自愈');
+  const clearCall = ASSISTANT_JS.indexOf('as.draft.clear();', heal);
+  check(clearCall > heal && clearCall - heal < 1200, '自愈应清掉残留草稿');
+  check(ASSISTANT_JS.indexOf("hitTx.deleted !== true", heal) >= 0 || ASSISTANT_JS.indexOf('hitTx.deleted === true', heal) >= 0,
+    '自愈应以「未删的同 id 账目」为已写入判据');
+});
+
 console.log('\n通过 ' + passCount + ' / 失败 ' + failCount);
 if (failCount > 0) { process.exitCode = 1; }
