@@ -52,6 +52,28 @@
   /* 2.28.8：撤销历史机制移除，UNDO_MS / 屏内撤销条一并删除。 */
   var TYPING_DELAY = 200;
 
+  /* 2.29.2：鲨鱼式极速直记——看懂的账不再停在确认卡，直接入账，
+     DIRECT_UNDO_MS 内可在气泡里一键撤销；缺金额/疑似重复/拿不准的仍走补问与确认。 */
+  var DIRECT_PREF_KEY = 'assistant.direct';
+  var DIRECT_UNDO_MS = 8000;
+
+  function prefGet(key, fallback) {
+    var prefs = (XZB.app && XZB.app.prefs) || null;
+    if (!prefs || typeof prefs.get !== 'function') { return fallback; }
+    try {
+      var v = prefs.get(key, fallback);
+      return (v === undefined || v === null) ? fallback : v;
+    } catch (error) { return fallback; }
+  }
+
+  function prefSet(key, value) {
+    var prefs = (XZB.app && XZB.app.prefs) || null;
+    if (!prefs || typeof prefs.set !== 'function') { return false; }
+    try { prefs.set(key, value); return true; } catch (error) { return false; }
+  }
+
+  function directOn() { return prefGet(DIRECT_PREF_KEY, true) !== false; }
+
   /* 回落原因 → 一行短说明（A27/D-08：不得静默切换） */
   var REASON_TEXT = {
     timeout: '网络超时，已改用本地解析',
@@ -313,7 +335,7 @@
 
     var banner = el('div', { className: 's-assistant__banner', hidden: true });
 
-    var chipRow = el('div', { className: 's-assistant__chips', 'aria-label': '快捷示例' });
+    var chipRow = el('div', { className: 's-assistant__chips', 'aria-label': '快捷标签' });
 
     var input = el('textarea', {
       className: 's-assistant__input',
@@ -496,6 +518,8 @@
   }
 
   function botBubble(turn) {
+    /* 2.29.2：直记成功气泡（自带撤销）优先于普通 reply 渲染 */
+    if (turn.kind === 'recorded') { return recordedBubble(turn); }
     var reply = turn.reply || {};
     var body = el('div', { className: 's-assistant__bubble s-assistant__bubble--bot' + (turn.tone === 'ok' ? ' is-ok' : '') + (turn.tone === 'err' ? ' is-err' : '') });
 
@@ -587,6 +611,83 @@
     }
 
     return el('div', { className: 's-assistant__row s-assistant__row--bot' }, [
+      el('div', { className: 's-assistant__avatar', 'aria-hidden': 'true' }, [icon('sparkles', 16)]),
+      body
+    ]);
+  }
+
+  /* 2.29.2：直记成功气泡——明细一行一笔 + 撤销按钮（DIRECT_UNDO_MS 后消失） */
+  function recordedRowText(row) {
+    return [row.typeText, row.amountText, row.categoryText, row.accountText, row.note]
+      .filter(function (part) { return !!part; }).join(' · ');
+  }
+
+  function undoRecorded(turn) {
+    if (!turn || turn.undoGone || turn.undoing || turn.undone) { return; }
+    var as = assistant();
+    var cx = cxNow();
+    var ids = turn.ids || [];
+    if (!as || !cx || !ids.length || typeof as.buildDeletePlan !== 'function' || typeof as.execute !== 'function') {
+      turn.undoGone = true;
+      paint();
+      return;
+    }
+    turn.undoing = true;
+    paint();
+    var done = 0;
+    var failed = 0;
+    function settle(ok) {
+      done += 1;
+      if (!ok) { failed += 1; }
+      if (done < ids.length) { return; }
+      turn.undoing = false;
+      turn.undone = failed === 0;
+      turn.undoGone = true;
+      paint();
+      scrollToEnd(true);
+    }
+    ids.forEach(function (id) {
+      var tx = null;
+      ((cx.db && cx.db.transactions) || []).forEach(function (one) {
+        if (one && one.id === id) { tx = one; }
+      });
+      if (!tx || tx.deleted === true) { settle(true); return; }
+      var delPlan = null;
+      try { delPlan = as.buildDeletePlan(tx, cx); } catch (error) { delPlan = null; }
+      if (!delPlan) { settle(false); return; }
+      as.execute(delPlan, cx).then(function (res) {
+        settle(!!(res && res.ok));
+      }, function () {
+        settle(false);
+      });
+    });
+  }
+
+  function recordedBubble(turn) {
+    var rows = turn.rows || [];
+    var body = el('div', { className: 's-assistant__bubble s-assistant__bubble--bot is-ok' });
+    body.appendChild(el('p', {
+      className: 's-assistant__text',
+      text: turn.undone ? '已撤销，这笔没有入账' : (rows.length > 1 ? '已记 ' + rows.length + ' 笔 ✓' : '已记 ✓')
+    }));
+    rows.forEach(function (row) {
+      body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: recordedRowText(row) }));
+    });
+    if (turn.undone) {
+      body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: '想再记直接说一句就行' }));
+    } else if (!turn.undoGone) {
+      var acts = el('div', { className: 's-assistant__actions' });
+      acts.appendChild(el('button', {
+        className: 's-assistant__ghost',
+        type: 'button',
+        'aria-label': '撤销刚才直接入的账',
+        onclick: function () { undoRecorded(turn); }
+      }, [turn.undoing ? '正在撤销…' : '撤销']));
+      body.appendChild(acts);
+    } else {
+      body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: '想改动去流水里操作就行' }));
+    }
+    return el('div', { className: 's-assistant__row s-assistant__row--bot', 'aria-live': 'polite' }, [
       el('div', { className: 's-assistant__avatar', 'aria-hidden': 'true' }, [icon('sparkles', 16)]),
       body
     ]);
@@ -1210,6 +1311,12 @@
   function afterReply(raw, reply, meta) {
     var as = assistant();
 
+    /* 2.29.2：鲨鱼式直记——干净的 create 预览不停留，直接写入并给撤销气泡 */
+    if (directReplyOk(reply, meta)) {
+      doConfirm(reply.plan, { direct: true });
+      return;
+    }
+
     /* 草稿是否需要写进 prefs：只在「待确认」时留，确认/放弃后清掉 */
     if (reply && reply.kind === 'preview' && reply.plan && as && as.draft && as.draft.save) {
       as.draft.save(reply.plan, { note: 'waiting-confirm' });
@@ -1230,6 +1337,17 @@
     scrollToEnd(true);
     renderChips();
     queueNext();
+  }
+
+  /* 直记闸门：只对「可直接确认的干净 create 预览」放行；
+     疑似重复（needDupConfirm）、云端回落（fallback）、非 create 一律照旧走确认卡。 */
+  function directReplyOk(reply, meta) {
+    if (!directOn()) { return false; }
+    if (!reply || reply.kind !== 'preview' || reply.canConfirm !== true) { return false; }
+    if (reply.needDupConfirm === true) { return false; }
+    if (!reply.plan || reply.plan.kind !== 'create') { return false; }
+    if (meta && meta.mode === 'fallback') { return false; }
+    return true;
   }
 
   function markConsumed(plan) {
@@ -1283,7 +1401,38 @@
       if (updated) { parts.push('修改 ' + updated + ' 笔'); }
       if (deleted) { parts.push('删除 ' + deleted + ' 笔'); }
       var doneText = res.already ? '这几笔之前已经记过了，没有重复入账' : ('搞定，' + (parts.join('、') || '已写入'));
-      pushTurn({ who: 'bot', text: doneText, tone: 'ok', mode: 'local' });
+      /* 2.29.2：鲨鱼式直记成功——明细气泡 + 8 秒撤销窗 + 成功音；普通确认仍走旧文案 */
+      if (opts && opts.direct === true && created > 0) {
+        var view = as.previewRows ? as.previewRows(plan, cx) : null;
+        var rows = (view && view.rows ? view.rows : []).filter(function (row) {
+          return (result.created || []).indexOf(row.id) >= 0;
+        });
+        var turn = {
+          who: 'bot',
+          kind: 'recorded',
+          rows: rows,
+          ids: (result.created || []).slice(),
+          undoing: false,
+          undone: false,
+          undoGone: false,
+          mode: 'local',
+          reason: ''
+        };
+        pushTurn(turn);
+        later(function () {
+          if (turn.undone || turn.undoing) { return; }
+          turn.undoGone = true;
+          paint();
+        }, DIRECT_UNDO_MS);
+        setTimeout(function () {
+          try {
+            var sound = (XZB.ui && XZB.ui.sound) || (XZB.UI && XZB.UI.sound);
+            if (sound && typeof sound.fire === 'function') { sound.fire('success'); }
+          } catch (error) { /* 音效失败绝不影响记账 */ }
+        }, 160);
+      } else {
+        pushTurn({ who: 'bot', text: doneText, tone: 'ok', mode: 'local' });
+      }
       paint();
       scrollToEnd(true);
       /* 2.28.8：撤销历史机制移除，写入成功不再出屏内撤销条。 */
@@ -1362,18 +1511,48 @@
     }
   }
 
+  /* 2.29.2：鲨鱼式快捷标签——近 60 天高频支出分类 top6 常驻；点一下填词，补个金额就发送 */
+  function topChips() {
+    var cx = cxNow();
+    var out = [];
+    if (cx && cx.db) {
+      var cut = '';
+      var d = datesApi();
+      if (d && typeof d.addDays === 'function' && cx.today) {
+        try { cut = d.addDays(cx.today, -60); } catch (error) { cut = ''; }
+      }
+      var counts = {};
+      (cx.db.transactions || []).forEach(function (tx) {
+        if (!tx || tx.deleted === true || tx.type !== 'expense') { return; }
+        if (cut && tx.date && tx.date < cut) { return; }
+        var id = tx.categoryId || '';
+        if (!id) { return; }
+        counts[id] = (counts[id] || 0) + 1;
+      });
+      Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).forEach(function (id) {
+        if (out.length >= 6) { return; }
+        var cat = null;
+        (cx.liveCategories || []).forEach(function (c) { if (c && c.id === id) { cat = c; } });
+        if (cat && cat.name && out.indexOf(String(cat.name)) < 0) { out.push(String(cat.name)); }
+      });
+    }
+    ['午饭', '打车', '咖啡', '超市', '快递'].forEach(function (word) {
+      if (out.length < 6 && out.indexOf(word) < 0) { out.push(word); }
+    });
+    return out.slice(0, 6);
+  }
+
   function renderChips() {
     if (!host) { return; }
     var row = host.chipRow;
     clear(row);
-    if (session.turns.length > 3) { return; }
-    QUICK_EXAMPLES.forEach(function (text) {
+    topChips().forEach(function (word) {
       row.appendChild(el('button', {
         className: 's-assistant__chip',
         type: 'button',
-        'aria-label': '示例：' + text + '（点了只填进输入框）',
-        onclick: function () { fillInput(text); }
-      }, [text]));
+        'aria-label': '快记：' + word + '（点了填进输入框，补个金额就发送）',
+        onclick: function () { fillInput(word + ' '); }
+      }, [word]));
     });
   }
 

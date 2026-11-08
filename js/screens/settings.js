@@ -1185,8 +1185,11 @@
      改用 llmConfigView 实际提供的 ready（=已开启且已同意隐私告知）。 */
   function llmRowValue() {
     var cfg = llmCfg();
+    var api = llmApi();
+    /* 2.29.2：免密钥预设（内置免费模型）也算已配置 */
+    var presetOk = !!(api && typeof api.isPreset === 'function' && api.isPreset());
     if (!cfg) { return '未配置 · 纯本地'; }
-    var configured = cfg.hasKey === true && cfg.baseURL && cfg.model;
+    var configured = cfg.baseURL && cfg.model && (cfg.hasKey === true || presetOk);
     if (!configured) { return '未配置 · 纯本地'; }
     if (cfg.enabled !== true) { return '已关闭 · 纯本地'; }
     if (cfg.ready !== true) { return '未就绪 · 纯本地'; }
@@ -1200,6 +1203,14 @@
         title: '小助手',
         sub: '说一句就能记好一笔',
         onClick: function () { go(ctx, '#/assistant'); }
+      }),
+      /* 2.29.2：鲨鱼式极速直记——看懂直接入账，气泡里 8 秒可撤销 */
+      switchRow(ctx, {
+        icon: 'check-circle',
+        title: '极速直记',
+        sub: '看懂的账直接入账，8 秒内可在小助手里撤销；拿不准的仍会先问你',
+        checked: prefsGet(ctx, 'assistant.direct', true) !== false,
+        onChange: function (next) { return prefsSet(ctx, 'assistant.direct', next === true); }
       }),
       row({
         icon: 'cloud',
