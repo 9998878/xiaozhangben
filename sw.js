@@ -49,7 +49,8 @@
     './js/modules/nl.js',
     './js/modules/core-assistant.js',
     './js/modules/ai-insights.js',
-    './js/modules/habit.js'
+    './js/modules/habit.js',
+    './js/modules/bill-import.js'
   ];
 
   /* 判断是否为可接管的 http(s) 地址：chrome-extension:/file:/data: 一律放行给浏览器 */

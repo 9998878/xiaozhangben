@@ -11924,6 +11924,99 @@ textarea::selection {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- 从微信/支付宝账单导入（2.29.0） ---------- */
+.s-settings-bill__accrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 0;
+}
+
+.s-settings-bill__acclabel {
+  color: var(--c-text-2);
+  font-size: var(--fs-subhead);
+}
+
+.s-settings-bill__select {
+  min-width: 9em;
+  max-width: 60%;
+  height: 36px;
+  padding: 0 var(--sp-2);
+  border: var(--hairline) solid var(--c-stroke);
+  border-radius: var(--r-md, 10px);
+  background: var(--c-bg-elev);
+  color: var(--c-text);
+  font-size: var(--fs-subhead);
+}
+
+.s-settings-bill__sumline {
+  margin: var(--sp-2) 0 0;
+  color: var(--c-text-2);
+  font-size: var(--fs-subhead);
+}
+
+.s-settings-bill__sum {
+  color: var(--c-text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.s-settings-bill__list {
+  max-height: 40vh;
+  overflow-y: auto;
+  border: var(--hairline) solid var(--c-stroke);
+  border-radius: var(--r-md, 10px);
+  margin-top: var(--sp-2);
+}
+
+.s-settings-bill__row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: var(--hairline) solid var(--c-hairline);
+  cursor: pointer;
+}
+
+.s-settings-bill__row:last-child {
+  border-bottom: 0;
+}
+
+.s-settings-bill__row--dupe {
+  color: var(--c-text-3);
+}
+
+.s-settings-bill__check {
+  flex: none;
+  margin-top: 2px;
+}
+
+.s-settings-bill__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.s-settings-bill__line {
+  font-size: var(--fs-subhead);
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.s-settings-bill__row--dupe .s-settings-bill__line {
+  color: var(--c-text-3);
+}
+
+.s-settings-bill__note {
+  overflow: hidden;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .s-settings-sheet__label {
   margin: var(--sp-1) 0 calc(var(--sp-2) * -1);
   color: var(--c-text-2);
@@ -31506,10 +31599,11 @@ textarea::selection {
     ['insights', 'screens/insights', 'screens/insights'], ['accounts', 'screens/accounts', 'screens/accounts'], ['books', 'screens/books', 'screens/books'], ['plan', 'screens/plan', 'screens/plan'],
     ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
     ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'],
-    ['ai-insights', 'modules/ai-insights', 'modules/ai-insights'], ['habit', 'modules/habit', 'modules/habit']
+    ['ai-insights', 'modules/ai-insights', 'modules/ai-insights'], ['habit', 'modules/habit', 'modules/habit'],
+    ['bill-import', 'modules/bill-import', 'modules/bill-import']
   ];
   /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
-  var DEPS = { home: ['habit'], add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts', 'ai-insights'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant'] };
+  var DEPS = { home: ['habit'], add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts', 'ai-insights'], plan: ['charts'], settings: ['icon-picker', 'bill-import'], assistant: ['nl', 'core-assistant'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
@@ -34473,5 +34567,6 @@ textarea::selection {
   <script type="text/xzb-module" data-xzb-chunk="core-assistant" src="js/modules/core-assistant.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="ai-insights" src="js/modules/ai-insights.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="habit" src="js/modules/habit.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="bill-import" src="js/modules/bill-import.js"></script>
 </body>
 </html>

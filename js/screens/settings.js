@@ -1305,7 +1305,7 @@
       startExport(ctx, 'csv');
     }));
     body.appendChild(list);
-    body.appendChild(noteBlock('导入时只认 JSON 备份。'));
+    body.appendChild(noteBlock('导入备份只认 JSON；微信/支付宝账单请用「从微信/支付宝导入」。'));
 
     handle = XZB.ui.sheet.open({
       title: '导出备份',
@@ -1544,6 +1544,294 @@
       previewImport(ctx, text, file.name, file.size);
     };
     reader.readAsText(file, 'utf-8');
+  }
+
+  /* ---------------- 数据：从微信/支付宝账单导入（2.29.0） ----------------
+     解析走 XZB.Core.billImport（纯本机，不联网）；本流程只新增流水，
+     不改动/删除现有数据，未勾选的行原样跳过。 */
+
+  function pickBillFile(ctx) {
+    if (!live.root) { return; }
+    removeImportInput();
+    var input = h('input', {
+      className: 's-settings-fileinput',
+      type: 'file',
+      accept: '.csv,text/csv',
+      tabindex: '-1',
+      aria: { hidden: 'true' }
+    });
+    importInput = input;
+    input.addEventListener('change', function () {
+      var file = input.files && input.files.length ? input.files[0] : null;
+      removeImportInput();
+      if (file) {
+        toast(ctx, '正在解析账单…', { type: 'info' });
+        readBillFile(ctx, file);
+      }
+    });
+    input.addEventListener('cancel', removeImportInput);
+    live.root.appendChild(input);
+    try {
+      input.click();
+    } catch (error) {
+      removeImportInput();
+      toast(ctx, '系统不允许打开文件选择，请检查浏览器权限后再试', { type: 'danger' });
+      return;
+    }
+    toast(ctx, '请选择微信或支付宝导出的账单 CSV', { type: 'info' });
+  }
+
+  function readBillFile(ctx, file) {
+    var limit = importLimitBytes();
+    if (limit > 0 && file.size > limit) {
+      toast(ctx, importTooLargeText(), { type: 'danger' });
+      return;
+    }
+    if (typeof global.FileReader !== 'function') {
+      toast(ctx, '当前浏览器不支持读取文件', { type: 'danger' });
+      return;
+    }
+    var reader = new global.FileReader();
+    reader.onerror = function () {
+      toast(ctx, MESSAGES.E_FILE_READ, { type: 'danger' });
+    };
+    reader.onload = function () {
+      var text = typeof reader.result === 'string' ? reader.result : '';
+      /* 支付宝账单是 GBK 编码：UTF-8 读出替换符就按 GBK 重读一次 */
+      if (text.indexOf('\uFFFD') >= 0) {
+        var gbkReader = new global.FileReader();
+        gbkReader.onerror = function () {
+          toast(ctx, MESSAGES.E_FILE_READ, { type: 'danger' });
+        };
+        gbkReader.onload = function () {
+          previewBillImport(ctx, typeof gbkReader.result === 'string' ? gbkReader.result : '', file.name, file.size);
+        };
+        gbkReader.readAsText(file, 'gbk');
+        return;
+      }
+      previewBillImport(ctx, text, file.name, file.size);
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function billFailText(code) {
+    if (code === 'E_BILL_SOURCE') { return '没认出这是微信还是支付宝的账单，请确认导出的是官方账单 CSV'; }
+    if (code === 'E_BILL_HEADER') { return '没找到账单表头，请确认导出的是官方账单 CSV'; }
+    if (code === 'E_BILL_EMPTY') { return '账单里没有可导入的记录'; }
+    return '账单解析失败，请重试';
+  }
+
+  function billDupeOf(row0, existing, refSet) {
+    if (row0.refNo && refSet[row0.refNo]) { return true; }
+    for (var i = 0; i < existing.length; i++) {
+      var ex = existing[i];
+      if (!ex || ex.deleted === true) { continue; }
+      if (Math.round(Number(ex.amountCents) || 0) !== row0.amountCents) { continue; }
+      var d = String(ex.date || '');
+      if (d >= row0.date && d <= row0.date) { /* 同日 */ return true; }
+      var dt = new Date(row0.date + 'T00:00:00').getTime();
+      var de = new Date(d + 'T00:00:00').getTime();
+      if (isFinite(dt) && isFinite(de) && Math.abs(dt - de) <= 3 * 86400000) { return true; }
+    }
+    return false;
+  }
+
+  function previewBillImport(ctx, text, filename, bytes) {
+    var bill = coreMod('billImport');
+    if (!bill || typeof bill.parse !== 'function') {
+      toast(ctx, '账单解析组件未加载', { type: 'danger' });
+      return;
+    }
+    var parsed = bill.parse(text, {});
+    if (!parsed.ok) {
+      toast(ctx, billFailText(parsed.code), { type: 'danger' });
+      return;
+    }
+
+    var db = dbOf(ctx);
+    var accounts = listOf(db, 'accounts').filter(function (a) {
+      return a && a.archived !== true;
+    });
+    if (!accounts.length) {
+      toast(ctx, '还没有账户，先去「账户」里加一个再导入', { type: 'danger' });
+      return;
+    }
+    var existing = listOf(db, 'transactions');
+    var refSet = {};
+    for (var i = 0; i < existing.length; i++) {
+      var ref = existing[i] && existing[i].importRef;
+      if (ref) { refSet[ref] = true; }
+    }
+
+    var items = [];
+    for (var r = 0; r < parsed.rows.length; r++) {
+      var row0 = parsed.rows[r];
+      var dupe = billDupeOf(row0, existing, refSet);
+      items.push({ row: row0, dupe: dupe, checked: !dupe });
+    }
+    var dupeCount = items.filter(function (it) { return it.dupe; }).length;
+
+    var lastAccount = prefsGet(ctx, 'lastAccountId', null);
+    var defaultAccountId = '';
+    for (var a = 0; a < accounts.length; a++) {
+      if (accounts[a].id === lastAccount) { defaultAccountId = lastAccount; break; }
+    }
+    if (!defaultAccountId) { defaultAccountId = accounts[0].id; }
+
+    var body = h('div', { className: 's-settings-sheet' });
+    if (filename) {
+      var fileLine = filename + ' · ' + fmtBytes(bytes);
+      body.appendChild(h('p', { className: 's-settings-sheet__file', text: fileLine }));
+    }
+    body.appendChild(noteBlock(
+      (parsed.source === 'wechat' ? '识别为微信支付账单' : '识别为支付宝账单') +
+      '；解析在这台手机上完成，不联网。只新增流水，不改动现有数据。',
+      's-settings-sheet__lead'
+    ));
+
+    parsed.warnings.forEach(function (w) {
+      body.appendChild(noteBlock(w, 's-settings-sheet__warn'));
+    });
+
+    var accRow = h('div', { className: 's-settings-bill__accrow' });
+    accRow.appendChild(h('span', { className: 's-settings-bill__acclabel', text: '记入账户' }));
+    var accSelect = h('select', { className: 's-settings-bill__select' });
+    accounts.forEach(function (acc) {
+      var opt = h('option', { value: String(acc.id), text: String(acc.name || '未命名账户') });
+      if (String(acc.id) === String(defaultAccountId)) { opt.selected = true; }
+      accSelect.appendChild(opt);
+    });
+    accRow.appendChild(accSelect);
+    body.appendChild(accRow);
+
+    var summaryValue = h('span', { className: 's-settings-bill__sum', text: '' });
+    var statList = h('div', { className: 'c-list s-settings-sheet__list' });
+    statList.appendChild(row({
+      title: '解析结果',
+      value: parsed.rows.length + ' 笔 · 跳过 ' + parsed.skipped.length + ' 行' +
+        (dupeCount > 0 ? ' · 疑似重复 ' + dupeCount : ''),
+      chevron: false
+    }));
+    body.appendChild(statList);
+    var sumLine = h('p', { className: 's-settings-bill__sumline' });
+    sumLine.appendChild(h('span', { className: 's-settings-bill__sumlabel', text: '将导入 ' }));
+    sumLine.appendChild(summaryValue);
+    body.appendChild(sumLine);
+
+    var listBox = h('div', { className: 's-settings-bill__list' });
+    function updateSummary() {
+      var n = items.filter(function (it) { return it.checked; }).length;
+      summaryValue.textContent = n + ' 笔';
+    }
+    items.forEach(function (item) {
+      var row0 = item.row;
+      var label = h('label', {
+        className: 's-settings-bill__row' + (item.dupe ? ' s-settings-bill__row--dupe' : '')
+      });
+      var box = h('input', { type: 'checkbox', className: 's-settings-bill__check' });
+      box.checked = item.checked;
+      box.addEventListener('change', function () {
+        item.checked = box.checked;
+        updateSummary();
+      });
+      label.appendChild(box);
+      var text0 = h('span', { className: 's-settings-bill__text' });
+      text0.appendChild(h('span', {
+        className: 's-settings-bill__line',
+        text: row0.date + ' · ' + (row0.type === 'expense' ? '支出' : '收入') + ' · ¥' +
+          (row0.amountCents / 100).toFixed(2) + (item.dupe ? ' · 疑似重复' : '')
+      }));
+      if (row0.note) {
+        text0.appendChild(h('span', { className: 's-settings-bill__note', text: row0.note }));
+      }
+      label.appendChild(text0);
+      listBox.appendChild(label);
+    });
+    body.appendChild(listBox);
+
+    updateSummary();
+    var handle = XZB.ui.sheet.open({
+      title: '从' + (parsed.source === 'wechat' ? '微信' : '支付宝') + '账单导入',
+      content: body,
+      actions: [
+        { label: '取消', kind: 'text' },
+        {
+          label: '导入勾选账单',
+          kind: 'primary',
+          onClick: function () {
+            runBillImport(ctx, items, String(accSelect.value || defaultAccountId), handle);
+            return false;
+          }
+        }
+      ]
+    });
+    if (handle && typeof handle.close === 'function') { /* 交给 action 关闭 */ }
+  }
+
+  function runBillImport(ctx, items, accountId, handle) {
+    if (live.busy) { return; }
+    var chosen = items.filter(function (it) { return it.checked; });
+    if (!chosen.length) {
+      toast(ctx, '先勾选要导入的账单', { type: 'warning' });
+      return;
+    }
+    var app = XZB.app;
+    var schema = schemaApi();
+    if (!app || typeof app.commit !== 'function' || !schema || typeof schema.createTransaction !== 'function') {
+      toast(ctx, '数据层还没准备好', { type: 'danger' });
+      return;
+    }
+    var db = dbOf(ctx);
+    var bookId = typeof db.activeBookId === 'string' && db.activeBookId ? db.activeBookId : '';
+    if (!bookId) {
+      var books = listOf(db, 'books').filter(function (b) { return b && b.archived !== true; });
+      bookId = books.length ? books[0].id : '';
+    }
+    live.busy = true;
+    var pending;
+    try {
+      pending = app.commit(function (working) {
+        var list = Array.isArray(working.transactions) ? working.transactions : [];
+        for (var i = 0; i < chosen.length; i++) {
+          var row0 = chosen[i].row;
+          list.push(schema.createTransaction({
+            bookId: bookId,
+            type: row0.type,
+            amountCents: row0.amountCents,
+            accountId: accountId,
+            toAccountId: null,
+            categoryId: null,
+            date: row0.date,
+            time: row0.time || '12:00',
+            note: row0.note || '',
+            tags: [],
+            source: 'import',
+            importRef: row0.refNo || null
+          }));
+        }
+        return { value: 'bill-import' };
+      }, { label: '导入账单' });
+    } catch (error) {
+      live.busy = false;
+      toast(ctx, '导入失败，数据已回滚', { type: 'danger' });
+      return;
+    }
+    Promise.resolve(pending).then(function (result) {
+      live.busy = false;
+      if (!result || result.ok !== true) {
+        toast(ctx, (result && result.message) || '导入失败，数据已回滚', { type: 'danger' });
+        return;
+      }
+      if (handle) { handle.close(); }
+      var skippedCount = items.length - chosen.length;
+      refreshData(ctx).then(function () {
+        toast(ctx, '已导入 ' + chosen.length + ' 笔' +
+          (skippedCount > 0 ? '，未勾选 ' + skippedCount + ' 笔未导入' : ''), { type: 'success' });
+      });
+    }, function () {
+      live.busy = false;
+      toast(ctx, '导入失败，数据已回滚', { type: 'danger' });
+    });
   }
 
   function transactionsOfBackup(value, kind) {
@@ -2233,6 +2521,12 @@
         icon: 'upload',
         title: '导入备份',
         onClick: function () { pickImportFile(ctx); }
+      }),
+      row({
+        icon: 'receipt',
+        title: '从微信/支付宝导入',
+        value: 'CSV',
+        onClick: function () { pickBillFile(ctx); }
       }),
       snapRow,
       /* 2.26.0：自动快照从「自动化」并入数据与备份，紧挨快照记录。 */
