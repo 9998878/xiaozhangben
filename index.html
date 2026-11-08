@@ -5635,15 +5635,17 @@ textarea::selection {
   justify-self: end;
 }
 
-/* ---------- 标签 ---------- */
+/* ---------- 标签 ----------
+   标题与输入同行垂直居中：input 文字在 --tap 框内本就居中，
+   标题走 start+padding-top 硬凑必然错位（真机「标签歪了」根因）；
+   字号统一 15（--fs-subhead），与报销/不计收支两行标题同档。 */
 .s-add-tags {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: var(--sp-2);
 }
 .s-add-tags__label {
-  padding-top: var(--sp-2);
   font-size: var(--fs-subhead);
   color: var(--c-text);
 }
@@ -5662,7 +5664,7 @@ textarea::selection {
   border: 0;
   background: transparent;
   color: var(--c-text);
-  font-size: var(--fs-callout);
+  font-size: var(--fs-subhead);
   font-family: var(--font-sans);
 }
 .s-add-tags__input::placeholder {
