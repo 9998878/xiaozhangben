@@ -266,7 +266,8 @@
     selfHealedExistingIds: selfHealedExistingIds,
     pendingRetryText: pendingRetryText,
     pendingRetryOutcome: pendingRetryOutcome,
-    suggestCategoryByAccount: suggestCategoryByAccount
+    suggestCategoryByAccount: suggestCategoryByAccount,
+    parsePrefill: parsePrefill
   });
 
   /* ---------------- DOM 小工具 ---------------- */
@@ -393,6 +394,13 @@
     var editing = editId ? findTransaction(db, editId) : null;
     var limitedTags = tagLimit();
     var noteMax = noteLimit();
+    /* 习惯建议/外部唤起预填（2.28.10）：解析 #/add?pre=<JSON>，白名单校验，只在新建生效 */
+    var prefill = !editing && context.params && context.params.pre ?
+      parsePrefill(String(context.params.pre), {
+        accounts: allAccounts,
+        categories: allCategories,
+        noteMax: noteMax
+      }) : null;
 
     /* ---------- 会话状态（每次渲染重建） ---------- */
     var state = {
@@ -432,6 +440,15 @@
       state.reimburse = editing.reimburse === 'pending' || editing.reimburse === 'done';
       /* 编辑模式不改默认：历史智能建议只服务新建（2.28.9） */
       state.categoryTouched = true;
+    } else if (prefill) {
+      /* 外部预填（2.28.10）：视同用户手动设置（categoryTouched=true），账户切换不再覆盖 */
+      state.type = prefill.type;
+      state.accountId = prefill.accountId || defaultAccountId(accounts, app, settings);
+      state.categoryId = prefill.categoryId || defaultCategoryId(state.type, categoriesAll, settings);
+      state.categoryTouched = true;
+      state.amountText = centsToText(prefill.amountCents);
+      state.note = prefill.note;
+      state.date = today;
     } else {
       state.type = 'expense';
       state.accountId = defaultAccountId(accounts, app, settings);
@@ -3537,6 +3554,34 @@
       return 0;
     });
     return (pool[0].id === pool[1].id && pool[1].id === pool[2].id) ? pool[0].id : '';
+  }
+
+  /* 习惯建议/外部唤起预填（2.28.10）：解析 #/add?pre=<JSON>。
+     白名单字段逐一校验，任何一项非法整体放弃（返回 null，静默按正常新建走）；
+     无 eval；总量 ≤300 字符防滥用。纯函数。 */
+  function parsePrefill(raw, ctx) {
+    if (typeof raw !== 'string' || !raw || raw.length > 300) { return null; }
+    var data;
+    try { data = JSON.parse(raw); } catch (error) { return null; }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) { return null; }
+    var type = data.type === 'income' ? 'income' : (data.type === 'expense' ? 'expense' : '');
+    if (!type) { return null; }
+    var cents = Math.round(Number(data.amountCents));
+    if (!isFinite(cents) || cents <= 0 || cents > 99000000) { return null; }
+    var accountId = typeof data.accountId === 'string' ? data.accountId : '';
+    if (accountId && !existsIn(ctx && ctx.accounts ? ctx.accounts : [], accountId)) { return null; }
+    var categoryId = typeof data.categoryId === 'string' ? data.categoryId : '';
+    if (categoryId) {
+      var cats = ctx && ctx.categories ? ctx.categories : [];
+      var found = false;
+      for (var i = 0; i < cats.length; i += 1) {
+        if (cats[i] && cats[i].id === categoryId && cats[i].kind === type) { found = true; break; }
+      }
+      if (!found) { return null; }
+    }
+    var noteMax = ctx && ctx.noteMax ? ctx.noteMax : 80;
+    var note = typeof data.note === 'string' ? data.note.slice(0, noteMax) : '';
+    return { type: type, amountCents: cents, accountId: accountId, categoryId: categoryId, note: note };
   }
 
   /* ============================================================

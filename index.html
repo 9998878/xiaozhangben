@@ -4293,6 +4293,68 @@ textarea::selection {
 
 /* ---------------- 待入账定期账单（M8：标准轻量 warning 卡，不再大色块） ---------------- */
 
+/* ---------- 首页：习惯建议卡（2.28.10，命中才渲染） ----------
+   版式复刻 s-home-due（左描边提示卡），描边用品牌黄 --c-tint 区分「该记」语义 */
+.s-home-habit {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  box-sizing: border-box;
+  margin: var(--sp-block-lg) var(--sp-page) 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--hairline) solid var(--c-stroke);
+  border-left: 3px solid var(--c-tint);
+  border-radius: var(--r-card);
+  background: var(--c-bg-elev);
+  box-shadow: none;
+}
+
+.s-home-habit__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--size-icon);
+  height: var(--size-icon);
+  color: var(--c-tint);
+}
+
+.s-home-habit__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.s-home-habit__title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--c-text);
+  font-size: var(--fs-subhead);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-home-habit__sub {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-home-habit__go {
+  flex: none;
+}
+
+.s-home-habit__skip {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+}
+
 .s-home-due {
   display: flex;
   align-items: center;
@@ -31410,10 +31472,10 @@ textarea::selection {
     ['insights', 'screens/insights', 'screens/insights'], ['accounts', 'screens/accounts', 'screens/accounts'], ['books', 'screens/books', 'screens/books'], ['plan', 'screens/plan', 'screens/plan'],
     ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
     ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'],
-    ['ai-insights', 'modules/ai-insights', 'modules/ai-insights']
+    ['ai-insights', 'modules/ai-insights', 'modules/ai-insights'], ['habit', 'modules/habit', 'modules/habit']
   ];
   /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
-  var DEPS = { add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts', 'ai-insights'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant'] };
+  var DEPS = { home: ['habit'], add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts', 'ai-insights'], plan: ['charts'], settings: ['icon-picker'], assistant: ['nl', 'core-assistant'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
@@ -34376,5 +34438,6 @@ textarea::selection {
   <script type="text/xzb-module" data-xzb-chunk="nl" src="js/modules/nl.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="core-assistant" src="js/modules/core-assistant.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="ai-insights" src="js/modules/ai-insights.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="habit" src="js/modules/habit.js"></script>
 </body>
 </html>

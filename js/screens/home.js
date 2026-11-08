@@ -617,6 +617,69 @@
     return section;
   }
 
+  /* 按 id 找实体（habit 卡取名用；home 内没有通用 findById，这里就近补一个只读小助手） */
+  function findEntity(list, id) {
+    var items = Array.isArray(list) ? list : [];
+    if (!id) { return null; }
+    for (var i = 0; i < items.length; i += 1) {
+      if (items[i] && items[i].id === id) { return items[i]; }
+    }
+    return null;
+  }
+
+  /* ---------------- 区块：习惯建议（2.28.10，吸收自借章 statement-suggestion） ---------------- */
+     每天最多一条、命中才渲染；「记一下」带上次金额/账户/备注跳记账页预填，
+     「忽略」写 prefs 忽略表 7 天不再提示。建议失败/未命中 → 整块不渲染。 */
+  function buildHabit(view) {
+    var habitCore = XZB.Core && XZB.Core.habit;
+    if (!habitCore || typeof habitCore.suggestHabits !== 'function') { return null; }
+    var app = appApi();
+    var prefs = (view && view.ctx && view.ctx.prefs) || (app && app.prefs) || null;
+    var now = new Date();
+    var tip = habitCore.suggestHabits(view.db, prefs, now);
+    if (!tip) { return null; }
+
+    var cat = findEntity(view.db && view.db.categories, tip.categoryId);
+    var acc = findEntity(view.db && view.db.accounts, tip.accountId);
+    var catName = cat && cat.name ? String(cat.name) : '这笔';
+    var subParts = ['上次 ' + fmt(Math.abs(Number(tip.amountCents) || 0))];
+    if (acc && acc.name) { subParts.push(String(acc.name)); }
+    if (tip.lastDate) { subParts.push(humanDate(tip.lastDate)); }
+
+    var section = el('section', { className: 's-home-habit', 'aria-label': '习惯记账建议' });
+    var iconBox = el('span', { className: 's-home-habit__icon' });
+    iconBox.setAttribute('aria-hidden', 'true');
+    iconBox.appendChild(iconNode(cat && cat.icon ? cat.icon : 'tag', 24));
+    section.appendChild(iconBox);
+
+    var main = el('div', { className: 's-home-habit__body' });
+    main.appendChild(el('p', { className: 's-home-habit__title', text: '该记「' + catName + '」了吗？' }));
+    main.appendChild(el('p', { className: 's-home-habit__sub', text: subParts.join(' · ') }));
+    section.appendChild(main);
+
+    var pre = {
+      type: tip.type,
+      amountCents: tip.amountCents,
+      categoryId: tip.categoryId,
+      accountId: tip.accountId,
+      note: tip.note
+    };
+    var go = btnNode('记一下', {
+      variant: 'secondary',
+      href: '#/add?pre=' + encodeURIComponent(JSON.stringify(pre))
+    });
+    go.classList.add('s-home-habit__go');
+    section.appendChild(go);
+
+    var skip = el('button', { className: 's-home-habit__skip', type: 'button', text: '忽略' });
+    skip.addEventListener('click', function () {
+      habitCore.dismiss(prefs, tip, new Date());
+      section.hidden = true;
+    });
+    section.appendChild(skip);
+    return section;
+  }
+
   /* ---------------- 嵌入式明细 ---------------- */
 
   function ledgerPlaceholder() {
@@ -983,6 +1046,10 @@
     var inner = el('div', { className: 's-home-inner' });
     view.inner = inner;
 
+    /* 习惯建议卡（2.28.10）：命中才渲染，位置在预算卡上方（案A，用户 2026-11-08 批准方向） */
+    var habitCard = buildHabit(view);
+    if (habitCard) { inner.appendChild(habitCard); }
+
     var budgetCard = buildBudget(view);
     view.budgetCard = budgetCard;
     if (budgetCard) { inner.appendChild(budgetCard); }
@@ -1022,7 +1089,7 @@
     }
 
     if (firstPaint && kit() && !reducedMotion()) {
-      kit().stagger([budgetCard, dueCard], { step: 34 });
+      kit().stagger([habitCard, budgetCard, dueCard].filter(Boolean), { step: 34 });
       firstPaint = false;
     }
 
