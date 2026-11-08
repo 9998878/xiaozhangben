@@ -397,6 +397,37 @@ regCase('5.6 测试连接对免费预设放宽到 20s（推理模型探针 6s �
     'llmTest 应对预设端点传 LLM_PLAN_TIMEOUT_MS');
 });
 
+regCase('4.8 查询快车道：带显式时间词的查询本地秒答（零出站）', async function () {
+  seedPresetConfig();
+  let calls = 0;
+  const res = await withNet(function () {
+    calls += 1;
+    return Promise.reject(new Error('带时间词的查询不得出站'));
+  }, true, function () {
+    return llm.respondRemote('大前天花了多少', {}, { db: { accounts: [], categories: [], transactions: [] }, today: '2026-11-08' });
+  });
+  checkEq(calls, 0, '显式时间词查询不得出站');
+  checkEq(res && res.mode, 'local', '应为 local 快车道');
+  checkEq(res.reply && res.reply.kind, 'query', '应直接出查询结果卡');
+});
+
+regCase('4.9 无时间词的模糊查询不上快车道：照旧云端解析', async function () {
+  seedPresetConfig();
+  let calls = 0;
+  await withNet(function () {
+    calls += 1;
+    return Promise.resolve({
+      status: 200,
+      text: function () {
+        return Promise.resolve(chatEnvelope(JSON.stringify({ intent: 'need_clarify', clarify: { question: '哪个时间段？', options: [] } })));
+      }
+    });
+  }, true, function () {
+    return llm.respondRemote('餐饮花了多少', {}, { db: { accounts: [], categories: [] }, today: '2026-11-08' });
+  });
+  checkEq(calls, 1, '无时间词应出站（本月兜底是猜测，不本地猜）');
+});
+
 /* ============================== 用例 6：同句再记不撞已撤销的软删 id ============================== */
 
 section('用例 6：create 计划 id 每次提交带 nonce（记→撤→再记不得撞 E_AS_CONFLICT_ID）');

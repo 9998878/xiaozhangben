@@ -3559,6 +3559,24 @@
     return { state: out.state, reply: reply, mode: 'local', reason: '' };
   }
 
+  /* 查询快车道（2.29.2，鲨鱼式置信分档）：句子带显式时间词（今天/大前天/上上周/
+     本周末/上月/近7天…）时本地统计秒答且口径确定；无时间词的「本月兜底」是猜测，
+     猜错比答慢更伤——这类仍交云端。 */
+  function fastLocalQueryReply(text, state, cx) {
+    if (detectIntent(text) !== 'query') { return null; }
+    var probe = resolveRange(text, cx);
+    if (probe.key === 'thisMonth' && !/本月|这个月|这月/.test(norm(text))) { return null; }
+    var out = null;
+    try {
+      out = respond(text, state, cx);
+    } catch (error) {
+      return null;
+    }
+    var reply = out && out.reply;
+    if (!reply || reply.kind !== 'query') { return null; }
+    return { state: out.state, reply: reply, mode: 'local', reason: '' };
+  }
+
   /* respondRemote(text, state, cx) → Promise<{state, reply, mode:'online'|'local-fallback', reason}>
    * 软提示（LLM_SOFT_MS，2.26.11 起 8s）由界面消费；这里只负责硬 20s 兜底与回落，永不 reject。 */
   function respondRemote(text, state, cx) {
@@ -3580,6 +3598,11 @@
       }
       /* 2.29.2：本地快车道——简单记账句秒回，不吃云端延迟与限流 */
       var fast = fastLocalReply(text, state, ctx);
+      if (fast) {
+        resolve(fast);
+        return;
+      }
+      fast = fastLocalQueryReply(text, state, ctx);
       if (fast) {
         resolve(fast);
         return;
