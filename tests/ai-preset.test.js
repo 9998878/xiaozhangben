@@ -109,6 +109,30 @@ function seedPresetConfig() {
   }
 }
 
+/* 2.29.2：注入 nl 桩，模拟真机上 nl.parse 永远产出「分类+置信度」的行为
+ * （真机 nl 总会返回一个分类，快车道置信闸门依据 best.confidence 分档）。
+ * conf < 0.8 → 快车道应升级云端；conf >= 0.8 → 快车道直记。 */
+function withNl(conf, categoryId, type) {
+  sandbox.XZB.Core.nl = {
+    parse: function (text) {
+      const m = String(text).match(/(\d+(?:\.\d+)?)/);
+      const cents = m ? Math.round(parseFloat(m[1]) * 100) : 0;
+      return {
+        ok: true,
+        best: {
+          type: type || 'expense', cents: cents, date: '', time: '', note: String(text).replace(/\d+(?:\.\d+)?/, '').trim(),
+          tags: [], accountId: '', categoryId: categoryId, toAccountId: '',
+          matches: null, confidence: conf
+        }
+      };
+    }
+  };
+}
+
+function withoutNl() {
+  delete sandbox.XZB.Core.nl;
+}
+
 /* 换 fetch 桩与 onLine 状态（用后还原） */
 async function withNet(stub, navigatorOnLine, fn) {
   const prevFetch = sandbox.fetch;
@@ -264,6 +288,7 @@ regCase('4.2 聊天出口失败（限流）→ 回落本地「没听懂」，绝
 
 regCase('4.3 难句（转账缺转入账户）不走快车道：仍发解析请求（system 含「记账解析器」）', async function () {
   seedPresetConfig();
+  withNl(0.9, '', 'transfer');
   let bodies = [];
   const res = await withNet(function (url, options) {
     bodies.push(String((options && options.body) || ''));
@@ -286,6 +311,7 @@ regCase('4.3 难句（转账缺转入账户）不走快车道：仍发解析请�
 
 regCase('4.6 本地快车道：干净记账句秒回预览（零出站、mode=local）', async function () {
   seedPresetConfig();
+  withNl(0.9, 'ca_food');
   let calls = 0;
   const res = await withNet(function () {
     calls += 1;
@@ -309,6 +335,7 @@ regCase('4.6 本地快车道：干净记账句秒回预览（零出站、mode=lo
 
 regCase('4.7 缺金额的句子不上快车道：照旧走解析补问', async function () {
   seedPresetConfig();
+  withNl(0.9, 'ca_food');
   let calls = 0;
   await withNet(function () {
     calls += 1;
@@ -428,6 +455,37 @@ regCase('4.9 无时间词的模糊查询不上快车道：照旧云端解析', a
   checkEq(calls, 1, '无时间词应出站（本月兜底是猜测，不本地猜）');
 });
 
+regCase('4.10 本地认不出的分类（炒土鸡）不上快车道：升级给模型定分类（用户实测主诉）', async function () {
+  seedPresetConfig();
+  withNl(0.6, 'ca_other_expense');
+  let calls = 0;
+  const res = await withNet(function () {
+    calls += 1;
+    return Promise.resolve({
+      status: 200,
+      text: function () {
+        return Promise.resolve(chatEnvelope(JSON.stringify({
+          intent: 'create',
+          items: [{ type: 'expense', amountCents: 2000, accountId: 'ac_wechat', toAccountId: '', categoryId: 'ca_food', date: '', time: '', note: '炒土鸡' }]
+        })));
+      }
+    });
+  }, true, function () {
+    return llm.respondRemote('炒土鸡20', {}, {
+      db: {
+        accounts: [{ id: 'ac_wechat', name: '微信', type: 'wechat' }],
+        categories: [{ id: 'ca_food', name: '餐饮', kind: 'expense' }]
+      },
+      today: '2026-11-08'
+    });
+  });
+  checkEq(calls, 1, '本地认不出的分类应出站让模型分析');
+  checkEq(res && res.mode, 'online', '应走在线');
+  checkEq(res.reply && res.reply.kind, 'preview', '应产出预览（屏幕端按直记闸门直写入）');
+  const row = res.reply && res.reply.rows && res.reply.rows[0];
+  checkEq(row && row.categoryText, '餐饮', '模型应把炒土鸡定为餐饮而不是其他');
+});
+
 /* ============================== 用例 6：同句再记不撞已撤销的软删 id ============================== */
 
 section('用例 6：create 计划 id 每次提交带 nonce（记→撤→再记不得撞 E_AS_CONFLICT_ID）');
@@ -451,6 +509,7 @@ regCase('6.1 同一句两次 parseCreate：plan id 与 tx id 都不同（直记+
 
 regCase('6.2 模型问「用哪个账户」一律不问：回落本地（默认账户口径，用户实测主诉）', async function () {
   seedPresetConfig();
+  withoutNl();
   const res = await withNet(function () {
     return Promise.resolve({
       status: 200,

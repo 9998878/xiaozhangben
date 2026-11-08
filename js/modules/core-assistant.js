@@ -71,6 +71,12 @@
     model: 'openai'
   };
 
+  /* 2.29.2：快车道分类兜底 id（竞品口径）——nl 对词表有把握时给出具体分类，
+     没把握时落 ca_other_expense/ca_other_income 兜底并警告「未识别分类」。
+     在线模式下兜底结果升级给模型定分类（用户实测「炒土鸡20」主诉）；
+     纯本地模式不经过快车道，维持原有直记体验。 */
+  var OTHER_CATEGORY_IDS = { 'ca_other_expense': true, 'ca_other_income': true };
+
   var E = {
     NO_AMOUNT: 'E_AS_NO_AMOUNT',
     AMBIGUOUS_ACCOUNT: 'E_AS_AMBIGUOUS_ACCOUNT',
@@ -421,7 +427,8 @@
   var EXTRA_ALIASES = {
     /* 2.29.2：品牌别名扩充（竞品口径）——与 nl.js CATEGORY_ALIASES 同步 */
     ca_food: ['吃饭', '午饭', '晚饭', '早饭', '外卖', '咖啡', '奶茶', '零食',
-      '麦当劳', '肯德基', '星巴克', '瑞幸', '喜茶', '奈雪', '烧烤', '火锅', '美团', '饿了么'],
+      '麦当劳', '肯德基', '星巴克', '瑞幸', '喜茶', '奈雪', '烧烤', '火锅', '美团', '饿了么',
+      '炒菜', '炒饭', '炒面', '米线', '米粉', '宵夜'],
     ca_transport: ['打车', '地铁', '公交', '高铁', '油费', '停车', '加油',
       '滴滴', '曹操', '叫车', '网约车', '火车票'],
     ca_shopping: ['购物', '网购', '买衣服', '超市', '淘宝', '京东', '拼多多', '盒马', '山姆', '电商'],
@@ -3118,7 +3125,9 @@
     if (list.length > MAX_BATCH) { return { ok: false, code: E.BATCH_TOO_LARGE }; }
     var segs = [];
     try { segs = splitSegments(raw) || []; } catch (error) { segs = []; }
-    var planId = fingerprint(raw, cx, '');
+    /* 2.29.2：与 parseCreate 同口径——云端装配的计划 id 也带 nonce，
+       否则「云端记→撤销→云端再记同句」会撞 E_AS_CONFLICT_ID。 */
+    var planId = fingerprint(raw, cx, submitNonce());
     var plan = {
       id: planId,
       kind: 'create',
@@ -3556,6 +3565,17 @@
     }
     var reply = out && out.reply;
     if (!reply || reply.kind !== 'preview' || reply.canConfirm !== true) { return null; }
+    /* 2.29.2：鲨鱼式分档收口——nl 落到「其他」兜底分类（本地词表认不出，如
+       「炒土鸡」）说明没把握，在线模式升级给模型定分类，不拿「其他」直记糊弄
+       （用户实测主诉）。nl 缺席的沙箱/极端降级同口径。云端失败照旧回落本地，
+       绝不阻塞记账。 */
+    var fastItems = (reply.plan && reply.plan.items) || [];
+    for (var fi = 0; fi < fastItems.length; fi += 1) {
+      var fitem = fastItems[fi];
+      if (fitem && fitem.type !== 'transfer' && OTHER_CATEGORY_IDS[fitem.categoryId]) {
+        return null;
+      }
+    }
     return { state: out.state, reply: reply, mode: 'local', reason: '' };
   }
 
