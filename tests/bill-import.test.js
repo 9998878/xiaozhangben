@@ -98,6 +98,32 @@ const ALIPAY_SAMPLE = [
 
 const GARBAGE = '随便一些不是账单的文本\n没有逗号\n也没有表头\n';
 
+/* 2.32.0：带「分类」「账户」列的通用 CSV（小账本自己导的、别家记账应用导的） */
+const GENERIC_SAMPLE = [
+  '交易时间,收/支,金额(元),分类,账户,备注,交易单号',
+  '2026-01-05 08:12:30,支出,14.50,餐饮,,早餐,sk-1',
+  '2026-01-06 20:30:00,支出,"1,000.00",住房,,房租,sk-2',
+  '2026-01-07 09:00:00,收入,300.00,兼职,,做完海报,sk-3',
+  '2026-01-08 12:00:00,支出,20.00,水果,现金,,sk-4',
+  ''
+].join('\n');
+
+/* 没有分类列的同结构 CSV：不该被当成账单 */
+const NO_CATEGORY_CSV = [
+  '交易时间,收/支,金额(元),备注',
+  '2026-01-05 08:12:30,支出,14.50,早餐',
+  ''
+].join('\n');
+
+const CATEGORIES = [
+  { id: 'ca_food', kind: 'expense', name: '餐饮', aliases: ['吃饭', '外卖'] },
+  { id: 'ca_home', kind: 'expense', name: '居住', aliases: ['房租', '住房'] },
+  { id: 'ca_fruit', kind: 'expense', name: '水果', aliases: [], hidden: false },
+  { id: 'ca_other_expense', kind: 'expense', name: '其他', aliases: [] },
+  { id: 'ca_parttime', kind: 'income', name: '兼职', aliases: ['外快'] },
+  { id: 'ca_other_income', kind: 'income', name: '其他', aliases: [] }
+];
+
 /* ============================== 用例 ============================== */
 
 section('用例 1：来源识别');
@@ -186,6 +212,81 @@ test('4.3 CSV 引号内逗号不切列', function () {
   check(r.ok && r.rows.length === 1, '解析成功');
   checkEq(r.rows[0].amountCents, 1000, '列未错位（金额列还是金额）');
   checkEq(r.rows[0].note, '商户消费 · 某某店,分店 · 生椰,拿铁', '引号内逗号保留');
+});
+
+section('用例 5（2.32.0）：通用 CSV 解析');
+test('5.1 识别为 generic，表头含分类列即可解析', function () {
+  checkEq(billImport.detectSource(GENERIC_SAMPLE), 'generic', 'generic 来源');
+  const r = billImport.parse(GENERIC_SAMPLE, {});
+  check(r.ok, 'ok: ' + JSON.stringify(r).slice(0, 120));
+  checkEq(r.source, 'generic', '来源');
+  checkEq(r.rows.length, 4, '4 行全部可导');
+});
+
+test('5.2 金额/方向/日期/时间/单号照旧', function () {
+  const r = billImport.parse(GENERIC_SAMPLE, {});
+  checkEq(r.rows[0].amountCents, 1450, '14.50');
+  checkEq(r.rows[1].amountCents, 100000, '千分位 1,000.00');
+  checkEq(r.rows[2].type, 'income', '收入');
+  checkEq(r.rows[0].time, '08:12', '时间舍秒');
+  checkEq(r.rows[3].refNo, 'sk-4', '交易单号');
+});
+
+test('5.3 分类/账户原样带出，备注就是备注', function () {
+  const r = billImport.parse(GENERIC_SAMPLE, {});
+  checkEq(r.rows[0].category, '餐饮', '分类列');
+  checkEq(r.rows[1].category, '住房', '住房');
+  checkEq(r.rows[3].accountName, '现金', '账户列');
+  checkEq(r.rows[0].accountName, '', '账户为空');
+  checkEq(r.rows[0].note, '早餐', '备注');
+  checkEq(r.rows[1].note, '房租', '备注二');
+});
+
+test('5.4 没有分类列的 CSV 不认（仍报 E_BILL_SOURCE）', function () {
+  checkEq(billImport.detectSource(NO_CATEGORY_CSV), null, '不误判');
+  checkEq(billImport.parse(NO_CATEGORY_CSV, {}).code, 'E_BILL_SOURCE', '错误码');
+});
+
+test('5.5 通用 CSV 也走状态闸门，退款行不进', function () {
+  const refundCsv = [
+    '交易时间,收/支,金额(元),分类,状态',
+    '2026-01-09 10:00:00,支出,50.00,购物,已全额退款',
+    '2026-01-10 10:00:00,支出,30.00,购物,交易成功',
+    ''
+  ].join('\n');
+  const r = billImport.parse(refundCsv, {});
+  checkEq(r.rows.length, 1, '只留成功那笔');
+  checkEq(r.skipped.length, 1, '退款那笔跳过');
+});
+
+test('5.6 微信/支付宝账单的分类/账户字段为空，不串味', function () {
+  const w = billImport.parse(WECHAT_SAMPLE, {});
+  checkEq(w.rows[0].category, '', '微信无分类');
+  checkEq(w.rows[0].accountName, '', '微信无账户名');
+});
+
+section('用例 6（2.32.0）：分类/账户按名称归位');
+test('6.1 pickCategoryId：正名、别名、方向过滤', function () {
+  checkEq(billImport.pickCategoryId('餐饮', 'expense', CATEGORIES), 'ca_food', '正名');
+  checkEq(billImport.pickCategoryId('吃饭', 'expense', CATEGORIES), 'ca_food', '别名');
+  checkEq(billImport.pickCategoryId('住房', 'expense', CATEGORIES), 'ca_home', '住房→居住(别名)');
+  checkEq(billImport.pickCategoryId('兼职', 'income', CATEGORIES), 'ca_parttime', '收入分类');
+  checkEq(billImport.pickCategoryId('兼职', 'expense', CATEGORIES), '', '收入分类不给出支出账单');
+  checkEq(billImport.pickCategoryId('火锅', 'expense', CATEGORIES), '', '认不到返回空');
+  checkEq(billImport.pickCategoryId('', 'expense', CATEGORIES), '', '空名返回空');
+  checkEq(billImport.pickCategoryId('餐饮', 'expense', null), '', '无分类表返回空');
+});
+
+test('6.2 pickAccountId：按名称精确匹配，跳过已归档', function () {
+  const accounts = [
+    { id: 'ac_cash', name: '现金' },
+    { id: 'ac_wechat', name: '微信', archived: true },
+    { id: 'ac_alipay', name: '支付宝' }
+  ];
+  checkEq(billImport.pickAccountId('现金', accounts), 'ac_cash', '命中');
+  checkEq(billImport.pickAccountId('微信', accounts), '', '归档账户不命中');
+  checkEq(billImport.pickAccountId('招商银行', accounts), '', '认不到返回空');
+  checkEq(billImport.pickAccountId('现金', null), '', '无账户表返回空');
 });
 
 /* ============================== 汇总 ============================== */

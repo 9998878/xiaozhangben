@@ -1330,7 +1330,7 @@
       startExport(ctx, 'csv');
     }));
     body.appendChild(list);
-    body.appendChild(noteBlock('导入备份只认 JSON；微信/支付宝账单请用「从微信/支付宝导入」。'));
+    body.appendChild(noteBlock('导入备份只认 JSON；账单 CSV 请用「从账单 CSV 导入」。'));
 
     handle = XZB.ui.sheet.open({
       title: '导出备份',
@@ -1571,7 +1571,7 @@
     reader.readAsText(file, 'utf-8');
   }
 
-  /* ---------------- 数据：从微信/支付宝账单导入（2.29.0） ----------------
+  /* ---------------- 数据：从账单 CSV 导入（2.29.0 微信/支付宝，2.32.0 通用 CSV） ----------------
      解析走 XZB.Core.billImport（纯本机，不联网）；本流程只新增流水，
      不改动/删除现有数据，未勾选的行原样跳过。 */
 
@@ -1603,7 +1603,7 @@
       toast(ctx, '系统不允许打开文件选择，请检查浏览器权限后再试', { type: 'danger' });
       return;
     }
-    toast(ctx, '请选择微信或支付宝导出的账单 CSV', { type: 'info' });
+    toast(ctx, '请选择微信、支付宝或其它记账应用导出的账单 CSV', { type: 'info' });
   }
 
   function readBillFile(ctx, file) {
@@ -1640,14 +1640,22 @@
   }
 
   function billFailText(code) {
-    if (code === 'E_BILL_SOURCE') { return '没认出这是微信还是支付宝的账单，请确认导出的是官方账单 CSV'; }
-    if (code === 'E_BILL_HEADER') { return '没找到账单表头，请确认导出的是官方账单 CSV'; }
+    if (code === 'E_BILL_SOURCE') { return '没认出这是微信、支付宝还是带「分类」列的 CSV 账单，请确认导出的是账单 CSV'; }
+    if (code === 'E_BILL_HEADER') { return '没找到账单表头，请确认导出的是账单 CSV'; }
     if (code === 'E_BILL_EMPTY') { return '账单里没有可导入的记录'; }
     return '账单解析失败，请重试';
   }
 
+  /* 账单来源的界面称呼（2.32.0 起多一种通用 CSV） */
+  function billSourceLabel(source) {
+    if (source === 'wechat') { return '微信支付账单'; }
+    if (source === 'alipay') { return '支付宝账单'; }
+    return 'CSV 账单';
+  }
+
+  /* 有交易单号就只认单号：同一笔账单重复导入仍会被拦住，而同日同额的两笔真账不会被误判 */
   function billDupeOf(row0, existing, refSet) {
-    if (row0.refNo && refSet[row0.refNo]) { return true; }
+    if (row0.refNo) { return refSet[row0.refNo] === true; }
     for (var i = 0; i < existing.length; i++) {
       var ex = existing[i];
       if (!ex || ex.deleted === true) { continue; }
@@ -1688,11 +1696,23 @@
       if (ref) { refSet[ref] = true; }
     }
 
+    /* 2.32.0：账单里的「分类」「账户」只有名字，按名称/别名归到本机已有的分类与账户；
+       认不到的退回「其他」分类与上面手选的账户，不会新建分类或账户 */
+    var cats = listOf(db, 'categories');
+    /* 组件版本不一致时也别让导入整块崩掉：认不到就退回手选 */
+    var pickCat = typeof bill.pickCategoryId === 'function' ? bill.pickCategoryId : function () { return ''; };
+    var pickAcc = typeof bill.pickAccountId === 'function' ? bill.pickAccountId : function () { return ''; };
+    var matchedCats = 0;
+    var matchedAccs = 0;
     var items = [];
     for (var r = 0; r < parsed.rows.length; r++) {
       var row0 = parsed.rows[r];
       var dupe = billDupeOf(row0, existing, refSet);
-      items.push({ row: row0, dupe: dupe, checked: !dupe });
+      var categoryId = row0.category ? pickCat(row0.category, row0.type, cats) : '';
+      var accountId2 = row0.accountName ? pickAcc(row0.accountName, accounts) : '';
+      if (categoryId) { matchedCats += 1; }
+      if (accountId2) { matchedAccs += 1; }
+      items.push({ row: row0, dupe: dupe, checked: !dupe, categoryId: categoryId, accountId: accountId2 });
     }
     var dupeCount = items.filter(function (it) { return it.dupe; }).length;
 
@@ -1709,7 +1729,7 @@
       body.appendChild(h('p', { className: 's-settings-sheet__file', text: fileLine }));
     }
     body.appendChild(noteBlock(
-      (parsed.source === 'wechat' ? '识别为微信支付账单' : '识别为支付宝账单') +
+      '识别为' + billSourceLabel(parsed.source) +
       '；解析在这台手机上完成，不联网。只新增流水，不改动现有数据；没有识别到分类的账单会归到「其他」。',
       's-settings-sheet__lead'
     ));
@@ -1737,6 +1757,23 @@
         (dupeCount > 0 ? ' · 疑似重复 ' + dupeCount : ''),
       chevron: false
     }));
+    /* 账单自带分类列时，把「认到几个分类 / 归到几个账户」摆在预览里先看一眼 */
+    if (parsed.source === 'generic' && parsed.rows.length > 0) {
+      statList.appendChild(row({
+        title: '分类',
+        sub: '按名称/别名匹配本机分类，认不到的归「其他」',
+        value: matchedCats + ' / ' + parsed.rows.length + ' 笔',
+        chevron: false
+      }));
+      if (matchedAccs > 0) {
+        statList.appendChild(row({
+          title: '账户',
+          sub: '账单里的账户名与本机账户同名时按名称归入',
+          value: matchedAccs + ' 笔按名称',
+          chevron: false
+        }));
+      }
+    }
     body.appendChild(statList);
     var sumLine = h('p', { className: 's-settings-bill__sumline' });
     sumLine.appendChild(h('span', { className: 's-settings-bill__sumlabel', text: '将导入 ' }));
@@ -1763,7 +1800,8 @@
       var text0 = h('span', { className: 's-settings-bill__text' });
       text0.appendChild(h('span', {
         className: 's-settings-bill__line',
-        text: row0.date + ' · ' + (row0.type === 'expense' ? '支出' : '收入') + ' · ¥' +
+        text: row0.date + ' · ' + (row0.type === 'expense' ? '支出' : '收入') +
+          (row0.category ? ' · ' + row0.category : '') + ' · ¥' +
           (row0.amountCents / 100).toFixed(2) + (item.dupe ? ' · 疑似重复' : '')
       }));
       if (row0.note) {
@@ -1776,7 +1814,7 @@
 
     updateSummary();
     var handle = XZB.ui.sheet.open({
-      title: '从' + (parsed.source === 'wechat' ? '微信' : '支付宝') + '账单导入',
+      title: '从' + billSourceLabel(parsed.source) + '导入',
       content: body,
       actions: [
         { label: '取消', kind: 'text' },
@@ -1812,8 +1850,8 @@
       var books = listOf(db, 'books').filter(function (b) { return b && b.archived !== true; });
       bookId = books.length ? books[0].id : '';
     }
-    /* 账单 CSV 没有小账本分类：支出落到「其他支出」、收入落到「其他收入」（系统分类，
-       与 ai-insights 的未分类口径同源），避免 E_TX_CATEGORY_REQUIRED 整库校验失败 */
+    /* 账单自带分类就按分类落；没有分类（微信/支付宝）才落到「其他支出/其他收入」
+       （系统分类，与 ai-insights 的未分类口径同源），避免 E_TX_CATEGORY_REQUIRED 整库校验失败 */
     var cats = listOf(db, 'categories');
     var fallbackCategory = function (kind) {
       var want = kind === 'income' ? 'ca_other_income' : 'ca_other_expense';
@@ -1832,13 +1870,15 @@
         var list = Array.isArray(working.transactions) ? working.transactions : [];
         for (var i = 0; i < chosen.length; i++) {
           var row0 = chosen[i].row;
+          var catId = chosen[i].categoryId || fallbackCategory(row0.type);
+          var accId = chosen[i].accountId || accountId;
           list.push(schema.createTransaction({
             bookId: bookId,
             type: row0.type,
             amountCents: row0.amountCents,
-            accountId: accountId,
+            accountId: accId,
             toAccountId: null,
-            categoryId: fallbackCategory(row0.type),
+            categoryId: catId,
             date: row0.date,
             time: row0.time || '12:00',
             note: row0.note || '',
@@ -2562,7 +2602,7 @@
       }),
       row({
         icon: 'receipt',
-        title: '从微信/支付宝导入',
+        title: '从账单 CSV 导入',
         value: 'CSV',
         onClick: function () { pickBillFile(ctx); }
       }),
