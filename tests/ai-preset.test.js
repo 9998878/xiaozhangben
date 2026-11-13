@@ -397,7 +397,7 @@ regCase('4.6 本地快车道：干净记账句秒回预览（零出站、mode=lo
   checkEq(res.reply && res.reply.kind, 'preview', '应直接出预览卡');
   checkEq(res.reply && res.reply.canConfirm, true, '预览应可直接确认');
   checkEq(res.reply.rows && res.reply.rows[0] && res.reply.rows[0].categoryText, '吃饭', '分类应本地命中');
-  checkEq(res.reply.rows && res.reply.rows[0] && res.reply.rows[0].accountText, '微信', '账户应本地命中');
+  checkEq(res.reply.plan && res.reply.plan.items && res.reply.plan.items[0] && res.reply.plan.items[0].accountId, 'acc_wechat', '账户应本地命中');
 });
 
 regCase('4.7 缺金额的句子不上快车道：照旧走解析补问', async function () {

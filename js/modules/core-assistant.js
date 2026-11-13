@@ -912,8 +912,6 @@
         amountText: formatCents(item.amountCents),
         categoryId: item.categoryId,
         categoryText: item.type === 'transfer' ? '—' : categoryName(cx, item.categoryId),
-        accountText: accountName(cx, item.accountId) || '账户不可用',
-        toAccountText: item.type === 'transfer' ? (accountName(cx, item.toAccountId) || '待选择') : '',
         dateText: dateLabel(cx, item.date),
         time: item.time,
         note: item.note,
@@ -1461,7 +1459,6 @@
         amountCents: tx.amountCents,
         amountText: formatCents(tx.amountCents),
         categoryText: tx.type === 'transfer' ? '转账' : categoryName(cx, tx.categoryId),
-        accountText: accountName(cx, tx.accountId),
         note: tx.note || ''
       };
     });
@@ -1647,7 +1644,7 @@
     var next = cloneState(state);
     var input = norm(text);
     if (!input) {
-      return { state: next, reply: { kind: 'hint', text: '说说这笔账，比如「午饭 35 微信」或「这个月餐饮花了多少」' } };
+      return { state: next, reply: { kind: 'hint', text: '说说这笔账，比如「午饭 35」或「这个月餐饮花了多少」' } };
     }
 
     /* 0) 补问/草稿状态下先说「取消」：任何补问都不能把用户锁死 */
@@ -1713,7 +1710,7 @@
       draftClear();
       return {
         state: next,
-        reply: { kind: 'hint', text: '好，这次先不记。想记账直接说「午饭 28 微信」就行。', options: [] }
+        reply: { kind: 'hint', text: '好，这次先不记。想记账直接说「午饭 28」就行。', options: [] }
       };
     }
 
@@ -2148,8 +2145,6 @@
       amountCents: target.amountCents,
       amountText: row.amountText,
       categoryText: target.type === 'transfer' ? '转账' : categoryName(cx, target.categoryId),
-      accountText: accountName(cx, target.accountId),
-      toAccountText: target.type === 'transfer' ? accountName(cx, target.toAccountId) : '',
       dateText: dateLabel(cx, target.date),
       time: target.time,
       note: target.note || '',
@@ -3682,7 +3677,7 @@
       '你是「小账本」App 里的记账小助手，跟用户用中文聊天。',
       '只聊记账、花销、省钱习惯、预算、App 使用相关的话题；别的话题礼貌地引回记账。',
       '你拿不到用户的任何账目数据，不要编造数字，也不要假装查过账。',
-      '用户想记账或查账时，提醒他直接说一句话，例如「午饭 35 微信」「这个月餐饮花了多少」。',
+      '用户想记账或查账时，提醒他直接说一句话，例如「午饭 35」「这个月餐饮花了多少」。',
       '回答口语化、友好，一般不超过 80 字；不提供投资、借贷、博彩类建议。',
       '今天：' + String(today || '')
     ].join('\n');

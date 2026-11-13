@@ -23,6 +23,7 @@ const ROOT = path.resolve(__dirname, '..');
 const ASSISTANT_JS = fs.readFileSync(path.join(ROOT, 'js/screens/assistant.js'), 'utf8');
 const SETTINGS_JS = fs.readFileSync(path.join(ROOT, 'js/screens/settings.js'), 'utf8');
 const CORE_JS = fs.readFileSync(path.join(ROOT, 'js/modules/core-assistant.js'), 'utf8');
+const NL_JS = fs.readFileSync(path.join(ROOT, 'js/modules/nl.js'), 'utf8');
 
 let passCount = 0;
 let failCount = 0;
@@ -99,6 +100,12 @@ test('1.7 助手不显示账户名：记录气泡/预览/示例句都不再出�
   check(ASSISTANT_JS.indexOf("'午饭 35 微信'") === -1, '示例句不得再写微信');
   check(ASSISTANT_JS.indexOf("'昨天打车 18 支付宝'") === -1, '示例句不得再写支付宝');
   check(ASSISTANT_JS.indexOf("'工资 8000 招行'") === -1, '示例句不得再写招行');
+});
+
+test('1.8 提示语与本地错误示例也不再带账户名', function () {
+  check(CORE_JS.indexOf('午饭 35 微信') === -1, '空态/聊天提示不得再写微信');
+  check(CORE_JS.indexOf('午饭 28 微信') === -1, '取消提示不得再写微信');
+  check(NL_JS.indexOf('没听清金额，试试「午饭28微信」') === -1, '本地缺金额错误不得再写微信');
 });
 
 console.log('\n用例 2：常用分类快捷标签（assistant.js 源码锁）');

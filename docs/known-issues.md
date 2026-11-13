@@ -4,6 +4,13 @@
 
 > 行号会漂移：按文件 + 符号/关键词 grep 定位，不要照抄旧行号。
 
+## 已修（2.32.6 批次）
+
+| 位置 | 问题 | 回归 |
+| --- | --- | --- |
+| `core-assistant.js` 空态/取消提示、`nl.js` 缺金额错误、`chatSystemText` | 还在举例「午饭 35 微信」，用户能看到账户名 | `tests/assistant-direct.test.js` 用例 1.8 |
+| `core-assistant.js` `previewRows`/查询/`previewEdit` | 仍产出 `accountText / toAccountText` 显示字段，界面虽不读但源码仍带账户名 | `tests/ai-preset.test.js` 4.6、`tests/assistant-direct.test.js` 1.7 |
+
 ## 已修（2.32.5 批次）
 
 | 位置 | 问题 | 回归 |

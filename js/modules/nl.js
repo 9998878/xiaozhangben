@@ -34,7 +34,7 @@
   var E_AMOUNT = 'E_NL_AMOUNT';
   var E_PARSE = 'E_NL_PARSE';
   var NL_MESSAGE = {
-    E_NL_NO_AMOUNT: '没听清金额，试试「午饭28微信」',
+    E_NL_NO_AMOUNT: '没听清金额，试试「午饭 28」',
     E_NL_AMOUNT: '金额不对，请检查',
     E_NL_PARSE: '没听懂，试试手动填写'
   };
@@ -1964,7 +1964,7 @@
     if (type === 'transfer') {
       reason = '转账' + (typeInfo.repayment ? '（还款）' : '') + '：' +
         (acctPlan.accountName || '默认账户') + ' → ' +
-        (acctPlan.toAccountName || '待选择转入账户') + ' · ' + dp.date;
+        (acctPlan.toAccountName || '默认账户') + ' · ' + dp.date;
     } else {
       reason = (type === 'income' ? '收入' : '支出') + '：' +
         (catPlan.categoryName || '未分类') + ' · ' +
