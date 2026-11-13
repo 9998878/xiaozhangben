@@ -799,7 +799,7 @@
         className: 's-assistant__opt',
         type: 'button',
         'aria-label': '回复：' + label,
-        onclick: function () { submit(value); }
+        onclick: function () { submit(value, { display: label }); }
       }, [label]));
     });
     return wrap;
@@ -815,7 +815,7 @@
         className: 's-assistant__opt',
         type: 'button',
         'aria-label': '选择：' + label,
-        onclick: function () { submit(value); }
+        onclick: function () { submit(value, { display: label }); }
       }, [label]));
     });
     return wrap;
@@ -1074,7 +1074,7 @@
         className: 's-assistant__target',
         type: 'button',
         'aria-label': '第 ' + (index + 1) + ' 笔：' + label,
-        onclick: function () { submit(tx.id); }
+        onclick: function () { submit(tx.id, { display: label }); }
       }, [
         el('span', { className: 's-assistant__target-idx', text: String(index + 1) }),
         el('span', { className: 's-assistant__target-main' }, [
@@ -1131,17 +1131,20 @@
   function submit(text, opts) {
     if (!host || !text || !String(text).trim()) { return; }
     var raw = String(text).trim();
+    var display = opts && opts.display ? String(opts.display).trim() : raw;
+    if (!display) { display = raw; }
 
     /* 忙的时候不静默吞掉：排进队列，并明确告诉用户（A1） */
     if (session.busy) {
-      session.queue.push(raw);
+      session.queue.push({ raw: raw, display: display });
       pushTurn({ who: 'bot', reply: { kind: 'hint', text: '上一条还在处理，这条先排在后面，等它完我接着记。' } });
       paint();
       scrollToEnd(true);
       return;
     }
 
-    pushTurn({ who: 'user', text: raw });
+    /* 2.32.3：按钮的 value 可能只是 keep/drop 或账户 id；聊天记录里要显示人话标签 */
+    pushTurn({ who: 'user', text: display });
     if (host.input) {
       host.input.value = '';
       autoGrow(host.input);
@@ -1157,7 +1160,8 @@
        话语被静默吞掉，兑现不了「排在后面」。留在队列，回屏后由下一条回复带出。 */
     if (!host) { return; }
     var next = session.queue.shift();
-    later(function () { submit(next); }, 0);
+    if (typeof next === 'string') { next = { raw: next, display: next }; }
+    later(function () { submit(next.raw, { display: next.display }); }, 0);
   }
 
   function dispatch(raw, opts) {

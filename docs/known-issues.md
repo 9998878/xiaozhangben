@@ -4,6 +4,12 @@
 
 > 行号会漂移：按文件 + 符号/关键词 grep 定位，不要照抄旧行号。
 
+## 已修（2.32.3 批次）
+
+| 位置 | 问题 | 回归 |
+| --- | --- | --- |
+| `js/screens/assistant.js` `submit`/`replyOptions`/`optionChips`/`targetList` | 点「继续编辑上一批 / 放弃并重新解析」后，聊天记录把内部值 `keep`/`drop` 原样上屏；账户 id、交易 id 同理 | `tests/assistant-direct.test.js` 用例 1.6 |
+
 ## 已修（2.32.2 批次）
 
 | 位置 | 问题 | 回归 |

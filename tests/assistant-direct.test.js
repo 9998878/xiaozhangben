@@ -87,6 +87,12 @@ test('1.5 不撞撤销历史退役锁（用例 18 同口径）：不出现 rende
     '直记撤销是气泡按钮，不得复用流水页 5 秒 toast 的锁串形态');
 });
 
+test('1.6 按钮提交保留人话标签：keep/drop 与账户 id 不应原样写进聊天记录', function () {
+  check(ASSISTANT_JS.indexOf('submit(value, { display: label })') >= 0, '选项按钮应把 label 作为显示文本');
+  check(ASSISTANT_JS.indexOf('session.queue.push({ raw: raw, display: display })') >= 0, '排队时也要保留显示文本');
+  check(ASSISTANT_JS.indexOf("pushTurn({ who: 'user', text: display })") >= 0, '用户气泡应显示 display 而非 raw');
+});
+
 console.log('\n用例 2：常用分类快捷标签（assistant.js 源码锁）');
 
 test('2.1 chips 动态化：近 60 天高频支出分类 top6，常驻不随轮数消失', function () {
