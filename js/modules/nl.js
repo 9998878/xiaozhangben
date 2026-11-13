@@ -1709,7 +1709,8 @@
         }
       }
       if (!chosenTo) {
-        pushWarning(warnings, '未识别转入账户，请选择');
+        chosenTo = defaultAccount(ctx, chosenFrom ? chosenFrom.id : null);
+        pushWarning(warnings, chosenTo ? '未识别转入账户，已用默认账户' : '转账需要两个账户，先在账户页再添加一个');
       }
       result.accountId = chosenFrom ? chosenFrom.id : null;
       result.toAccountId = chosenTo ? chosenTo.id : null;

@@ -9,8 +9,8 @@
  *      键盘固定底部 bottom:var(--kb)，页面高度用 --vvh 计算，键盘收起回落。
  *   3. 分类宫格 4 列（按 type 过滤、12 色槽 data-tone）：全量分类拉通铺开，常用置顶、
  *      自建分类排在最后；「现成种类」「管理」两格收在宫格尾。
- *   4. 账户横向 chip（默认上次账户，存 prefs.lastAccountId）；转账变「转出 → 转入」两行，
- *      选同一个给 store.MESSAGES.E_TRANSFER_SAME 中文。
+ *   4. 账户不在本页让用户选（2.32.7 起）：内部用默认账户落库，转账自动配一个不同的默认账户；
+ *      账户管理页与余额保留，缺账户时提示去账户页添加。
  *   5. 日期：今天/昨天/前天 chip + 自绘月历浮层（不引日历库）。
  *   6. 备注 ≤80 字（LIMITS.txNote）；标签 ≤5 个、每个 ≤10 字（LIMITS.tags/tagLen），退格删。
  *   7. 保存：schema.createTransaction → schema.validateTransaction → XZB.app.commit，
@@ -433,8 +433,10 @@
     if (editing) {
       state.type = TYPE_KEYS.indexOf(editing.type) >= 0 ? editing.type : 'expense';
       state.amountText = centsToText(editing.amountCents);
-      state.accountId = existsIn(accounts, editing.accountId) ? editing.accountId : '';
-      state.toAccountId = editing.type === 'transfer' && existsIn(accounts, editing.toAccountId) ? editing.toAccountId : '';
+      state.accountId = existsIn(accounts, editing.accountId) ? editing.accountId : defaultAccountId(accounts, app, settings);
+      state.toAccountId = editing.type === 'transfer'
+        ? (existsIn(accounts, editing.toAccountId) ? editing.toAccountId : defaultToAccountId(accounts, state.accountId))
+        : '';
       state.categoryId = editing.categoryId ? String(editing.categoryId) : '';
       state.date = dates.isValidDateStr(editing.date) ? editing.date : today;
       state.note = typeof editing.note === 'string' ? editing.note.slice(0, noteMax) : '';
@@ -460,6 +462,10 @@
       state.categoryId = suggestCategoryByAccount(db, state.accountId, state.type) ||
         defaultCategoryId(state.type, categoriesAll, settings);
       state.date = today;
+    }
+
+    if (state.type === 'transfer' && (!state.toAccountId || state.toAccountId === state.accountId)) {
+      state.toAccountId = defaultToAccountId(accounts, state.accountId);
     }
 
     /* ---------- 照片预载（数据流 5b：重入编辑页先重置为空，再按 tx.photoIds 原序预载） ---------- */
@@ -648,8 +654,8 @@
     extrasBlock.appendChild(extrasHead);
     extrasBlock.appendChild(extrasBody);
 
-    /* 版式：分段 → 摘要条 → 宫格 → 补充信息。账户/日期/备注收进键盘上方属性横滑栏。
-       appendChild 对已挂载节点是移动，不产生副本。 */
+    /* 版式：分段 → 摘要条 → 宫格 → 补充信息。日期/备注收进键盘上方属性横滑栏；
+       账户不在此页选择。appendChild 对已挂载节点是移动，不产生副本。 */
     wrap.appendChild(segWrap);
     wrap.appendChild(draftBar);
     wrap.appendChild(gridBlock);
@@ -665,7 +671,7 @@
     var dock = make('div', 's-add-dock');
     dock.setAttribute('data-open', '1');
     var keypadSlot = make('div', 's-add-keypad');
-    /* 键盘上下文（M3）：告诉用户正在为哪个分类/账户记账，并提供收起入口 */
+    /* 键盘上下文（M3）：告诉用户正在记哪个分类/类型，并提供收起入口 */
     var kctx = make('div', 's-add-dock__ctx');
     var kctxText = make('span', 's-add-dock__ctx-text', '');
     kctxText.setAttribute('aria-live', 'polite');
@@ -674,29 +680,19 @@
     kctx.appendChild(kctxCollapse);
     dock.appendChild(kctx);
 
-    /* 属性横滑栏：账户 / 转账双账户 / 日期 / 备注，各一个 chip，点击弹 sheet
-       （原「常用模板 + 账户 chip 行 + 日期 4 控件」三行全部并入此栏） */
+    /* 属性横滑栏：日期 / 备注。账户不再让用户选，默认账户在内部自动落库。
+       （2.32.7：账户选择从手动记账里删掉，账户管理页和余额保留） */
     var propsRow = make('div', 's-add-props');
     propsRow.setAttribute('role', 'toolbar');
-    propsRow.setAttribute('aria-label', '账户、日期与备注');
+    propsRow.setAttribute('aria-label', '日期与备注');
     function propChip(className, ariaLabel) {
       var chip = button(className, '', ariaLabel);
       chip.appendChild(make('span', 's-add-props__label'));
       chip.appendChild(iconNode('chevron-down', 14));
       return chip;
     }
-    var accChip = propChip('s-add-props__chip', '选择账户');
-    /* 转账方向纠错：把转出/转入一键交换（仅转账时出现） */
-    var swapBtn = button('s-add-swap', '', '交换转出与转入账户');
-    swapBtn.appendChild(iconNode('transfer', 20));
-    swapBtn.hidden = true;
-    var toAccChip = propChip('s-add-props__chip', '选择转入账户');
-    toAccChip.hidden = true;
     var dateChip = propChip('s-add-props__chip', '选择日期');
     var noteChip = propChip('s-add-props__chip s-add-props__chip--note', '添加备注');
-    propsRow.appendChild(accChip);
-    propsRow.appendChild(swapBtn);
-    propsRow.appendChild(toAccChip);
     propsRow.appendChild(dateChip);
     propsRow.appendChild(noteChip);
     dock.appendChild(propsRow);
@@ -853,16 +849,11 @@
     function syncKeypadContext() {
       var parts = [];
       if (state.type === 'transfer') {
-        var from = accountById(state.accountId);
-        var to = accountById(state.toAccountId);
         parts.push('转账');
-        parts.push((from ? from.name : '转出') + ' → ' + (to ? to.name : '转入'));
       } else {
         var category = categoryById(state.categoryId);
         parts.push(category ? category.name : '未选分类');
         parts.push(draftTypeLabel());
-        var account = accountById(state.accountId);
-        parts.push(account ? account.name : '未选账户');
       }
       kctxText.textContent = parts.join(' · ');
       var confirmKey = keypadSlot.querySelector('[data-key="confirm"]');
@@ -882,14 +873,15 @@
       var cents = amountOf(state.amountText);
       if (!(cents > 0)) return { ok: false, reason: '输入金额' };
       if (state.type === 'transfer') {
-        if (!state.accountId) return { ok: false, reason: '选择转出账户' };
-        if (!state.toAccountId) return { ok: false, reason: '选择转入账户' };
+        if (!state.accountId || !state.toAccountId) {
+          return { ok: false, reason: '转账需要两个账户，先在账户页再添加一个' };
+        }
         if (state.accountId === state.toAccountId) {
           return { ok: false, reason: messageOf('E_TRANSFER_SAME', '转出和转入不能是同一个账户') };
         }
       } else {
         if (!state.categoryId) return { ok: false, reason: messageOf('E_TX_CATEGORY_REQUIRED', '请选择分类') };
-        if (!state.accountId) return { ok: false, reason: '选择账户' };
+        if (!state.accountId) return { ok: false, reason: '还没有可用账户，先在账户页添加一个' };
       }
       if (!dates.isValidDateStr(state.date)) return { ok: false, reason: messageOf('E_TX_DATE', '日期无效') };
       return { ok: true, reason: '' };
@@ -967,7 +959,9 @@
       }
       state.type = next;
       if (next === 'transfer') {
-        if (state.accountId === state.toAccountId) state.toAccountId = '';
+        if (!state.toAccountId || state.toAccountId === state.accountId) {
+          state.toAccountId = defaultToAccountId(accounts, state.accountId);
+        }
       } else {
         var current = categoryById(state.categoryId);
         if (!current || current.kind !== next) {
@@ -978,30 +972,13 @@
       syncAmount();
     }
 
-    /* ---------- 账户（属性栏 chip + sheet 选择） ---------- */
-    var ACC_ICON = {
-      cash: 'cash', debit: 'bank-card', wechat: 'wechat', alipay: 'alipay',
-      credit: 'credit-card', savings: 'savings-account'
-    };
-
+    /* ---------- 同步：属性栏（只保留日期/备注；账户不再让用户选） ---------- */
     function setChipLabel(chip, text) {
       var label = chip.querySelector('.s-add-props__label');
       if (label) { label.textContent = String(text); }
     }
 
-    /* 属性栏同步：账户（转账时转出 + 转入两枚）· 日期 · 备注 */
     function syncProps() {
-      var account = accountById(state.accountId);
-      var isTransfer = state.type === 'transfer';
-      setChipLabel(accChip, isTransfer
-        ? '转出 ' + (account ? account.name : '选账户')
-        : (account ? account.name : '选账户'));
-      toAccChip.hidden = !isTransfer;
-      swapBtn.hidden = !isTransfer;
-      if (isTransfer) {
-        var to = accountById(state.toAccountId);
-        setChipLabel(toAccChip, '转入 ' + (to ? to.name : '选账户'));
-      }
       setChipLabel(dateChip, dates.formatHuman(state.date));
       var noteText = String(state.note || '');
       var photoCount = livePhotoItems().length;
@@ -1019,86 +996,6 @@
       noteChip.setAttribute('aria-label', photoCount > 0
         ? '备注与照片，已选 ' + photoCount + ' 张'
         : '添加备注');
-    }
-
-    function setAccount(id) {
-      if (!existsIn(accounts, id)) return;
-      state.accountId = id;
-      if (state.type === 'transfer' && state.toAccountId === id) state.toAccountId = '';
-      /* 历史智能默认：账户切换时跟随（镜像类型切换 L928 的重置先例；用户手动选过分类则不覆盖）。
-         建议为空时回落默认分类——与"进屏就是这个账户"的初始口径一致。 */
-      if (!state.categoryTouched && state.type !== 'transfer') {
-        var suggested = suggestCategoryByAccount(db, state.accountId, state.type) ||
-          defaultCategoryId(state.type, categoriesAll, settings);
-        if (suggested && suggested !== state.categoryId) {
-          state.categoryId = suggested;
-          renderGrid();
-        }
-      }
-      syncProps();
-      syncAmount();
-    }
-
-    function setToAccount(id) {
-      if (!existsIn(accounts, id)) return;
-      if (id === state.accountId) {
-        showToast(messageOf('E_TRANSFER_SAME', '转出和转入不能是同一个账户'), { type: 'warning' });
-        return;
-      }
-      state.toAccountId = id;
-      syncProps();
-      syncAmount();
-    }
-
-    /* 交换转出/转入：用户一键纠正方向（README 记为用户可见纠错路径） */
-    function swapAccounts() {
-      if (state.type !== 'transfer') return;
-      var temp = state.accountId;
-      state.accountId = state.toAccountId;
-      state.toAccountId = temp;
-      swapBtn.classList.remove('is-swap');
-      void swapBtn.offsetWidth;
-      swapBtn.classList.add('is-swap');
-      syncProps();
-      syncAmount();
-    }
-
-    function openAccountSheet(isTo) {
-      var sheet = ui('sheet');
-      if (!sheet || typeof sheet.open !== 'function') {
-        showToast('账户选择暂时不可用', { type: 'warning' });
-        return;
-      }
-      var holder = make('div', 's-add-accsheet');
-      if (!accounts.length) {
-        holder.appendChild(make('p', 's-add-empty-inline', '还没有账户，去设置里加一个吧'));
-      }
-      var currentId = isTo ? state.toAccountId : state.accountId;
-      accounts.forEach(function (account) {
-        var row = button('c-row c-row--tappable s-add-accsheet__row');
-        row.setAttribute('data-account', account.id);
-        if (account.id === currentId) { row.classList.add('c-row--selected'); }
-        var tileNode = make('span', 'c-tile c-tile--lg');
-        tileNode.appendChild(iconNode(ACC_ICON[String(account.type || 'cash')] || 'cash', 22));
-        row.appendChild(tileNode);
-        var main = make('span', 'c-row__main');
-        main.appendChild(make('span', 'c-row__title', account.name || '未命名账户'));
-        row.appendChild(main);
-        if (account.id === currentId) {
-          var check = make('span', 's-add-accsheet__check');
-          check.appendChild(iconNode('check', 18));
-          row.appendChild(check);
-        }
-        row.addEventListener('click', function () {
-          if (isTo) { setToAccount(account.id); } else { setAccount(account.id); }
-          sheetHandle.close('pick');
-        });
-        holder.appendChild(row);
-      });
-      var sheetHandle = sheet.open({
-        title: isTo ? '转入账户' : (state.type === 'transfer' ? '转出账户' : '账户'),
-        content: holder
-      });
     }
 
     /* ---------- 同步：分类宫格（分组拉通） ----------
@@ -3311,10 +3208,7 @@
       closeKeypad();
     });
 
-    /* 属性横滑栏：各 chip 弹对应 sheet */
-    accChip.addEventListener('click', function () { openAccountSheet(false); });
-    toAccChip.addEventListener('click', function () { openAccountSheet(true); });
-    swapBtn.addEventListener('click', swapAccounts);
+    /* 属性横滑栏：日期 / 备注 chip */
     dateChip.addEventListener('click', openCalendar);
     noteChip.addEventListener('click', openNoteSheet);
 
@@ -3542,6 +3436,14 @@
       return settings.defaultAccountId;
     }
     return accounts[0].id;
+  }
+
+  /* 2.32.7：转账不再让用户选转入账户，内部取一个与转出不同的默认账户 */
+  function defaultToAccountId(accounts, fromId) {
+    for (var i = 0; i < accounts.length; i += 1) {
+      if (accounts[i] && String(accounts[i].id) !== String(fromId)) return accounts[i].id;
+    }
+    return '';
   }
 
   function defaultCategoryId(type, categories, settings) {

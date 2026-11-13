@@ -4,6 +4,15 @@
 
 > 行号会漂移：按文件 + 符号/关键词 grep 定位，不要照抄旧行号。
 
+## 已修（2.32.7 批次）
+
+| 位置 | 问题 | 回归 |
+| --- | --- | --- |
+| `js/screens/add.js` 属性栏 | 手动记账仍有「选择账户 / 选择转入账户」chip 和账户 sheet，转账还要选转入账户 | `tests/accountless-ui.test.js` 1.1/1.2 |
+| `js/screens/plan.js` 定期计划表单 | 仍有账户 / 转入账户下拉，保存时提示「请选择账户」 | `tests/accountless-ui.test.js` 2.1 |
+| `js/screens/settings.js` 账单导入预览 | 仍有「记入账户」下拉，导入前要手动选账户 | `tests/accountless-ui.test.js` 2.2 |
+| `js/screens/ledger.js` 筛选 sheet | 仍有账户分组和账户 chips，已启用筛选里也有账户项 | `tests/accountless-ui.test.js` 2.3 |
+
 ## 已修（2.32.6 批次）
 
 | 位置 | 问题 | 回归 |

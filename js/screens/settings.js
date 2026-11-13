@@ -1738,17 +1738,6 @@
       body.appendChild(noteBlock(w, 's-settings-sheet__warn'));
     });
 
-    var accRow = h('div', { className: 's-settings-bill__accrow' });
-    accRow.appendChild(h('span', { className: 's-settings-bill__acclabel', text: '记入账户' }));
-    var accSelect = h('select', { className: 's-settings-bill__select' });
-    accounts.forEach(function (acc) {
-      var opt = h('option', { value: String(acc.id), text: String(acc.name || '未命名账户') });
-      if (String(acc.id) === String(defaultAccountId)) { opt.selected = true; }
-      accSelect.appendChild(opt);
-    });
-    accRow.appendChild(accSelect);
-    body.appendChild(accRow);
-
     var summaryValue = h('span', { className: 's-settings-bill__sum', text: '' });
     var statList = h('div', { className: 'c-list s-settings-sheet__list' });
     statList.appendChild(row({
@@ -1822,7 +1811,7 @@
           label: '导入勾选账单',
           kind: 'primary',
           onClick: function () {
-            runBillImport(ctx, items, String(accSelect.value || defaultAccountId), handle);
+            runBillImport(ctx, items, defaultAccountId, handle);
             return false;
           }
         }

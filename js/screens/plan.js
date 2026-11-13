@@ -243,6 +243,14 @@
     return db[key].filter(function (row) { return !!row; });
   }
 
+  /* 2.32.7：计划不再让用户选账户，内部取一个与转出不同的默认账户 */
+  function defaultToAccountId(accounts, fromId) {
+    for (var i = 0; i < accounts.length; i++) {
+      if (accounts[i] && String(accounts[i].id) !== String(fromId)) { return String(accounts[i].id); }
+    }
+    return '';
+  }
+
   function listOf(working, key) {
     if (!working[key] || !Array.isArray(working[key])) { working[key] = []; }
     return working[key];
@@ -1732,11 +1740,6 @@
 
     var nameInput = textInput(rule ? rule.name : '', '例如：房租', '名称');
     var amountBox = amountInput(rule ? rule.amountCents : 0);
-    var accountOptions = accounts.map(function (row) {
-      return { value: String(row.id), label: String(row.name || '账户') };
-    });
-    var accountSelect = selectInput(accountOptions, state.accountId, '账户');
-    var toAccountSelect = selectInput(accountOptions, state.toAccountId || state.accountId, '转入账户');
     var categorySelect = el('select', { className: 'c-field__input s-plan-select' });
     categorySelect.setAttribute('aria-label', '分类');
     var intervalBox = numberInput(rule ? (Number(rule.interval) || 1) : 1, 1, 99);
@@ -1750,7 +1753,6 @@
     var startBox = dateInput(rule ? rule.startDate : todayStr());
     var error = errorNode();
 
-    var toAccountRow = fieldRow('转入账户', toAccountSelect);
     var categoryRow = fieldRow('分类', categorySelect);
     var weekdayRow = fieldRow('周期日', weekdaySelect);
     var dayRow = fieldRow('每月几号', dayBox);
@@ -1783,8 +1785,6 @@
       fieldRow('名称', nameInput),
       fieldRow('金额', amountBox, '¥'),
       typeRow,
-      fieldRow('账户', accountSelect),
-      toAccountRow,
       categoryRow,
       freqRow,
       intervalRow,
@@ -1814,21 +1814,20 @@
 
     function syncRows() {
       var isTransfer = state.type === 'transfer';
-      toAccountRow.hidden = !isTransfer;
       categoryRow.hidden = isTransfer;
       weekdayRow.hidden = state.freq !== 'weekly';
       dayRow.hidden = !(state.freq === 'monthly' || state.freq === 'yearly');
       monthRow.hidden = state.freq !== 'yearly';
       intervalRow.hidden = false;
       if (!isTransfer) { fillCategories(); }
-      if (isTransfer && !state.toAccountId) { state.toAccountId = accounts.length > 1 ? String(accounts[1].id) : state.accountId; toAccountSelect.value = state.toAccountId; }
+      if (isTransfer && (!state.toAccountId || state.toAccountId === state.accountId)) {
+        state.toAccountId = defaultToAccountId(accounts, state.accountId);
+      }
     }
 
     typeSeg.addEventListener('click', function () { syncRows(); });
     freqSeg.addEventListener('click', function () { syncRows(); });
     categorySelect.addEventListener('change', function () { state.categoryId = String(categorySelect.value); });
-    accountSelect.addEventListener('change', function () { state.accountId = String(accountSelect.value); });
-    toAccountSelect.addEventListener('change', function () { state.toAccountId = String(toAccountSelect.value); });
 
     syncRows();
 
@@ -1849,9 +1848,9 @@
       var cents = parseCents(amountBox.value);
       if (!name) { showError(error, '请填写账单名称'); return; }
       if (!isFinite(cents) || cents <= 0) { showError(error, '请输入大于 0 的金额'); return; }
-      if (!state.accountId) { showError(error, '请选择账户'); return; }
+      if (!state.accountId) { showError(error, '还没有可用账户，先在账户页添加一个'); return; }
       if (state.type === 'transfer' && (!state.toAccountId || state.toAccountId === state.accountId)) {
-        showError(error, '转入账户不能和转出账户相同');
+        showError(error, '转账需要两个账户，先在账户页再添加一个');
         return;
       }
       if (state.type !== 'transfer' && !state.categoryId) { showError(error, '请选择分类'); return; }

@@ -2597,33 +2597,8 @@
     typeGroup.appendChild(seg);
     content.appendChild(typeGroup);
 
-    /* 账户：横向可换行 chips（M5） */
-    var accounts = rows(st.db, 'accounts').filter(function (item) {
-      return item && item.archived !== true && item.deleted !== true;
-    });
-    var accountGroup = el('section', { className: 's-ledger-fgroup' });
-    accountGroup.appendChild(el('h3', { className: 's-ledger-fgroup__title', text: '账户' }));
-    var accountBox = el('div', { className: 's-ledger-fchips' });
-    accounts.forEach(function (account) {
-      var on = draft.accountIds.indexOf(account.id) >= 0;
-      var chip = el('button', {
-        className: 's-ledger-fchip' + (on ? ' is-active' : ''),
-        type: 'button',
-        'aria-pressed': on ? 'true' : 'false',
-        text: accountName(account)
-      });
-      chip.addEventListener('click', function () {
-        var nowOn = draft.accountIds.indexOf(account.id) >= 0;
-        toggleId(draft.accountIds, account.id, !nowOn);
-        chip.classList.toggle('is-active', !nowOn);
-        chip.setAttribute('aria-pressed', !nowOn ? 'true' : 'false');
-        syncApply();
-      });
-      accountBox.appendChild(chip);
-    });
-    if (!accounts.length) { accountBox.appendChild(el('p', { className: 's-ledger-fempty', text: '还没有账户' })); }
-    accountGroup.appendChild(accountBox);
-    content.appendChild(accountGroup);
+    /* 2.32.7：账户筛选已移除（账户选择统一从流水筛选里删掉），
+       账户名仍由下方流水行/详情展示，账户管理页照常保留。 */
 
     /* 分类：搜索 + 类型过滤 + 常用优先 + 展开分组 + 已选置顶（M5） */
     var categories = rows(st.db, 'categories').filter(function (item) {
@@ -2844,7 +2819,7 @@
     }
     function syncApply() {
       if (!applyBtn) { return; }
-      var n = draft.categoryIds.length + draft.accountIds.length +
+      var n = draft.categoryIds.length +
         (draft.type !== 'all' ? 1 : 0) +
         ((draft.minCents !== null || draft.maxCents !== null) ? 1 : 0);
       applyBtn.textContent = n > 0 ? '应用（' + n + '）' : '应用';
@@ -2912,15 +2887,6 @@
     if (st.reimburseOnly) {
       defs.push({ key: 'reimburse', label: '待报销' });
     }
-    if (st.accountIds.length) {
-      var acc = st.maps.accounts[st.accountIds[0]];
-      defs.push({
-        key: 'accounts',
-        label: st.accountIds.length === 1
-          ? (acc && acc.name ? String(acc.name) : '1 个账户')
-          : st.accountIds.length + ' 个账户'
-      });
-    }
     if (st.categoryIds.length) {
       var cat = st.maps.categories[st.categoryIds[0]];
       defs.push({
@@ -2970,7 +2936,6 @@
   function removeFilterKey(st, key) {
     if (key === 'day') { st.day = ''; }
     else if (key === 'reimburse') { st.reimburseOnly = false; }
-    else if (key === 'accounts') { st.accountIds = []; }
     else if (key === 'categories') { st.categoryIds = []; }
     else if (key === 'range') { st.minCents = null; st.maxCents = null; }
     paint(st);
@@ -3008,12 +2973,6 @@
       parts.push(cat && cat.name ? String(cat.name) : '1 个分类');
     } else if (st.categoryIds.length > 1) {
       parts.push(st.categoryIds.length + ' 个分类');
-    }
-    if (st.accountIds.length === 1) {
-      var acc = st.maps.accounts[st.accountIds[0]];
-      parts.push(acc && acc.name ? String(acc.name) : '1 个账户');
-    } else if (st.accountIds.length > 1) {
-      parts.push(st.accountIds.length + ' 个账户');
     }
     if (st.minCents !== null || st.maxCents !== null) {
       var minText = st.minCents === null ? '0' : String(st.minCents / 100);
