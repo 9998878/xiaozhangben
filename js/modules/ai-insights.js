@@ -1027,7 +1027,6 @@
     var incomeCents = Number(cash.incomeCents) || 0;
     var expenseCents = Number(cash.expenseCents) || 0;
     var netCents = Number(cash.netCents) || 0;
-    var incomeCents = Number(cash.incomeCents) || 0;
     /* 2.32.8：收入没记过的月份（只记支出的学生账本）不判结余、必要支出、应急金——
        这三项在「收入=0」时必然为负，旧版每月都报同一批红旗，解读会变成噪音。
        字段缺省按「记过」处理，保持旧指标对象的行为不变。 */
