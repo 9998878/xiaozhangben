@@ -1569,7 +1569,12 @@
      旧版 pending 有绝对优先权：只要还有一个补问没答完，任何新句子都会被当成
      对旧问题的回答，用户说「烟14.09」只会再被问一次「转到哪个账户」。 */
   function isCancelText(input) {
-    return /^(取消|算了|不用了|不了|不要了|不记了|先不|重来|清空)$/.test(input);
+    return /^(取消|算了|不用了|不了|不要了|不记了|先不|重来|清空)(吧|了|啦)?$/.test(input);
+  }
+
+  /* 草稿冲突气泡的两个 value + 对应中文口语/按钮文案；联网模式也必须认它们 */
+  function isResumeControl(input) {
+    return /^(继续|接着|再改|保留|不放弃|keep|放弃|丢掉|取消|重新|重来|清空|drop)(编辑上一批|并重新解析|上一批|这次)?$/.test(input);
   }
 
   function conflictReply(state) {
@@ -1631,7 +1636,7 @@
 
     /* 1b) 草稿冲突的按钮/口语指令要先于补问处理：
        否则 pending 会把 keep 当成「账户名」再问一遍，按钮永远出不去。 */
-    if (next.draft && /^(继续|接着|再改|保留|不放弃|keep|放弃|丢掉|取消|重新|重来|清空|drop)$/.test(input)) {
+    if (next.draft && isResumeControl(input)) {
       var resumeCtrl = tryResume(input, next, cx);
       if (resumeCtrl) { return resumeCtrl; }
     }
@@ -1700,7 +1705,7 @@
 
   function tryResume(input, state, cx) {
     /* 2.32.2：按钮传的是 value（keep/drop），旧版只认中文，点了没反应 */
-    if (/^(继续|接着|再改|保留|不放弃|keep)$/.test(input)) {
+    if (/^(继续|接着|再改|保留|不放弃|keep)/.test(input)) {
       state.conflictText = '';
       /* 旧批还有没补完的字段：把原来的补问连同选项一起端回来 */
       if (state.pending && state.draft) {
@@ -1721,18 +1726,19 @@
         reply: previewReply(state.draft, cx, '接着改这一批')
       };
     }
-    if (/^(放弃|丢掉|取消|重新|算了|不用了|不了|不要了|重来|清空|drop)$/.test(input)) {
+    if (/^(放弃|丢掉|取消|重新|算了|不用了|不了|不要了|重来|清空|drop)/.test(input)) {
       var retryRaw = state.conflictText || '';
       state.draft = null;
       state.pending = null;
       state.conflictText = '';
       draftClear();
       if (retryRaw) {
-        var retry = handleCreate(retryRaw, state, cx);
+        /* 2.32.2：不能固定走 handleCreate——用户丢掉草稿后想查账/改账也要能走对路由 */
+        var retry = respond(retryRaw, state, cx);
         if (retry && retry.reply) {
           if (retry.reply.kind === 'preview') {
             retry.reply.text = '已放弃上一批，按「' + short(retryRaw, 20) + '」重新解析。';
-          } else if (retry.reply.kind === 'clarify') {
+          } else {
             retry.reply.text = '已放弃上一批。' + (retry.reply.text || '');
           }
         }
@@ -3006,17 +3012,6 @@
     if (Number(cfg.noticeAt) <= 0) {
       return Promise.resolve({ ok: false, code: E.NOT_ACKED });
     }
-    var body;
-    try {
-      body = JSON.stringify({
-        model: cfg.model,
-        temperature: 0,
-        max_tokens: 16,
-        messages: [{ role: 'user', content: '回复一个 JSON 对象：{"ok":true}' }]
-      });
-    } catch (error) {
-      return Promise.resolve({ ok: false, code: E.NET_CONFIG });
-    }
     /* 免费预设走 20s 门；自定义服务维持 6s。
        2.32.1：HTTP 200 不等于模型可用——推理模型会把 token 预算烧在 reasoning 上
        返回空 content（finish_reason=length），旧版据此报「连接正常」是假阳性。
@@ -3786,6 +3781,18 @@
           : (!aiConfigured(cfg) ? 'config' : 'privacy');
         resolve(localReply(text, state, ctx, gateReason));
         return;
+      }
+      /* 2.32.2：补问/草稿的「取消/继续/放弃」是控制词，不是聊天。
+         它们的 detectIntent 都是 unknown，旧版会走下面的聊天出口，
+         结果联网模式下按钮/取消还是没反应——必须先本地处理。 */
+      var ctrlInput = norm(text);
+      var hasOpenState = !!(state && (state.pending || state.draft));
+      if (hasOpenState && (isCancelText(ctrlInput) || isResumeControl(ctrlInput))) {
+        var controlOut = respond(text, state, ctx);
+        if (controlOut && controlOut.reply) {
+          resolve({ state: controlOut.state, reply: controlOut.reply, mode: 'local', reason: '' });
+          return;
+        }
       }
       /* 2.29.2：自由对话兜底——本地意图听不懂的句子直接走聊天出口（先本地判意图，
          不为这类句子白等一次解析）；失败照常回落本地。 */

@@ -95,6 +95,14 @@ eq('drop 应按新句子重新解析', out.reply.kind, 'preview');
 eq('重新解析的应正是「烟14.09」', out.reply.plan && out.reply.plan.raw, '烟14.09');
 check('drop 应说清已放弃上一批', String(out.reply.text || '').indexOf('已放弃上一批') === 0, out.reply.text);
 
+/* 4b) drop 后的新句子若是在查账，也必须走查询路由，不能硬当记账 */
+out = asst.respond('转账500', {}, ctx);
+out = asst.respond('支付宝', out.state, ctx);
+out = asst.respond('这个月花了多少', out.state, ctx);
+eq('草稿时发查询应转冲突', out.reply.kind, 'conflict');
+out = asst.respond('drop', out.state, ctx);
+eq('drop 后发查询应走查询路由', out.reply.kind, 'query');
+
 /* 5) 补问/草稿的通用取消 */
 out = asst.respond('转账500', {}, ctx);
 out = asst.respond('取消', out.state, ctx);

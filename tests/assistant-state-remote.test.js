@@ -76,6 +76,24 @@ const ctx = {
   check('冲突气泡应提示上一批，而不是反问 14.09', out.reply.kind === 'conflict', 'kind=' + out.reply.kind);
   check('冲突时不得发出任何网络请求', fetchCalls === 0, 'fetchCalls=' + fetchCalls);
   check('冲突文案应点名上一批「转账500」', String(out.reply.text || '').indexOf('转账500') >= 0, out.reply.text);
+
+  /* 联网模式下按钮 value 也必须本地处理 */
+  const dropped = await asst.respondRemote('drop', out.state, ctx);
+  check('联网模式点「放弃并重新解析」应直接出预览', dropped.reply.kind === 'preview' && dropped.reply.plan && dropped.reply.plan.raw === '烟14.09',
+    'kind=' + dropped.reply.kind + ' raw=' + (dropped.reply.plan && dropped.reply.plan.raw));
+  check('drop 不得出站', fetchCalls === 0, 'fetchCalls=' + fetchCalls);
+
+  const firstKeep = asst.respond('转账500', {}, ctx);
+  const conflictKeep = await asst.respondRemote('烟14.09', firstKeep.state, ctx);
+  const kept = await asst.respondRemote('keep', conflictKeep.state, ctx);
+  check('联网模式点「继续编辑上一批」应回旧补问', kept.reply.kind === 'clarify', 'kind=' + kept.reply.kind);
+
+  const firstCancel = asst.respond('转账500', {}, ctx);
+  const cancelled = await asst.respondRemote('取消', firstCancel.state, ctx);
+  check('联网模式「取消」应清空补问', cancelled.reply.kind === 'hint' && !cancelled.state.pending && !cancelled.state.draft,
+    'kind=' + cancelled.reply.kind + ' pending=' + JSON.stringify(cancelled.state.pending && cancelled.state.pending.field));
+  check('取消不得出站', fetchCalls === 0, 'fetchCalls=' + fetchCalls);
+
   console.log('\n通过 ' + pass + ' / 失败 ' + fail);
   process.exit(fail ? 1 : 0);
 })();
