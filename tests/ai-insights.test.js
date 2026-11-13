@@ -658,6 +658,108 @@ regCase('7.7 收入只覆盖不到一半支出：不报赤字，改提示「收�
   checkEq(solid[0].level, 'red', '仍是红旗');
 });
 
+/* ============================== 用例 8：2.32.9 同期复盘 / 分类贡献 / 免模型月报 ============================== */
+
+section('用例 8：月中同期、分类贡献与免模型月报（2.32.9）');
+
+function buildSamePeriodDb() {
+  return buildDbWith([
+    tx({ categoryId: 'ca_food', amountCents: 1000, date: '2026-11-01' }),
+    tx({ categoryId: 'ca_food', amountCents: 2000, date: '2026-11-06' }),
+    tx({ categoryId: 'ca_food', amountCents: 3000, date: '2026-10-01' }),
+    tx({ categoryId: 'ca_food', amountCents: 4000, date: '2026-10-05' }),
+    tx({ categoryId: 'ca_food', amountCents: 5000, date: '2026-10-20' })
+  ]);
+}
+
+regCase('8.1 月中总量与分类都用上月同期，不用上月整月', function () {
+  const m = buildMetrics(buildSamePeriodDb());
+  checkEq(m.period.elapsedDays, 6, '固定今天为 11 月 6 日');
+  checkEq(m.period.isPartial, true, '月中标记');
+  checkEq(m.period.avgDailyExpenseCents, 500, '日均=3000/6');
+  checkEq(m.period.projectedExpenseCents, 15000, '按日均外推 30 天');
+  checkEq(m.period.prevSamePeriodExpenseCents, 7000, '上月只取 1-6 日');
+  checkEq(m.period.samePeriodDeltaCents, -4000, '同期差额');
+  checkEq(m.trends.mom.expense.prevCents, 12000, '原整月环比字段仍保留');
+  checkEq(m.trends.samePeriodItems[0].prevCents, 7000, '分类同期榜只取 1-6 日');
+  checkEq(m.trends.samePeriodItems[0].deltaCents, -4000, '分类同期差额');
+});
+
+regCase('8.2 过去月仍按整月，不生成月中同期分类榜', function () {
+  const db = buildDbWith([
+    tx({ categoryId: 'ca_food', amountCents: 1000, date: '2026-10-20' }),
+    tx({ categoryId: 'ca_food', amountCents: 2000, date: '2026-09-30' })
+  ]);
+  const m = aiInsights.buildMonthlyMetrics(db, '2026-10', BOOK);
+  checkEq(m.period.elapsedDays, 31, '过去月已完整');
+  checkEq(m.period.isPartial, false, '不是月中');
+  checkEq(m.period.prevSamePeriodExpenseCents, 2000, '过去月的上月同期=上月整月');
+  checkEq(m.trends.samePeriodItems, null, '过去月无需重复同期榜');
+});
+
+regCase('8.3 分类贡献榜与峰值日：金额、占比、笔数可核验', function () {
+  const m = buildMetrics(buildDbWith([
+    tx({ categoryId: 'ca_food', amountCents: 3000, date: '2026-11-02' }),
+    tx({ categoryId: 'ca_home', amountCents: 6000, date: '2026-11-02' }),
+    tx({ categoryId: 'ca_food', amountCents: 1000, date: '2026-11-03' })
+  ]));
+  checkEq(m.topCategories[0].name, '居住', '6000 居住排第一');
+  checkEq(m.topCategories[0].pct, 60, '居住占比 60%');
+  checkEq(m.topCategories[1].count, 2, '餐饮两笔');
+  checkEq(m.peakDay.date, '2026-11-02', '11 月 2 日峰值');
+  checkEq(m.peakDay.cents, 9000, '峰值日合计');
+  checkEq(m.peakDay.count, 2, '峰值日两笔');
+});
+
+regCase('8.4 总预算按当前日均预测，兜底只说“可能超”并给剩余日均', function () {
+  const db = buildDbWith([tx({ categoryId: 'ca_food', amountCents: 6000, date: '2026-11-06' })]);
+  db.budgets = [{ bookId: BOOK, month: '2026-11', totalCents: 10000 }];
+  const m = buildMetrics(db);
+  checkEq(m.budget.total.usedPct, 60, '已用 60%');
+  checkEq(m.budget.total.remainingCents, 4000, '剩余 40 元');
+  checkEq(m.budget.total.projectedExpenseCents, 30000, '预计全月 300 元');
+  checkEq(m.budget.total.projectedOverCents, 20000, '预计超 200 元');
+  const out = aiInsights.buildFallbackInsights(m);
+  const pace = out.find(function (x) { return x.title.indexOf('可能超总预算') >= 0; });
+  check(pace, '应出现预算节奏提示');
+  check(pace.suggestion.indexOf('1.67') >= 0, '剩余 24 天每天 40/24=1.67 元：' + pace.suggestion);
+});
+
+regCase('8.5 免模型总览与分类证据都使用同期口径', function () {
+  const db = buildSamePeriodDb();
+  db.transactions.push(tx({ categoryId: 'ca_food', amountCents: 2000, date: '2026-10-06' }));
+  const m = buildMetrics(db);
+  const summary = aiInsights.buildLocalSummary(m);
+  check(summary.indexOf('比上月同期少花 60.00 元') >= 0, summary);
+  check(summary.indexOf('餐饮最多，占 100.0%') >= 0, summary);
+  check(summary.indexOf('入不敷出') < 0, '无收入月不判赤字');
+  const out = aiInsights.buildFallbackInsights(m);
+  const food = out.find(function (x) { return x.title.indexOf('「餐饮」') >= 0; });
+  check(food, '本地月报不只给数据质量提示');
+  check(food.evidence.join(' ').indexOf('90.00') >= 0, '分类证据用上月同期 90 元');
+  check(food.evidence.join(' ').indexOf('140.00') < 0, '不得误用上月整月 140 元');
+  check(out.length <= 4, '本地月报最多 4 条');
+});
+
+regCase('8.6 请求体带同期分类、总预算与贡献榜，仍不带分类 id', async function () {
+  const m = buildMetrics(buildSamePeriodDb());
+  const fake = fakeAssistant([AI_OK_JSON]);
+  await withAssistant(fake, function () { return aiInsights.requestAiInsights(m, {}); });
+  const raw = fake.calls[0].messages[1].content;
+  const payload = JSON.parse(raw);
+  checkEq(payload.topCategories[0].prev, '70.00', 'topCategories 用同期上月金额');
+  checkEq(payload.trends.samePeriodItems[0].prev, '70.00', '请求体带分类同期榜');
+  checkEq(payload.period.prevSamePeriodExpense, '70.00', '请求体带总量同期');
+  check(raw.indexOf('categoryId') < 0, '请求体不得带 categoryId');
+});
+
+regCase('8.7 空账与脏入参：免模型总览不造结论', function () {
+  checkEq(aiInsights.buildLocalSummary(null), '', 'null 返回空串');
+  checkEq(aiInsights.buildLocalSummary({ dataQuality: { txCount: 0 } }), '', '空账返回空串');
+  check(aiSrc.indexOf('trends.samePeriodItems') >= 0 && aiSrc.indexOf('projectedOver') >= 0,
+    '提示词必须解释同期分类与预算预测');
+});
+
 /* ============================== 汇总 ============================== */
 
 (async function main() {

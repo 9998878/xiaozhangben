@@ -23,7 +23,7 @@
 
 - UI：`js/screens/assistant.js`（说话记账）、`js/screens/insights.js`（月度解读卡）、`js/screens/settings.js`（AI 配置页）。
 - 传输与错误码：`js/modules/core-assistant.js`。密钥只出现在 `Authorization` 头；错误码统一 `E_AS_*`。
-- 指标与提示词：`js/modules/ai-insights.js`（`buildMonthlyMetrics`、`requestAiInsights`、`toInsightPayload`）。
+- 指标与提示词：`js/modules/ai-insights.js`（`buildMonthlyMetrics`、`requestAiInsights`、`toInsightPayload`、`buildFallbackInsights`、`buildLocalSummary`）。月中总量与分类都使用上月同期；免模型月报与 AI 请求共用同一聚合结果，不各算一套。
 - 本地解析：`js/modules/nl.js`（金额、日期、分类别名）；没有模型时全靠它。
 
 ## 发布与不变量

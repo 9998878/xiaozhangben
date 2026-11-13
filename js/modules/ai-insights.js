@@ -4,10 +4,11 @@
  * 金额全程整数分（*Cents 字段原样输出分），比率/占比/月数在输出层才做除法取整，全程无 toFixed；
  * 口径与 core/stats.walk 完全一致（五道过滤：deleted / bookId / 合法 type / amount>0 / 合法日期）。
  *
- * 导出（XZB.core.aiInsights，共三个）：
- *   - buildMonthlyMetrics(db, month, bookId) -> metrics | null（第 1 轮：单月聚合，纯函数零网络）；
- *   - requestAiInsights(metrics, opts) -> Promise（第 2 轮：输出层，请求 LLM 生成解读，永不 reject）；
- *   - buildFallbackInsights(metrics) -> items（第 2 轮：输出层本地规则兜底，零网络）。
+ * 导出（XZB.core.aiInsights）：
+ *   - buildMonthlyMetrics(db, month, bookId) -> metrics | null（单月聚合，纯函数零网络）；
+ *   - requestAiInsights(metrics, opts) -> Promise（请求 LLM 生成解读，永不 reject）；
+ *   - buildFallbackInsights(metrics) -> items（本地规则月报，零网络）；
+ *   - buildLocalSummary(metrics) -> string（免模型月报总览，零网络）。
  *   - db：XZB.app.db() 内存真源（至少含 transactions 数组）；
  *   - month：'YYYY-MM'；bookId：当前账本 id；两者非法一律返回 null，不抛错。
  *   - 跨月信息（3 个月移动平均、连续超支月数、环比）在函数内部回溯 prev1/prev2，不靠外部传区间。
@@ -321,6 +322,14 @@
     var prev1 = shiftMonth(mKey, -1);
     var prev2 = shiftMonth(mKey, -2);
     var today = todayInfo();
+    /* 2.32.9：月中复盘按「上月同期」而不是上月整月。过去月 elapsedDays=整月，
+       与旧口径一致；未来月没有实绩，日均/预测给 null。 */
+    var dimCur = daysInMonthOf(Number(mKey.slice(0, 4)), Number(mKey.slice(5, 7)));
+    var elapsedCur = mKey < today.month ? dimCur
+      : (mKey === today.month ? Math.max(1, Math.min(dimCur, today.day)) : 0);
+    var prevSamePeriodCents = 0;
+    var prevSameCats = Object.create(null);
+    var dailyCur = Object.create(null);
 
     /* ---- 月份桶：本月 / 上月 / 上上月，一次遍历分流 ---- */
     function newBucket() {
@@ -398,8 +407,19 @@
             note: typeof tx.note === 'string' ? tx.note : '',
             categoryId: categoryId
           });
+          var dayRow = dailyCur[date];
+          if (!dayRow) { dailyCur[date] = dayRow = { cents: 0, count: 0 }; }
+          dayRow.cents += amount;
+          dayRow.count += 1;
           matchSmallGroup(smallCur, tx.note, categoryId, amount, catIndex);
         } else if (mk === prev1) {
+          if (elapsedCur > 0 && Number(date.slice(8, 10)) <= elapsedCur) {
+            prevSamePeriodCents += amount;
+            var sameCatRow = prevSameCats[categoryId];
+            if (!sameCatRow) { prevSameCats[categoryId] = sameCatRow = { cents: 0, count: 0 }; }
+            sameCatRow.cents += amount;
+            sameCatRow.count += 1;
+          }
           matchSmallGroup(smallPrev, tx.note, categoryId, amount, catIndex);
         }
       } else if (type === TYPE_INCOME) {
@@ -549,6 +569,33 @@
     momItems.sort(function (a, b) {
       return (Math.abs(b.deltaCents) - Math.abs(a.deltaCents)) || (b.currentCents - a.currentCents);
     });
+
+    /* 月中分类同期榜：与 period.prevSamePeriodExpenseCents 使用完全相同的截止日 */
+    var samePeriodItems = null;
+    if (elapsedCur > 0 && elapsedCur < dimCur) {
+      var sameSeen = Object.create(null);
+      for (var sc1 in cur.cats) { if (Object.prototype.hasOwnProperty.call(cur.cats, sc1)) { sameSeen[sc1] = 1; } }
+      for (var sc2 in prevSameCats) { if (Object.prototype.hasOwnProperty.call(prevSameCats, sc2)) { sameSeen[sc2] = 1; } }
+      samePeriodItems = [];
+      for (var sc3 in sameSeen) {
+        if (!Object.prototype.hasOwnProperty.call(sameSeen, sc3)) { continue; }
+        var sameCur = spentOf(cur, sc3);
+        var samePrevRow = prevSameCats[sc3];
+        var samePrev = samePrevRow ? samePrevRow.cents : 0;
+        samePeriodItems.push({
+          categoryId: sc3,
+          name: categoryNameOf(catIndex, sc3),
+          currentCents: sameCur,
+          prevCents: samePrev,
+          deltaCents: sameCur - samePrev,
+          deltaPct: samePrev > 0 ? round1((sameCur - samePrev) / samePrev * 100) : null
+        });
+      }
+      samePeriodItems.sort(function (a, b) {
+        return (Math.abs(b.deltaCents) - Math.abs(a.deltaCents)) || (b.currentCents - a.currentCents);
+      });
+    }
+
     function totalDelta(curCents, prevCents) {
       return {
         currentCents: curCents,
@@ -572,12 +619,7 @@
     }
 
     /* ---- 异常大额（日均支出 ×3 或 500 元兜底，降序取 5） ---- */
-    function elapsedDaysOf(mk2) {
-      if (mk2 < today.month) { return daysInMonthOf(Number(mk2.slice(0, 4)), Number(mk2.slice(5, 7))); }
-      if (mk2 === today.month) { return Math.max(1, today.day); }
-      return 1; /* 未来月份无实绩，退化为只看大额兜底线 */
-    }
-    var dailyAvgCents = cur.expenseCents / elapsedDaysOf(mKey);
+    var dailyAvgCents = cur.expenseCents / (elapsedCur > 0 ? elapsedCur : 1);
     var thrDaily = dailyAvgCents * ANOMALY_DAILY_MULT;
     var anomalyHits = [];
     for (i = 0; i < expenseTxs.length; i++) {
@@ -649,9 +691,67 @@
     var expenseCents = cur.expenseCents;
     var netCents = incomeCents - expenseCents;
 
+    /* 2.32.9：分类贡献榜——回答“钱主要花在哪”，不再让模型从三桶占比里猜 */
+    var topCategories = [];
+    for (var topId in cur.cats) {
+      if (!Object.prototype.hasOwnProperty.call(cur.cats, topId)) { continue; }
+      var topRow = cur.cats[topId];
+      topCategories.push({
+        categoryId: topId,
+        name: categoryNameOf(catIndex, topId),
+        cents: topRow.cents,
+        count: topRow.count,
+        pct: pctOf(topRow.cents, expenseCents)
+      });
+    }
+    topCategories.sort(function (a, b) { return b.cents - a.cents; });
+    topCategories = topCategories.slice(0, 5);
+
+    var peakDay = null;
+    for (var dayKey in dailyCur) {
+      if (!Object.prototype.hasOwnProperty.call(dailyCur, dayKey)) { continue; }
+      var dayTotal = dailyCur[dayKey];
+      if (!peakDay || dayTotal.cents > peakDay.cents) {
+        peakDay = { date: dayKey, cents: dayTotal.cents, count: dayTotal.count };
+      }
+    }
+
+    var projectedExpenseCents = elapsedCur > 0 ? Math.round(expenseCents / elapsedCur * dimCur) : null;
+    var period = {
+      daysInMonth: dimCur,
+      elapsedDays: elapsedCur,
+      isPartial: elapsedCur > 0 && elapsedCur < dimCur,
+      avgDailyExpenseCents: elapsedCur > 0 ? Math.round(expenseCents / elapsedCur) : null,
+      projectedExpenseCents: projectedExpenseCents,
+      prevSamePeriodExpenseCents: elapsedCur > 0 ? prevSamePeriodCents : null,
+      samePeriodDeltaCents: elapsedCur > 0 ? expenseCents - prevSamePeriodCents : null,
+      samePeriodDeltaPct: elapsedCur > 0 && prevSamePeriodCents > 0
+        ? round1((expenseCents - prevSamePeriodCents) / prevSamePeriodCents * 100) : null
+    };
+
+    /* 总预算执行与月底预测。预测只是“按当前日均外推”，不是承诺，也不外推收入。 */
+    var totalBudget = null;
+    var budgets = Array.isArray(db.budgets) ? db.budgets : [];
+    for (i = 0; i < budgets.length; i++) {
+      var totalBg = budgets[i];
+      if (!totalBg || totalBg.bookId !== bid || totalBg.month !== mKey) { continue; }
+      var totalLimit = intOf(totalBg.totalCents);
+      if (totalLimit <= 0) { continue; }
+      totalBudget = {
+        limitCents: totalLimit,
+        spentCents: expenseCents,
+        remainingCents: totalLimit - expenseCents,
+        usedPct: pctOf(expenseCents, totalLimit),
+        projectedExpenseCents: projectedExpenseCents,
+        projectedOverCents: projectedExpenseCents === null ? null : Math.max(0, projectedExpenseCents - totalLimit)
+      };
+      break;
+    }
+
     /* ---- 组装（键序与任务书返回结构一致） ---- */
     return {
       month: mKey,
+      period: period,
       cashflow: {
         incomeCents: incomeCents,
         expenseCents: expenseCents,
@@ -679,8 +779,11 @@
         uncategorizedPct: pctOf(uncatCents, expenseCents)
       },
       budget: {
+        total: totalBudget,
         overCategories: overCategories
       },
+      topCategories: topCategories,
+      peakDay: peakDay,
       trends: {
         mom: {
           month: mKey,
@@ -690,6 +793,7 @@
           net: totalDelta(netCents, p1.incomeCents - p1.expenseCents),
           items: momItems
         },
+        samePeriodItems: samePeriodItems,
         ma3: ma3,
         anomalies: anomalies
       },
@@ -748,7 +852,9 @@
     'summary：1-2 句、60 字以内。先给这个月一句整体判断（比上月花得多还是少、主要花在哪、有没有异常高峰），用大白话，不要堆数字。',
     'items 每条形如 {"level":"red|orange|yellow|info","category":"九选一","title":"一句话说清是什么","evidence":["带数字的依据"],"suggestion":"下月做什么"}；category 只能取：结余与负债、必要支出、支出结构、连续超支、高频小额、负债红旗、应急缓冲、一次性收支、数据质量。',
     '条数只给 2-4 条：挑最值得说的，不要凑数，不要把一件事拆成两条；有做得好的地方可以给 1 条 info（如「外卖比上月少花 120 元」）。',
-    'evidence 每条都要引用用户数据里已有的数字，且至少一条带对比（环比／占比／连续月数／与近 3 个月均值比）；禁止编造，禁止自己再算新数，禁止出现交易 id。',
+    '2.32.9 月中口径：period.isPartial=true 时，用 period.prevSamePeriodExpense（上月同期）比较，不要拿本月已过去天数对比上月整月；projectedExpense 只是按当前日均外推，必须说「按当前节奏预计」。',
+    '先看 topCategories 和 trends.items；period.isPartial=true 时分类变化改用 trends.samePeriodItems，说清哪一类贡献了变化；peakDay 只说明哪天支出最集中，不要把单日高峰直接说成冲动消费。budget.total 有值时才给预算建议，建议金额不得低于已花金额；projectedOver>0 只说「按当前节奏可能超预算」，不要说已经超支。',
+    'evidence 每条都要引用用户数据里已有的数字，且至少一条带对比（同期／环比／占比／连续月数／与近 3 个月均值比）；禁止编造，禁止自己再算新数，禁止出现交易 id。',
     '能让数字更好懂时做生活化换算（如「相当于 24 杯奶茶」），但只能用数据里已有的小类金额，不能凭空估。',
     'suggestion 必须落到「下月一个动作 + 一个数字」（如「外卖每周限 3 次，一个月大约省 200 元」），禁止「注意节约」这类空话。',
     '重要：收入口径不完整时不要断言「入不敷出」。dataQuality.incomeRecorded 为 false（只记了支出没记收入）时，summary 先点明「本月只记了支出」，禁止说「支出超过收入／必要支出超过稳定收入」，也不要把结余为负当红旗；incomeRecorded 为 true 但 incomeCoveragePct < 50（收入只覆盖不到一半支出）时，指出「收入可能没记全」，同样不把结余为负当红旗。两种情况都把重点放在钱花到哪、比上月变化、哪类涨得多。',
@@ -824,6 +930,21 @@
       });
     }
 
+    var samePeriodPayload = null;
+    var srcSamePeriod = Array.isArray(trends.samePeriodItems) ? trends.samePeriodItems : null;
+    if (srcSamePeriod) {
+      samePeriodPayload = [];
+      for (var sp = 0; sp < srcSamePeriod.length && samePeriodPayload.length < AI_MOM_TOP; sp++) {
+        samePeriodPayload.push({
+          name: srcSamePeriod[sp].name,
+          current: yuanText(srcSamePeriod[sp].currentCents),
+          prev: yuanText(srcSamePeriod[sp].prevCents),
+          delta: yuanText(srcSamePeriod[sp].deltaCents),
+          deltaPct: typeof srcSamePeriod[sp].deltaPct === 'number' ? srcSamePeriod[sp].deltaPct : null
+        });
+      }
+    }
+
     var ma3Src = trends.ma3 && typeof trends.ma3 === 'object' ? trends.ma3 : null;
     var ma3 = ma3Src ? {
       months: Array.isArray(ma3Src.months) ? ma3Src.months.slice(0, 3) : [],
@@ -850,9 +971,62 @@
       });
     }
 
+    /* 2.32.9：把分类贡献、月中同期和预算节奏直接喂给模型，减少“自己再算一遍”的幻觉 */
+    var momByCat = Object.create(null);
+    var srcMomAll = Array.isArray(mom.items) ? mom.items : [];
+    var useSamePeriod = m.period && m.period.isPartial === true && samePeriodPayload !== null;
+    var srcCompare = useSamePeriod ? srcSamePeriod : srcMomAll;
+    var comparePayload = useSamePeriod ? samePeriodPayload : momItems;
+    for (var mi = 0; mi < comparePayload.length; mi++) {
+      var srcTopMom = srcCompare[mi];
+      if (srcTopMom && srcTopMom.categoryId) { momByCat[srcTopMom.categoryId] = comparePayload[mi]; }
+    }
+    var topCats = [];
+    var srcTopCats = Array.isArray(m.topCategories) ? m.topCategories : [];
+    for (var tc = 0; tc < srcTopCats.length; tc++) {
+      var top = srcTopCats[tc];
+      var topMom = momByCat[top.categoryId] || null;
+      topCats.push({
+        name: top.name,
+        current: yuanText(top.cents),
+        count: top.count,
+        pct: top.pct,
+        prev: topMom ? topMom.prev : null,
+        delta: topMom ? topMom.delta : null,
+        deltaPct: topMom ? topMom.deltaPct : null
+      });
+    }
+    var srcPeriod = m.period && typeof m.period === 'object' ? m.period : null;
+    var periodPayload = srcPeriod ? {
+      daysInMonth: srcPeriod.daysInMonth,
+      elapsedDays: srcPeriod.elapsedDays,
+      isPartial: srcPeriod.isPartial === true,
+      avgDailyExpense: srcPeriod.avgDailyExpenseCents === null ? null : yuanText(srcPeriod.avgDailyExpenseCents),
+      projectedExpense: srcPeriod.projectedExpenseCents === null ? null : yuanText(srcPeriod.projectedExpenseCents),
+      prevSamePeriodExpense: srcPeriod.prevSamePeriodExpenseCents === null ? null : yuanText(srcPeriod.prevSamePeriodExpenseCents),
+      samePeriodDelta: srcPeriod.samePeriodDeltaCents === null ? null : yuanText(srcPeriod.samePeriodDeltaCents),
+      samePeriodDeltaPct: srcPeriod.samePeriodDeltaPct
+    } : null;
+    var srcTotalBudget = m.budget && m.budget.total && typeof m.budget.total === 'object' ? m.budget.total : null;
+    var totalBudgetPayload = srcTotalBudget ? {
+      limit: yuanText(srcTotalBudget.limitCents),
+      spent: yuanText(srcTotalBudget.spentCents),
+      remaining: yuanText(srcTotalBudget.remainingCents),
+      usedPct: srcTotalBudget.usedPct,
+      projectedExpense: srcTotalBudget.projectedExpenseCents === null ? null : yuanText(srcTotalBudget.projectedExpenseCents),
+      projectedOver: srcTotalBudget.projectedOverCents === null ? null : yuanText(srcTotalBudget.projectedOverCents)
+    } : null;
+
     return {
       month: m.month,
       unit: '元，保留2位小数',
+      period: periodPayload,
+      topCategories: topCats,
+      peakDay: m.peakDay && typeof m.peakDay === 'object' ? {
+        date: m.peakDay.date,
+        amount: yuanText(m.peakDay.cents),
+        count: m.peakDay.count
+      } : null,
       cashflow: {
         income: yuanText(cash.incomeCents),
         expense: yuanText(cash.expenseCents),
@@ -879,13 +1053,14 @@
         enjoymentPct: structure.enjoymentPct,
         uncategorizedPct: structure.uncategorizedPct
       },
-      budget: { overCategories: overCategories },
+      budget: { total: totalBudgetPayload, overCategories: overCategories },
       trends: {
         prevMonth: mom.prevMonth,
         incomeMom: momDeltaToYuan(mom.income),
         expenseMom: momDeltaToYuan(mom.expense),
         netMom: momDeltaToYuan(mom.net),
         items: momItems,
+        samePeriodItems: samePeriodPayload,
         ma3: ma3,
         anomalies: anomalies
       },
@@ -1019,6 +1194,56 @@
   /* 本地规则兜底（任务书 §6）：不联网，按红旗优先级产出 0-4 条，条目与 AI 条目同构。
      2.32.8：收入没记过的月份跳过结余/必要/缓冲三条（必为假红旗），改给一条「只记支出」提示。
      metrics 非法或缺 cashflow 返回 []；无命中也返回 []。 */
+  /* 本地月报的总览与比较口径。月中只看上月同期；过去月才看整月环比。 */
+  function localExpenseCompare(m) {
+    var p = m && m.period && typeof m.period === 'object' ? m.period : null;
+    if (p && p.isPartial === true && typeof p.prevSamePeriodExpenseCents === 'number') {
+      return {
+        isPartial: true,
+        currentCents: Number(m.cashflow && m.cashflow.expenseCents) || 0,
+        prevCents: Number(p.prevSamePeriodExpenseCents) || 0,
+        deltaCents: Number(p.samePeriodDeltaCents) || 0,
+        deltaPct: typeof p.samePeriodDeltaPct === 'number' ? p.samePeriodDeltaPct : null
+      };
+    }
+    var mom = m && m.trends && m.trends.mom && m.trends.mom.expense;
+    if (!mom || typeof mom !== 'object') { return null; }
+    return {
+      isPartial: false,
+      currentCents: Number(mom.currentCents) || 0,
+      prevCents: Number(mom.prevCents) || 0,
+      deltaCents: Number(mom.deltaCents) || 0,
+      deltaPct: typeof mom.deltaPct === 'number' ? mom.deltaPct : null
+    };
+  }
+
+  function compareLabel(cmp) { return cmp && cmp.isPartial ? '上月同期' : '上月'; }
+
+  function buildLocalSummary(metrics) {
+    var m = metrics && typeof metrics === 'object' ? metrics : null;
+    if (!m || !m.dataQuality || !(Number(m.dataQuality.txCount) > 0)) { return ''; }
+    var cash = m.cashflow && typeof m.cashflow === 'object' ? m.cashflow : {};
+    var expenseCents = Number(cash.expenseCents) || 0;
+    var out = '本月支出 ' + yuanText(expenseCents) + ' 元';
+    var cmp = localExpenseCompare(m);
+    if (cmp && cmp.prevCents > 0) {
+      if (cmp.deltaCents < 0) { out += '，比' + compareLabel(cmp) + '少花 ' + yuanText(-cmp.deltaCents) + ' 元'; }
+      else if (cmp.deltaCents > 0) { out += '，比' + compareLabel(cmp) + '多花 ' + yuanText(cmp.deltaCents) + ' 元'; }
+      else { out += '，与' + compareLabel(cmp) + '持平'; }
+    } else if (m.period && typeof m.period.avgDailyExpenseCents === 'number') {
+      out += '，日均 ' + yuanText(m.period.avgDailyExpenseCents) + ' 元';
+    }
+    var tops = Array.isArray(m.topCategories) ? m.topCategories : [];
+    if (tops.length && tops[0] && tops[0].cents > 0) {
+      out += '；' + tops[0].name + '最多，占 ' + Number(tops[0].pct || 0).toFixed(1) + '%';
+    }
+    var dq = m.dataQuality;
+    var coverage = typeof dq.incomeCoveragePct === 'number' ? dq.incomeCoveragePct : null;
+    if (dq.incomeRecorded === false) { out += '。没记收入，结余先不判断'; }
+    else if (coverage !== null && coverage < 50) { out += '。收入可能没记全，结余先不判断'; }
+    return out.length > 90 ? out.slice(0, 89) + '…' : out;
+  }
+
   function buildFallbackInsights(metrics) {
     var m = metrics && typeof metrics === 'object' && !Array.isArray(metrics) ? metrics : null;
     if (!m || !m.cashflow || typeof m.cashflow !== 'object') { return []; }
@@ -1133,7 +1358,125 @@
       });
     }
 
-    return out;
+    /* 6. 预算节奏：月中做同期/预测，过去月才说已经超支 */
+    var bt = m.budget && m.budget.total && typeof m.budget.total === 'object' ? m.budget.total : null;
+    var bp = m.period && typeof m.period === 'object' ? m.period : null;
+    if (bt && bp && bp.isPartial === true && Number(bt.projectedOverCents) > 0) {
+      var remainDays = Math.max(1, (Number(bp.daysInMonth) || 0) - (Number(bp.elapsedDays) || 0));
+      var remainCents = Number(bt.remainingCents) || 0;
+      out.push({
+        level: 'orange',
+        category: '连续超支',
+        title: '按当前节奏，月底可能超总预算',
+        evidence: [
+          '已花 ' + yuanText(bt.spentCents) + ' 元，总预算 ' + yuanText(bt.limitCents) + ' 元',
+          '按当前日均预计全月 ' + yuanText(bt.projectedExpenseCents) + ' 元，可能超 ' + yuanText(bt.projectedOverCents) + ' 元'
+        ],
+        suggestion: remainCents > 0
+          ? '剩余预算 ' + yuanText(remainCents) + ' 元，接下来每天先控制在 ' + yuanText(remainCents / remainDays) + ' 元以内。'
+          : '总预算已用完，接下来先暂停非必要支出，别靠信用卡补缺口。'
+      });
+    } else if (bt && (!bp || bp.isPartial !== true) && Number(bt.spentCents) > Number(bt.limitCents)) {
+      out.push({
+        level: 'orange',
+        category: '连续超支',
+        title: '本月总预算超了',
+        evidence: [
+          '实际支出 ' + yuanText(bt.spentCents) + ' 元，预算 ' + yuanText(bt.limitCents) + ' 元',
+          '超出 ' + yuanText((Number(bt.spentCents) || 0) - (Number(bt.limitCents) || 0)) + ' 元'
+        ],
+        suggestion: '下月总预算先按本月实际 ' + yuanText(bt.spentCents) + ' 元设，执行一个月后再逐步往下调。'
+      });
+    }
+
+    /* 7. 正向反馈：少花就是值得保留的结果，不把月报写成问题清单 */
+    var cmp = localExpenseCompare(m);
+    if (cmp && cmp.prevCents > 0 && cmp.deltaCents < 0) {
+      out.push({
+        level: 'info',
+        category: '支出结构',
+        title: '比' + compareLabel(cmp) + '少花了',
+        evidence: [
+          '本期支出 ' + yuanText(cmp.currentCents) + ' 元，' + compareLabel(cmp) + ' ' + yuanText(cmp.prevCents) + ' 元',
+          '少花 ' + yuanText(-cmp.deltaCents) + ' 元' + (cmp.deltaPct === null ? '' : '（' + Math.abs(cmp.deltaPct).toFixed(1) + '%）')
+        ],
+        suggestion: '下月预算先按本期实际 ' + yuanText(cmp.currentCents) + ' 元试行，保持现在的节奏。'
+      });
+    }
+
+    /* 8. 哪一类贡献了变化：取绝对金额变化最大的一类，不拿百分比小类凑数 */
+    var trendBox = m.trends && typeof m.trends === 'object' ? m.trends : {};
+    var momList = bp && bp.isPartial === true && Array.isArray(trendBox.samePeriodItems)
+      ? trendBox.samePeriodItems
+      : (trendBox.mom && Array.isArray(trendBox.mom.items) ? trendBox.mom.items : []);
+    var change = null;
+    for (var ci = 0; ci < momList.length; ci++) {
+      if (Math.abs(Number(momList[ci].deltaCents) || 0) >= 5000) { change = momList[ci]; break; }
+    }
+    if (change) {
+      var changeUp = Number(change.deltaCents) > 0;
+      out.push({
+        level: changeUp ? 'yellow' : 'info',
+        category: '支出结构',
+        title: '「' + change.name + '」是本月变化最大的分类',
+        evidence: [
+          '本月 ' + yuanText(change.currentCents) + ' 元，' + compareLabel(cmp) + ' ' + yuanText(change.prevCents) + ' 元',
+          (changeUp ? '多花 ' : '少花 ') + yuanText(Math.abs(Number(change.deltaCents) || 0)) + ' 元' +
+            (typeof change.deltaPct === 'number' ? '（' + Math.abs(change.deltaPct).toFixed(1) + '%）' : '')
+        ],
+        suggestion: changeUp
+          ? '先看这类明细是否有一次性支出；下月预算可先从本月实际 ' + yuanText(change.currentCents) + ' 元设起。'
+          : '这个下降值得保持；下月这类预算先按本月实际 ' + yuanText(change.currentCents) + ' 元设。'
+      });
+    } else {
+      var topList = Array.isArray(m.topCategories) ? m.topCategories : [];
+      if (topList.length && Number(topList[0].cents) > 0) {
+        out.push({
+          level: 'info',
+          category: '支出结构',
+          title: '「' + topList[0].name + '」是本月最大支出',
+          evidence: [
+            '共 ' + yuanText(topList[0].cents) + ' 元，占总支出 ' + Number(topList[0].pct || 0).toFixed(1) + '%',
+            '本月共记 ' + (Number(topList[0].count) || 0) + ' 笔'
+          ],
+          suggestion: '下月先只盯这一类，预算按本月实际 ' + yuanText(topList[0].cents) + ' 元设，其他类不同时收紧。'
+        });
+      }
+    }
+
+    /* 9. 高频小额：笔数足够才提醒，避免把一两次消费说成习惯 */
+    var smallList = Array.isArray(m.smallFrequent) ? m.smallFrequent : [];
+    if (smallList.length && Number(smallList[0].count) >= 5 && Number(smallList[0].totalCents) > 0) {
+      var sf = smallList[0];
+      var weeklyLimit = Math.max(1, Math.ceil((Number(sf.count) || 0) / 4) - 1);
+      out.push({
+        level: 'yellow',
+        category: '高频小额',
+        title: '「' + sf.label + '」这类小额支出比较密集',
+        evidence: [
+          '本月 ' + (Number(sf.count) || 0) + ' 笔，合计 ' + yuanText(sf.totalCents) + ' 元',
+          typeof sf.momPct === 'number' ? '比上月变化 ' + sf.momPct.toFixed(1) + '%' : '上月没有同口径金额，暂不做百分比比较'
+        ],
+        suggestion: '下月把「' + sf.label + '」先控制在每周 ' + weeklyLimit + ' 次以内，月底对照笔数复盘。'
+      });
+    }
+
+    /* 10. 单日高峰：作为复盘线索，不贴“冲动消费”标签 */
+    var peak = m.peakDay && typeof m.peakDay === 'object' ? m.peakDay : null;
+    if (peak && bp && Number(bp.avgDailyExpenseCents) > 0 && Number(peak.cents) >= Number(bp.avgDailyExpenseCents) * 2 && Number(peak.cents) >= 10000) {
+      out.push({
+        level: 'info',
+        category: '支出结构',
+        title: peak.date + ' 是本月支出最集中的一天',
+        evidence: [
+          '当天 ' + (Number(peak.count) || 0) + ' 笔，合计 ' + yuanText(peak.cents) + ' 元',
+          '本月日均支出 ' + yuanText(bp.avgDailyExpenseCents) + ' 元'
+        ],
+        suggestion: '如果这类大额每月都有，下月单独预留 ' + yuanText(peak.cents) + ' 元，不要摊进日常零花。'
+      });
+    }
+
+    return out.slice(0, 4);
   }
 
   /* 请求 AI 解读（永不 throw、永不 reject）：
@@ -1216,7 +1559,12 @@
    * 5. 导出（XZB.Core / XZB.core 双挂载，Node 下单测可 require）
    * ------------------------------------------------------------------ */
 
-  var api = { buildMonthlyMetrics: buildMonthlyMetrics, requestAiInsights: requestAiInsights, buildFallbackInsights: buildFallbackInsights };
+  var api = {
+    buildMonthlyMetrics: buildMonthlyMetrics,
+    requestAiInsights: requestAiInsights,
+    buildFallbackInsights: buildFallbackInsights,
+    buildLocalSummary: buildLocalSummary
+  };
   Core.aiInsights = Object.freeze(api);
   if (XZB.core && XZB.core !== Core) { XZB.core.aiInsights = Core.aiInsights; }
 

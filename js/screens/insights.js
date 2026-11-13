@@ -1634,7 +1634,7 @@
   }
 
   /* LLM 通道尚未加载时的占位卡：只说明 + 一个按钮，不做任何网络请求 */
-  function aiLazyCard() {
+  function aiLazyCard(report) {
     var card = moduleCard('AI 月度解读', null, 's-insights-ai');
     if (S.aiModuleLoading) {
       card.appendChild(el('p', {
@@ -1647,10 +1647,15 @@
     card.appendChild(el('p', {
       className: 's-insights-ai__hint',
       text: S.aiModuleError
-        ? '模型连接模块加载失败，请检查网络后重试（离线状态下无法使用 AI 解读）。'
-        : '让 AI 先说一句本月总览，再挑 2-4 条最值得看的：哪里花多了、拿什么当证据、下月怎么改。'
+        ? '模型连接模块加载失败；仍可直接生成免模型月报，或检查网络后重试。'
+        : '可生成免模型月报；配置模型后，再由 AI 润色总览、变化和下月建议。'
     }));
-    card.appendChild(buttonNode('生成 AI 解读', {
+    card.appendChild(buttonNode('生成免模型月报', {
+      className: 's-insights-tip__action',
+      icon: 'chart-line',
+      onClick: function () { startLocalInsights(report); }
+    }));
+    card.appendChild(buttonNode('配置并生成 AI 解读', {
       className: 's-insights-tip__action',
       icon: 'sparkles',
       onClick: function () {
@@ -1659,6 +1664,25 @@
       }
     }));
     return card;
+  }
+
+  function startLocalInsights(report) {
+    var ai = aiModule();
+    if (!ai || !report) { return; }
+    var month = report.endMonth;
+    var scope = scopeOf(report.db);
+    var metrics = ai.buildMonthlyMetrics(report.db, month, scope.bookId);
+    if (!metrics || !(Number(metrics.dataQuality && metrics.dataQuality.txCount) > 0)) { return; }
+    settleAiInsights(month, metrics, (scope.bookId || '') + '|' + month, { ok: false, reason: 'local' });
+  }
+
+  function aiFailureText(reason) {
+    if (reason === 'local') { return '由本地规则生成，不调用模型、不上传账单；仅供参考。'; }
+    if (reason === 'config') { return '模型配置或连接未就绪，本次展示免模型月报；可在设置中检查接口、模型和密钥。'; }
+    if (reason === 'timeout') { return '模型响应超时，本次展示免模型月报；可稍后重试或换更快的模型。'; }
+    if (reason === 'rate') { return '模型请求被限流，本次展示免模型月报；请稍后再重新生成。'; }
+    if (reason === 'empty') { return '本期没有可分析的收支记录。'; }
+    return '模型请求或返回内容异常，本次展示免模型月报；可稍后重新生成。';
   }
 
   /* 缓存失效指纹：笔数 + 收支合计 + 必要支出 + 预算超支概况，任一变动即视为账单/口径已更新
@@ -1674,8 +1698,14 @@
       String(Number(dq.txCount) || 0),
       String(Number(cf.incomeCents) || 0),
       String(Number(cf.expenseCents) || 0),
-      String(Number(ne.totalCents) || 0)
+      String(Number(ne.totalCents) || 0),
+      String(Number(metrics && metrics.period && metrics.period.elapsedDays) || 0),
+      String(Number(metrics && metrics.budget && metrics.budget.total && metrics.budget.total.limitCents) || 0)
     ];
+    var topCats = metrics && Array.isArray(metrics.topCategories) ? metrics.topCategories : [];
+    for (var t = 0; t < topCats.length; t++) {
+      parts.push(String(topCats[t].categoryId || '') + ':' + String(Number(topCats[t].cents) || 0));
+    }
     for (var i = 0; i < over.length; i++) {
       var o = over[i] || {};
       parts.push((typeof o.name === 'string' ? o.name : '') + ':' + String(Number(o.limitCents) || 0) + ':' + String(Number(o.spentCents) || 0));
@@ -1737,23 +1767,27 @@
     /* core-assistant（LLM 通道，172KB）不再随本屏预加载：没加载过就先给按钮，
        点击时 ensure 再重渲染，由下面的常规分支接管「去设置 / 隐私告知 / 生成」。
        收益：一级 Tab 首屏少拉 172KB；代价：首次使用多点一次。 */
+    var month = report.endMonth;
+    var scope = scopeOf(report.db);
+    var cacheKey = (scope.bookId || '') + '|' + month;
+    /* 免模型月报不依赖 LLM 模块与配置；一旦生成，离线/未配置时也能继续查看 */
+    var localCached = S.aiCache[cacheKey];
+    var allowLocalCache = !!(localCached && localCached.localOnly === true);
     var llm = aiLlm();
-    if (!llm) { return aiLazyCard(); }
+    if (!llm && !allowLocalCache) { return aiLazyCard(report); }
 
     var cfg = null;
     try {
-      var got = llm.getConfig();
+      var got = llm && llm.getConfig();
       if (got && got.ok === true && got.cfg && typeof got.cfg === 'object') { cfg = got.cfg; }
     } catch (error) { cfg = null; }
-    if (!cfg) { return null; }
-
-    var month = report.endMonth;
+    if (!cfg && !allowLocalCache) { return null; }
 
     /* 未就绪分支前置：隐私说明与「去设置」用不到 metrics，不为它们做全量扫描（审查 P2-4） */
-    if (!cfg.ready) {
+    if ((!cfg || !cfg.ready) && !allowLocalCache) {
       /* 配置齐全但从未告知过：给一次性隐私说明（noticeAt 全局，其他账期不再弹）。
          聚合数据到点击时才现算：确认前零出站，确认后用最新账算 */
-      if (cfg.enabled && cfg.hasKey && cfg.baseURL && cfg.model && Number(cfg.noticeAt) <= 0) {
+      if (cfg && cfg.enabled && cfg.hasKey && cfg.baseURL && cfg.model && Number(cfg.noticeAt) <= 0) {
         var privacyCard = moduleCard('AI 月度解读', null, 's-insights-ai');
         privacyCard.appendChild(el('p', {
           className: 's-insights-ai__hint',
@@ -1777,13 +1811,23 @@
             startAiInsights(month, nowMetrics, (nowScope.bookId || '') + '|' + month);
           }
         }));
+        privacyCard.appendChild(buttonNode('先看免模型月报', {
+          className: 's-insights-tip__action',
+          icon: 'chart-line',
+          onClick: function () { startLocalInsights(report); }
+        }));
         return privacyCard;
       }
-      /* 其余未就绪：引导去设置 */
+      /* 其余未就绪：引导去设置，也允许零配置直接看本地月报 */
       var setupCard = moduleCard('AI 月度解读', null, 's-insights-ai');
       setupCard.appendChild(el('p', {
         className: 's-insights-ai__hint',
-        text: 'AI 解读需要在「设置 → 小助手与联网」里配置接口地址、模型与密钥后使用。'
+        text: '不配置模型也能看本地月报；需要更自然的总览和建议时，再到「设置 → 小助手与联网」配置接口、模型与密钥。'
+      }));
+      setupCard.appendChild(buttonNode('生成免模型月报', {
+        className: 's-insights-tip__action',
+        icon: 'chart-line',
+        onClick: function () { startLocalInsights(report); }
       }));
       setupCard.appendChild(buttonNode('去设置', {
         className: 's-insights-tip__action',
@@ -1793,7 +1837,6 @@
       return setupCard;
     }
 
-    var scope = scopeOf(report.db);
     var metrics = ai.buildMonthlyMetrics(report.db, month, scope.bookId);
     if (!metrics) { return null; }
 
@@ -1808,9 +1851,6 @@
       }));
       return emptyCard;
     }
-
-    /* 账本前缀防串账本：同月不同账本互不共用缓存 */
-    var cacheKey = (scope.bookId || '') + '|' + month;
 
     var card = moduleCard('AI 月度解读', null, 's-insights-ai');
     if (S.aiBusy && S.aiBusyMonth === cacheKey) {
@@ -1848,10 +1888,7 @@
       }
       card.appendChild(el('p', {
         className: 's-insights-ai__meta',
-        /* 兜底落款带自查指引：覆盖任务书 §2.3「仍失败则提示换模型」的文案要求 */
-        text: cached.fallback === true
-          ? '本次由本地规则兜底生成，仅供参考；若多次失败，可在「设置 → 小助手与联网」检查密钥或换更快的模型。'
-          : '由 AI 生成，仅供参考。'
+        text: cached.fallback === true ? aiFailureText(cached.reason) : '由 AI 生成，仅供参考；请结合原始明细核对。'
       }));
       card.appendChild(buttonNode('重新生成', {
         className: 's-insights-tip__action',
@@ -1926,13 +1963,14 @@
       }
       var ai = aiModule();
       items = (ai && typeof ai.buildFallbackInsights === 'function' && ai.buildFallbackInsights(metrics)) || [];
-      summary = '';
+      summary = ai && typeof ai.buildLocalSummary === 'function' ? ai.buildLocalSummary(metrics) : '';
       fallback = true;
     }
     S.aiCache[cacheKey] = {
       items: items,
       summary: summary,
       fallback: fallback,
+      localOnly: fallback,
       reason: okRes ? '' : ((res && res.reason) || 'bad'),
       fp: aiFp(metrics),
       at: Date.now()
