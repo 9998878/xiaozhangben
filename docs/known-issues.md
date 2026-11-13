@@ -4,6 +4,13 @@
 
 > 行号会漂移：按文件 + 符号/关键词 grep 定位，不要照抄旧行号。
 
+## 已修（2.32.2 批次）
+
+| 位置 | 问题 | 回归 |
+| --- | --- | --- |
+| `js/modules/core-assistant.js` `respond`/`answerClarify`/`tryResume` | 补问或草稿未完成时，任何新句子都被当成旧问题的回答；「烟14.09」会被反复追问「转到哪个账户」，冲突气泡的 keep/drop 按钮点了没反应，无法退出 | `tests/assistant-state.test.js` |
+| `js/modules/core-assistant.js` `sysPromptLines` | 云端对「烟14.09」这类「物品名+数字」过度追问「14.09 是什么意思/是多少钱」（实测 Llama 8.6s 返回 need_clarify） | 同文件提示词断言 + 真机复验 |
+
 ## 已修（2.32.1 批次）
 
 | 位置 | 问题 | 回归 |

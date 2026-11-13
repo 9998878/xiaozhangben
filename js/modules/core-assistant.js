@@ -1554,12 +1554,59 @@
       /* 2.25.0（合并 2.24.3）：洞察问答上下文——裸追问「那交通呢」复用上次范围；
          情境入口带来的 from/month/cat 也放这里 */
       lastInsight: null,
-      contextChip: null
+      contextChip: null,
+      /* 2.32.2：草稿冲突时暂存「用户这次真正想记的新句子」。
+         没有它，「放弃并重新解析」只能清掉旧草稿，新句子丢了，用户得重打。 */
+      conflictText: ''
     };
   }
 
   function cloneState(state) {
     return Object.assign(initialPlanState(), state || {});
+  }
+
+  /* 2.32.2：补问/草稿状态下的通用「取消」与冲突文案。
+     旧版 pending 有绝对优先权：只要还有一个补问没答完，任何新句子都会被当成
+     对旧问题的回答，用户说「烟14.09」只会再被问一次「转到哪个账户」。 */
+  function isCancelText(input) {
+    return /^(取消|算了|不用了|不了|不要了|不记了|先不|重来|清空)$/.test(input);
+  }
+
+  function conflictReply(state) {
+    var raw = state && state.draft && state.draft.raw ? String(state.draft.raw) : '';
+    return {
+      kind: 'conflict',
+      text: raw
+        ? '上一批「' + short(raw, 24) + '」还没确认，要接着改，还是丢掉、按新的一句重新解析？'
+        : '上一批还没确认，要接着改，还是丢掉重新来？',
+      options: [
+        { label: '继续编辑上一批', value: 'keep' },
+        { label: '放弃并重新解析', value: 'drop' }
+      ]
+    };
+  }
+
+  /* 补答失败时，判断用户是不是其实在说一笔新账。
+     例：补问「转到哪个账户」，用户回「烟14.09」——这不是账户名，
+     而是一笔完整的烟钱，不能再把人家按回旧问题。 */
+  function looksLikeNewEntry(input, pending, cx) {
+    var s = norm(input);
+    if (!s || !pending) { return false; }
+    var parsed = null;
+    try { parsed = parseCreate(s, cx); } catch (error) { return false; }
+    if (!parsed || parsed.ok !== true || !parsed.plan || !parsed.plan.items.length) { return false; }
+    var item = parsed.plan.items[0];
+    if (!item || !item.amountCents) { return false; }
+    if (pending.field === 'amount') {
+      return !/^[¥￥]?[0-9]+(?:\.[0-9]+)?(?:元|块|块钱)?$/.test(s);
+    }
+    if (pending.field === 'toAccountId' || pending.field === 'accountId') {
+      if (!/[0-9]/.test(s) && resolveAccount(s, cx).ok) { return false; }
+    }
+    if (pending.field === 'categoryId') {
+      if (!/[0-9]/.test(s) && resolveCategory(s, item.type === 'income' ? 'income' : 'expense', cx).ok) { return false; }
+    }
+    return true;
   }
 
   /* respond(text, state, cx) → { state, reply }；纯计算，不写库、不写 DOM。 */
@@ -1568,6 +1615,25 @@
     var input = norm(text);
     if (!input) {
       return { state: next, reply: { kind: 'hint', text: '说说这笔账，比如「午饭 35 微信」或「这个月餐饮花了多少」' } };
+    }
+
+    /* 0) 补问/草稿状态下先说「取消」：任何补问都不能把用户锁死 */
+    if ((next.pending || next.draft) && isCancelText(input)) {
+      next.pending = null;
+      next.draft = null;
+      next.conflictText = '';
+      draftClear();
+      return {
+        state: next,
+        reply: { kind: 'hint', text: '好，这批不记了。想记账直接说一句就行。', options: [] }
+      };
+    }
+
+    /* 1b) 草稿冲突的按钮/口语指令要先于补问处理：
+       否则 pending 会把 keep 当成「账户名」再问一遍，按钮永远出不去。 */
+    if (next.draft && /^(继续|接着|再改|保留|不放弃|keep|放弃|丢掉|取消|重新|重来|清空|drop)$/.test(input)) {
+      var resumeCtrl = tryResume(input, next, cx);
+      if (resumeCtrl) { return resumeCtrl; }
     }
 
     /* 1a) 「选一笔」待答（修改/删除的候选） */
@@ -1579,7 +1645,15 @@
     /* 1) 补问回答 */
     if (next.pending) {
       var answered = answerClarify(input, next, cx);
-      if (answered) { return answered; }
+      if (answered) {
+        /* 补答没吃进去，但这句本身是一笔完整新账：不再死循环追问旧字段，
+           转成「保留/放弃上一批」的冲突确认，并把新句子暂存下来 */
+        if (answered.reply && answered.reply.kind === 'clarify' && looksLikeNewEntry(input, next.pending, cx)) {
+          next.conflictText = input;
+          return { state: next, reply: conflictReply(next) };
+        }
+        return answered;
+      }
     }
 
     var intent = detectIntent(input);
@@ -1588,17 +1662,8 @@
     if (next.draft && intent !== 'undo') {
       var resumed = tryResume(input, next, cx);
       if (resumed) { return resumed; }
-      return {
-        state: next,
-        reply: {
-          kind: 'conflict',
-          text: '上一批还没确认，要接着改，还是丢掉重新来？',
-          options: [
-            { label: '继续编辑上一批', value: 'keep' },
-            { label: '放弃并重新解析', value: 'drop' }
-          ]
-        }
-      };
+      next.conflictText = input;
+      return { state: next, reply: conflictReply(next) };
     }
 
     if (intent === 'undo') { return handleUndo(input, next, cx); }
@@ -1634,16 +1699,45 @@
   }
 
   function tryResume(input, state, cx) {
-    if (/^(继续|接着|再改|保留|不放弃)/.test(input)) {
+    /* 2.32.2：按钮传的是 value（keep/drop），旧版只认中文，点了没反应 */
+    if (/^(继续|接着|再改|保留|不放弃|keep)$/.test(input)) {
+      state.conflictText = '';
+      /* 旧批还有没补完的字段：把原来的补问连同选项一起端回来 */
+      if (state.pending && state.draft) {
+        return {
+          state: state,
+          reply: {
+            kind: 'clarify',
+            text: state.pending.question,
+            code: state.pending.code,
+            options: state.pending.options,
+            preview: previewRows(state.draft, cx),
+            planId: state.draft.id
+          }
+        };
+      }
       return {
         state: state,
         reply: previewReply(state.draft, cx, '接着改这一批')
       };
     }
-    if (/^(放弃|丢掉|取消|重新|算了|不用了|不了|不要了)/.test(input)) {
+    if (/^(放弃|丢掉|取消|重新|算了|不用了|不了|不要了|重来|清空|drop)$/.test(input)) {
+      var retryRaw = state.conflictText || '';
       state.draft = null;
       state.pending = null;
+      state.conflictText = '';
       draftClear();
+      if (retryRaw) {
+        var retry = handleCreate(retryRaw, state, cx);
+        if (retry && retry.reply) {
+          if (retry.reply.kind === 'preview') {
+            retry.reply.text = '已放弃上一批，按「' + short(retryRaw, 20) + '」重新解析。';
+          } else if (retry.reply.kind === 'clarify') {
+            retry.reply.text = '已放弃上一批。' + (retry.reply.text || '');
+          }
+        }
+        return retry;
+      }
       return {
         state: state,
         reply: { kind: 'hint', text: '好，这批不记了。要记直接说一句就行。', options: [] }
@@ -2689,7 +2783,9 @@
       '6 note 取原话短语，不写「支出/记账/收入」，不写金额。',
       '7 超过 20 笔输出 need_clarify，请用户分批。',
       '8 update、delete 绝不输出交易 id，只给 targetHint 与 patch。',
-      '9 金额无法确定输出 need_clarify 并问一句，不要猜。',
+      '9 金额无法确定（整句没有任何数字）才 need_clarify；句子里有数字就按金额处理，禁止追问「这个数字是什么意思/是多少钱/请确认金额」。',
+      '9.1 「物品名+数字」就是金额，数字可带小数点、可省略「元/块」：如「烟14.09」= 1409 分，直接 create。',
+      '9.2 不要因为「没有货币单位」而追问金额；「午饭35」「水果30」「打车23」都是确定金额。',
       '10 分类拿不准留 ""，不要塞「其他」。',
       '11 听不懂或非记账请求输出 need_clarify。',
       '12 用户没提账户时 accountId 留 ""，禁止追问「用哪个账户」（系统会自动用默认账户）；只有金额无法确定或一次超过 20 笔时才 need_clarify。',
@@ -3639,7 +3735,13 @@
       return null;
     }
     var reply = out && out.reply;
-    if (!reply || reply.kind !== 'preview' || reply.canConfirm !== true) { return null; }
+    if (!reply) { return null; }
+    /* 2.32.2：草稿冲突也在本地秒回——旧版把冲突丢给云端，模型会答非所问
+       （用户实测：明确一句「烟14.09」，云端却问「14.09 是什么意思」）。 */
+    if (reply.kind === 'conflict') {
+      return { state: out.state, reply: reply, mode: 'local', reason: '' };
+    }
+    if (reply.kind !== 'preview' || reply.canConfirm !== true) { return null; }
     /* 2.29.2：鲨鱼式分档收口——nl 落到「其他」兜底分类（本地词表认不出，如
        「炒土鸡」）说明没把握，在线模式升级给模型定分类，不拿「其他」直记糊弄
        （用户实测主诉）。nl 缺席的沙箱/极端降级同口径。云端失败照旧回落本地，
