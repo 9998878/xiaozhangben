@@ -179,22 +179,34 @@ regCase('1.1b 旧 Pollinations 免 key 配置自动迁移到新预设（带密�
   checkEq(llm.isPreset(), false, '带密钥的 Pollinations 自定义配置不迁移');
 });
 
-regCase('1.1c 模型链：主模型限流自动切备用模型（第二次成功）', async function () {
+regCase('1.1c 免费预设不再切备用模型：429 直接回落，reason=rate 不被吞成 timeout', async function () {
   seedPresetConfig();
   const models = [];
   const res = await withNet(function (url, options) {
     const body = JSON.parse(options.body);
     models.push(body.model);
-    if (models.length === 1) {
-      return Promise.resolve({ status: 429, text: function () { return Promise.resolve('{}'); } });
-    }
-    return Promise.resolve({ status: 200, text: function () { return Promise.resolve(chatEnvelope(JSON.stringify({ intent: 'need_clarify', clarify: { question: '金额是多少？', options: [] } }))); } });
+    return Promise.resolve({ status: 429, text: function () { return Promise.resolve('{}'); } });
   }, true, function () {
     return llm.plan({ raw: '记一笔午饭', today: '2026-11-08', bookId: 'bk_main', accounts: [], categories: [] });
   });
-  checkEq(models.length, 2, '应恰好尝试两个模型');
-  checkEq(models[0], llm.preset().model, '第一个应是主模型');
-  checkEq(res && res.ok, true, '备用模型应成功');
+  checkEq(models.length, 1, '429 不得再尝试第二个模型（Qwen 推理档 12s 空转）');
+  checkEq(models[0], llm.preset().model, '唯一请求应是主模型');
+  checkEq(res && res.code, 'E_AS_NET_RATE', '应归限流');
+  checkEq(res && res.reason, 'rate', 'reason 必须透传，界面才能报「服务繁忙」而不是「网络超时」');
+});
+
+regCase('1.1d 5xx 同样单模型快失败，reason=server 透传', async function () {
+  seedPresetConfig();
+  let calls = 0;
+  const res = await withNet(function () {
+    calls += 1;
+    return Promise.resolve({ status: 503, text: function () { return Promise.resolve('{}'); } });
+  }, true, function () {
+    return llm.plan({ raw: '记一笔午饭', today: '2026-11-08', bookId: 'bk_main', accounts: [], categories: [] });
+  });
+  checkEq(calls, 1, '503 不得切换重试');
+  checkEq(res && res.code, 'E_AS_NET_RATE', '5xx 与限流同码');
+  checkEq(res && res.reason, 'server', 'reason 必须是 server，设置页才能区分服务端故障');
 });
 
 regCase('1.2 预设 + 开关 + 已告知：ready()=true（免密钥也算配置齐）', function () {
@@ -242,7 +254,7 @@ regCase('2.1 免密钥预设：请求头不含 Authorization（发空/假 Bearer
   let seen = null;
   const res = await withNet(function (url, options) {
     seen = { url: url, options: options };
-    return Promise.resolve({ status: 200, text: function () { return Promise.resolve('{"ok":true}'); } });
+    return Promise.resolve({ status: 200, text: function () { return Promise.resolve(chatEnvelope('{"ok":true}')); } });
   }, true, function () {
     return llm.test();
   });
@@ -257,7 +269,7 @@ regCase('2.2 有密钥：Authorization = Bearer <key>（回归，密钥不出域
   let seen = null;
   await withNet(function (url, options) {
     seen = { url: url, options: options };
-    return Promise.resolve({ status: 200, text: function () { return Promise.resolve('{"ok":true}'); } });
+    return Promise.resolve({ status: 200, text: function () { return Promise.resolve(chatEnvelope('{"ok":true}')); } });
   }, true, function () {
     return llm.test();
   });
@@ -315,6 +327,21 @@ regCase('4.2 聊天出口失败（限流）→ 回落本地「没听懂」，绝
   checkEq(res && res.mode, 'local-fallback', '应回落本地');
   checkEq(res.reply && res.reply.kind, 'hint', '本地兜底应为 hint');
   check((res.reply.text || '').indexOf('听不懂') >= 0, '应为本地的「没听懂」文案');
+});
+
+regCase('4.2b 记账解析 429 → 回落本地且 reason=rate（界面不得报超时）', async function () {
+  seedPresetConfig();
+  withNl(0.9, '', 'transfer');
+  const res = await withNet(function () {
+    return Promise.resolve({ status: 429, text: function () { return Promise.resolve('{}'); } });
+  }, true, function () {
+    return llm.respondRemote('转账 500', {}, {
+      db: { accounts: [{ id: 'acc_wechat', name: '微信' }, { id: 'acc_alipay', name: '支付宝' }], categories: [] },
+      today: '2026-11-08'
+    });
+  });
+  checkEq(res && res.mode, 'local-fallback', '应回落本地');
+  checkEq(res && res.reason, 'rate', 'reason=rate，界面才能显示「服务繁忙」而不是「网络超时」');
 });
 
 regCase('4.3 难句（转账缺转入账户）不走快车道：仍发解析请求（system 含「记账解析器」）', async function () {
@@ -432,7 +459,8 @@ regCase('5.2 开关门与占位符认得免密钥预设', function () {
 });
 
 regCase('5.3 免费档限流与升级指引文案在位（siliconflow）', function () {
-  check(SETTINGS_JS.indexOf('每模型每分钟 2 次') >= 0, '应说明限流口径');
+  check(SETTINGS_JS.indexOf('免费档每分钟约 2 次') >= 0, '应说明限流口径');
+  check(SETTINGS_JS.indexOf('自动换备用模型') < 0, '不得再承诺已撤掉的备用模型');
   check(SETTINGS_JS.indexOf('siliconflow.cn') >= 0, '应有升级指引');
   check(SETTINGS_JS.indexOf('https://api.siliconflow.cn/v1') >= 0, '应给出硅基流动地址');
 });
@@ -455,6 +483,28 @@ regCase('5.6 测试连接对免费预设放宽到 20s（推理模型探针 6s �
     'llmTest 应对预设端点传 LLM_PLAN_TIMEOUT_MS');
   check(CORE_JS.indexOf('aiIsPreset(cfg) ? LLM_PRESET_PLAN_TIMEOUT_MS : LLM_PLAN_TIMEOUT_MS') >= 0,
     'llmPlan 对预设端点走 12s 上限（排队尽快回落，实测抓到）');
+});
+
+regCase('5.7 测试连接不得假阳性：200 但 content 空 / finish_reason=length → E_AS_NET_BAD', async function () {
+  seedPresetConfig();
+  let calls = 0;
+  const res = await withNet(function () {
+    calls += 1;
+    return Promise.resolve({
+      status: 200,
+      text: function () {
+        return Promise.resolve(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'length' }]
+        }));
+      }
+    });
+  }, true, function () {
+    return llm.test();
+  });
+  checkEq(calls, 1, '只发一次，不重试');
+  checkEq(res && res.ok, false, '200 但空 content 不得报连接正常');
+  checkEq(res && res.code, 'E_AS_NET_BAD', '应归「返回内容看不懂」');
+  checkEq(res && res.reason, 'bad', 'reason=bad');
 });
 
 regCase('4.8 查询快车道：带显式时间词的查询本地秒答（零出站）', async function () {

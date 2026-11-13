@@ -66,15 +66,16 @@
   var LLM_MAX_CENTS = 999999999999;
 
   /* 2.29.2：内置免费预设（免密钥档）。OVH AI Endpoints 匿名层：免 key、CORS 全开、
-     每模型 2 次/分钟——主用非推理 Llama-3.3-70B（实测解析 2 秒级），限流时链内
-     自动切 Qwen3.5-9B 兜底；忙时/失败照旧回落本地解析，绝不阻塞记账。
-     2.29.2 末期：原 Pollinations 匿名档（gpt-oss-20b 推理模型，10-20s + 45s 限流）
-     因过慢被替换，旧配置在读入时自动迁移（见 LEGACY_PRESET）。 */
+     每模型 2 次/分钟——只用非推理 Llama-3.3-70B（实测解析 3-8 秒）。
+     2.32.1：撤掉 Qwen3.5-9B 备用档——它已变推理模型，12s 解析上限内拿不到内容
+     （实测 45s 仍 0 字节），切过去只会把「限流快失败」拖成「12s 空等」，然后
+     还被界面误报成网络超时；现在 429/5xx 直接回落本地，如实报「服务繁忙」。
+     原 Pollinations 匿名档（gpt-oss-20b 推理模型，10-20s + 45s 限流）因过慢被
+     替换，旧配置在读入时自动迁移（见 LEGACY_PRESET）。 */
   var AI_PRESET = {
     id: 'ovh-free',
     baseURL: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1',
-    model: 'Meta-Llama-3_3-70B-Instruct',
-    models: ['Meta-Llama-3_3-70B-Instruct', 'Qwen3.5-9B']
+    model: 'Meta-Llama-3_3-70B-Instruct'
   };
   var LEGACY_PRESET = {
     baseURL: 'https://text.pollinations.ai/openai',
@@ -2811,10 +2812,10 @@
     return { body: body, raw: raw };
   }
 
-  /* 2.29.2：免费预设的模型链——主模型限流/服务故障时自动切下一个
-     （OVH 匿名档限流按模型计，2 次/分钟/模型，链内多模型=变相扩容）。 */
+  /* 2.32.1：免费预设只发主模型。备用档 Qwen3.5-9B 已变推理模型，12s 解析上限内
+     拿不到内容，切换只会把「限流快失败」拖成「12s 超时」；自定义服务同样单模型。
+     保留数组形态，未来有实测过关的备用模型再往这里加。 */
   function modelChainOf(cfg) {
-    if (aiIsPreset(cfg) && AI_PRESET.models && AI_PRESET.models.length) { return AI_PRESET.models; }
     return [cfg.model];
   }
 
@@ -2823,8 +2824,8 @@
     var i = 0;
     function attempt() {
       return httpOnce(cfg, buildFor(models[i]), timeoutMs).then(function (res) {
-        /* 只有限流/服务故障（快速失败）才切下一个模型；超时说明整条链路都在排队，
-           切模型只会把最坏等待翻倍，直接回落本地更快（自测实测） */
+        /* 2.32.1：链已退化为单模型（见 modelChainOf），这里的切换循环留给未来实测
+           过关的备用档；只有限流/服务故障（快速失败）才切，超时一律直接回落。 */
         if (res && res.retryable && res.code !== E.NET_TIMEOUT && i < models.length - 1) {
           i += 1;
           return attempt();
@@ -2889,7 +2890,10 @@
           ok: false,
           code: (res && res.code) || E.NET_BAD,
           retryable: !!(res && res.retryable),
-          status: (res && res.status) || 0
+          status: (res && res.status) || 0,
+          /* 2.32.1：reason 必须透传——429 与 5xx 同码不同因，丢了 reason 后
+             「服务繁忙」会被 reasonOf 按最后的 NET_TIMEOUT 误报成「网络超时」 */
+          reason: (res && res.reason) || ''
         };
       });
     }
@@ -2917,7 +2921,10 @@
     } catch (error) {
       return Promise.resolve({ ok: false, code: E.NET_CONFIG });
     }
-    /* 免费预设走 20s 门 + 模型链（主模型限流自动切下一个）；自定义服务维持 6s 单模型。 */
+    /* 免费预设走 20s 门；自定义服务维持 6s。
+       2.32.1：HTTP 200 不等于模型可用——推理模型会把 token 预算烧在 reasoning 上
+       返回空 content（finish_reason=length），旧版据此报「连接正常」是假阳性。
+       测试连接必须真的拿到非空内容才算连通。 */
     return httpChain(cfg, function (model) {
       return JSON.stringify({
         model: model,
@@ -2929,6 +2936,10 @@
       if (!res || !res.ok) {
         /* reason 透传：5xx（server）与 429（rate）同码不同因，设置页文案要能区分（2.28.1） */
         return { ok: false, code: (res && res.code) || E.NET_BAD, reason: res && res.reason };
+      }
+      var choice = res.json && res.json.choices && res.json.choices[0];
+      if (!choice || choice.finish_reason === 'length' || !String(contentOf(choice) || '').trim()) {
+        return { ok: false, code: E.NET_BAD, reason: 'bad' };
       }
       return { ok: true, ms: Date.now() - started };
     }, function () {
@@ -2951,7 +2962,7 @@
     if (!list.length) { return Promise.resolve({ ok: false, code: E.NET_BAD, retryable: false, status: 0 }); }
     var extra = o.extraBody;
     var timeoutMs = Number(o.timeoutMs) > 0 ? Number(o.timeoutMs) : LLM_TIMEOUT_MS;
-    /* 2.29.2：模型链——预设限流时自动切下一个模型 */
+    /* 2.29.2：与 plan 共用 httpChain；2.32.1 起免费预设只剩主模型，不再切慢速备用。 */
     return httpChain(cfg, function (model) {
       var body = {
         model: model,

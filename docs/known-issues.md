@@ -4,6 +4,14 @@
 
 > 行号会漂移：按文件 + 符号/关键词 grep 定位，不要照抄旧行号。
 
+## 已修（2.32.1 批次）
+
+| 位置 | 问题 | 回归 |
+| --- | --- | --- |
+| `js/modules/core-assistant.js` `AI_PRESET`/`modelChainOf` | 备用 Qwen3.5-9B 已变推理模型，12s 解析上限内拿不到内容；主模型 429 切过去会空等 12s，再误报「网络超时」 | `tests/ai-preset.test.js` 用例 1.1c/1.1d |
+| `js/modules/core-assistant.js` `llmTest` | HTTP 200 但 content 空 / `finish_reason=length` 也报「连接正常」（假阳性） | 用例 5.7 |
+| `js/modules/core-assistant.js` `llmPlan` | 失败路径丢 `res.reason`，429 被下游按 `NET_TIMEOUT` 误报成超时 | 用例 1.1c/1.1d |
+
 ## 已修（存档）
 
 | # | 位置 | 问题 | 状态 |

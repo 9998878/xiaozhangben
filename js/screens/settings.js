@@ -3874,7 +3874,8 @@
     head.appendChild(t('h2', 's-settings-group__title', '接口与密钥'));
     wrap.appendChild(head);
 
-    /* 2.29.2：内置免费模型一键应用——只写地址/模型并清空密钥（免密钥档，限流约 45s 一条）；
+    /* 2.29.2：内置免费模型一键应用——只写地址/模型并清空密钥（免密钥档，每分钟 2 次）；
+       2.32.1 起备用模型已撤（推理档 12s 内拿不到内容），限流直接回落本地。
        「开启在线模型」与隐私告知仍要手动，尊重 A28 出站门。 */
     var presetBtn = h('button', {
       className: 'c-btn c-btn--secondary', type: 'button',
@@ -3901,7 +3902,7 @@
     wrap.appendChild(presetRow);
     wrap.appendChild(h('p', {
       className: 's-settings-group__note',
-      text: '免费档每模型每分钟 2 次，主模型限流会自动换备用模型，忙时自动改用本地解析。想要更强更稳：siliconflow.cn 免费注册（送 2000 万 tokens），接口地址改填 https://api.siliconflow.cn/v1，模型名如 Qwen/Qwen3-8B，再粘贴密钥。'
+      text: '免费档每分钟约 2 次，限流时会立即改用本地解析，不再空等；想要更强更稳：siliconflow.cn 免费注册（送 2000 万 tokens），接口地址改填 https://api.siliconflow.cn/v1，模型名如 Qwen/Qwen3-8B，再粘贴密钥。'
     }));
 
     var status = h('p', { className: 's-settings-note', text: '还没测试过', aria: { live: 'polite' } });
