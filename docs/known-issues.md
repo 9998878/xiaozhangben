@@ -4,6 +4,13 @@
 
 > 行号会漂移：按文件 + 符号/关键词 grep 定位，不要照抄旧行号。
 
+## 已修（2.32.4 批次）
+
+| 位置 | 问题 | 回归 |
+| --- | --- | --- |
+| `js/modules/core-assistant.js` `buildItem`/`normalizeLlmItem`/`buildPending`/`answerClarify` | 助手会为「转账500」追问转入账户并弹账户选项；用户明确说账户不重要 | `tests/assistant-state.test.js` 用例 2、`assistant-state-remote.test.js` |
+| `js/modules/core-assistant.js` `respond`/`switchToNewEntry` | 补问没答完时来了一句完整新账，仍弹「继续编辑/放弃」二选一，显得瞻前顾后 | 同文件 `switchToNewEntry` 源码锁 |
+
 ## 已修（2.32.3 批次）
 
 | 位置 | 问题 | 回归 |

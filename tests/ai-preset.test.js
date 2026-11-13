@@ -331,12 +331,15 @@ regCase('4.2 聊天出口失败（限流）→ 回落本地「没听懂」，绝
 
 regCase('4.2b 记账解析 429 → 回落本地且 reason=rate（界面不得报超时）', async function () {
   seedPresetConfig();
-  withNl(0.9, '', 'transfer');
+  withNl(0.9, 'ca_other_expense', 'expense');
   const res = await withNet(function () {
     return Promise.resolve({ status: 429, text: function () { return Promise.resolve('{}'); } });
   }, true, function () {
-    return llm.respondRemote('转账 500', {}, {
-      db: { accounts: [{ id: 'acc_wechat', name: '微信' }, { id: 'acc_alipay', name: '支付宝' }], categories: [] },
+    return llm.respondRemote('炒土鸡20', {}, {
+      db: {
+        accounts: [{ id: 'acc_wechat', name: '微信' }, { id: 'acc_alipay', name: '支付宝' }],
+        categories: [{ id: 'ca_other_expense', name: '其他', kind: 'expense' }]
+      },
       today: '2026-11-08'
     });
   });
@@ -344,9 +347,9 @@ regCase('4.2b 记账解析 429 → 回落本地且 reason=rate（界面不得报
   checkEq(res && res.reason, 'rate', 'reason=rate，界面才能显示「服务繁忙」而不是「网络超时」');
 });
 
-regCase('4.3 难句（转账缺转入账户）不走快车道：仍发解析请求（system 含「记账解析器」）', async function () {
+regCase('4.3 难句（本地分类没把握）不走快车道：仍发解析请求（system 含「记账解析器」）', async function () {
   seedPresetConfig();
-  withNl(0.9, '', 'transfer');
+  withNl(0.9, 'ca_other_expense', 'expense');
   let bodies = [];
   const res = await withNet(function (url, options) {
     bodies.push(String((options && options.body) || ''));
@@ -360,7 +363,13 @@ regCase('4.3 难句（转账缺转入账户）不走快车道：仍发解析请�
       }
     });
   }, true, function () {
-    return llm.respondRemote('转账 500', {}, { db: { accounts: [{ id: 'acc_wechat', name: '微信', type: 'wechat' }, { id: 'acc_alipay', name: '支付宝', type: 'alipay' }], categories: [] }, today: '2026-11-08' });
+    return llm.respondRemote('炒土鸡20', {}, {
+      db: {
+        accounts: [{ id: 'acc_wechat', name: '微信', type: 'wechat' }, { id: 'acc_alipay', name: '支付宝', type: 'alipay' }],
+        categories: [{ id: 'ca_other_expense', name: '其他', kind: 'expense' }]
+      },
+      today: '2026-11-08'
+    });
   });
   checkEq(bodies.length, 1, '应恰好一次出站请求');
   check(bodies[0].indexOf('记账解析器') >= 0, '应走解析提示词而非聊天');
@@ -608,9 +617,9 @@ regCase('6.1 同一句两次 parseCreate：plan id 与 tx id 都不同（直记+
   check(r1.plan.items[0].id !== r2.plan.items[0].id, 'tx id 不得相同（否则撞软删记录）');
 });
 
-regCase('6.2 模型问「用哪个账户」一律不问：回落本地（默认账户口径，用户实测主诉）', async function () {
+regCase('6.2 模型问「用哪个账户」一律不问：回落本地预览（默认账户口径，用户实测主诉）', async function () {
   seedPresetConfig();
-  withoutNl();
+  withNl(0.9, 'ca_other_expense', 'expense');
   const res = await withNet(function () {
     return Promise.resolve({
       status: 200,
@@ -629,23 +638,21 @@ regCase('6.2 模型问「用哪个账户」一律不问：回落本地（默认�
       }
     });
   }, true, function () {
-    return llm.respondRemote('转账 500', {}, {
+    return llm.respondRemote('炒土鸡20', {}, {
       db: {
         accounts: [
           { id: 'ac_cash', name: '现金', type: 'cash' },
           { id: 'ac_wechat', name: '微信', type: 'wechat' },
           { id: 'ac_alipay', name: '支付宝', type: 'alipay' }
         ],
-        categories: []
+        categories: [{ id: 'ca_other_expense', name: '其他', kind: 'expense' }]
       },
       today: '2026-11-08'
     });
   });
   checkEq(res && res.mode, 'local', '账户类补问应回落本地（不得把模型的补问原样抛给用户）');
-  checkEq(res.reply && res.reply.kind, 'clarify', '转账缺转入账户应由本地补问');
-  check((res.reply.text || '').indexOf('转账') >= 0, '本地补问文案应到位');
-  const opt0 = res.reply.options && res.reply.options[0];
-  check(!!opt0 && String(opt0.value).indexOf('ac_') === 0, '本地补问选项应是本机账户 id（点回去能被 pending 正确接管）');
+  checkEq(res.reply && res.reply.kind, 'preview', '账户不重要：本地应直接出预览，不再问账户');
+  check(!(res.reply.options && res.reply.options.length), '不得带账户选项');
 });
 
 regCase('6.3 源码锁：提示词禁止问账户 + isAccountClarify 兜底在位', function () {

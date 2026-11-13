@@ -13,7 +13,7 @@
    3. 金额一律正整数分；不做算术表达式求值。
    4. 单批最多 20 笔，超限报 E_AS_BATCH_TOO_LARGE，**不静默截断**。
    5. 分类未识别 → 支出 ca_other_expense / 收入 ca_other_income，并在预览标「默认」。
-   6. 转账必须两个不同有效账户、categoryId=null、不计收支；缺转入账户必须追问。
+   6. 转账必须两个不同有效账户、categoryId=null、不计收支；缺转入账户时自动补默认账户，不追问。
    7. 日期只用 core.dates；缺省今天；月日缺年取当前年；非法日期追问，不静默改成今天。
    8. 预分配 id（tx_…），重试复用；写入前按 id 对账。
    ============================================================================ */
@@ -120,9 +120,7 @@
 
   var M = {
     E_AS_NO_AMOUNT: '没听清金额，补一个数字就行（例如「午饭 35」）',
-    E_AS_AMBIGUOUS_ACCOUNT: '有多个账户对得上，选一个',
     E_AS_AMBIGUOUS_CATEGORY: '有多个分类对得上，选一个',
-    E_AS_TRANSFER_NEED_TO: '转账要说明转到哪个账户（例如「从微信转 500 到支付宝」）',
     E_AS_BATCH_TOO_LARGE: '一次最多记 20 笔，请分两次发给我',
     E_AS_DUP: '发现相似的账，确认还要记吗',
     E_AS_STALE: '这笔账刚刚被改过，请重新发起这次操作',
@@ -320,6 +318,16 @@
     var recent = recentAccountId(cx);
     if (recent) { return recent; }
     return cx.liveAccounts.length ? cx.liveAccounts[0].id : '';
+  }
+
+  /* 转账的转入账户也不问：取一个和转出不同的默认账户。
+     只有一个账户时才真的记不了（需要用户先添加账户）。 */
+  function defaultToAccountId(cx, fromId) {
+    var list = cx.liveAccounts || [];
+    for (var i = 0; i < list.length; i += 1) {
+      if (list[i] && list[i].id && list[i].id !== fromId) { return list[i].id; }
+    }
+    return '';
   }
 
   function fallbackCategoryId(cx, type) {
@@ -787,31 +795,33 @@
       item.issues.push({ field: 'type', code: E.UNKNOWN, message: '收支类型有冲突，选一个', options: ['expense', 'income'] });
     }
 
-    /* --- 转账：转入账户必填、账户必须不同 --- */
-    if (item.type === 'transfer') {
-      item.categoryId = '';
-      if (!item.toAccountId) {
-        var toGuess = guessToAccount(segText, cx, item.accountId);
-        if (toGuess) { item.toAccountId = toGuess; item.defaulted.toAccount = false; }
-        else {
-          item.issues.push({
-            field: 'toAccountId', code: E.TRANSFER_NEED_TO, message: M.E_AS_TRANSFER_NEED_TO,
-            options: cx.liveAccounts.filter(function (a) { return a.id !== item.accountId; }).map(function (a) { return { label: a.name, value: a.id }; }).slice(0, 5)
-          });
-        }
-      }
-      if (item.toAccountId && item.toAccountId === item.accountId) {
-        item.issues.push({ field: 'toAccountId', code: E.TRANSFER_NEED_TO, message: '转出和转入是同一个账户，换一个' });
-      }
-    }
-
-    /* --- 账户兜底 --- */
-    if (!item.accountId) {
+    /* --- 账户兜底：账户不重要，一律落到默认账户，不再让用户选账户 --- */
+    if (!item.accountId || !findIn(cx.liveAccounts, item.accountId)) {
       item.accountId = defaultAccountId(cx);
       item.defaulted.account = true;
     }
     if (!findIn(cx.liveAccounts, item.accountId)) {
-      item.issues.push({ field: 'accountId', code: E.AMBIGUOUS_ACCOUNT, message: '账户不可用（可能已归档），选一个' });
+      item.issues.push({ field: 'accountId', code: E.AMBIGUOUS_ACCOUNT, message: '还没有可用账户，先在小账本里添加一个' });
+    }
+
+    /* --- 转账：账户不重要，系统自动补一个不同的默认账户，不再追问 --- */
+    if (item.type === 'transfer') {
+      item.categoryId = '';
+      if (!item.toAccountId && item.accountId) {
+        var toGuess = guessToAccount(segText, cx, item.accountId);
+        if (toGuess) { item.toAccountId = toGuess; item.defaulted.toAccount = false; }
+      }
+      if ((!item.toAccountId || item.toAccountId === item.accountId) && item.accountId) {
+        var autoTo = defaultToAccountId(cx, item.accountId);
+        if (autoTo) { item.toAccountId = autoTo; item.defaulted.toAccount = true; }
+      }
+      if (!item.toAccountId) {
+        item.issues.push({
+          field: 'toAccountId',
+          code: E.TRANSFER_NEED_TO,
+          message: '转账需要两个账户，先在小账本里再添加一个账户'
+        });
+      }
     }
 
     /* --- 分类兜底 / 类型对齐 --- */
@@ -1614,6 +1624,24 @@
     return true;
   }
 
+  /* 2.32.4：补问还没答完，用户直接说了一句完整的新账（如「转账500」问到一半
+     又说「烟14.09」）时，不再弹「继续编辑/放弃」让用户做决定——旧补问先放下，
+     直接解析新账。旧补问本来就是未完成的草稿，留着只会「瞻前顾后」；
+     回复里点明旧句子，用户想补可以重新说一遍。 */
+  function switchToNewEntry(input, state, cx) {
+    var oldRaw = state && state.draft && state.draft.raw ? String(state.draft.raw) : '';
+    state.pending = null;
+    state.draft = null;
+    state.conflictText = '';
+    draftClear();
+    var out = handleCreate(input, state, cx);
+    if (out && out.reply) {
+      var note = oldRaw ? '「' + short(oldRaw, 24) + '」还没补完，先不记了。' : '';
+      out.reply.text = note + (out.reply.text || '');
+    }
+    return out;
+  }
+
   /* respond(text, state, cx) → { state, reply }；纯计算，不写库、不写 DOM。 */
   function respond(text, state, cx) {
     var next = cloneState(state);
@@ -1651,11 +1679,10 @@
     if (next.pending) {
       var answered = answerClarify(input, next, cx);
       if (answered) {
-        /* 补答没吃进去，但这句本身是一笔完整新账：不再死循环追问旧字段，
-           转成「保留/放弃上一批」的冲突确认，并把新句子暂存下来 */
+        /* 2.32.4：补答没吃进去，但这句本身是一笔完整新账：旧补问先放下，
+           直接解析新账，不再让用户在「继续编辑/放弃」之间做决定 */
         if (answered.reply && answered.reply.kind === 'clarify' && looksLikeNewEntry(input, next.pending, cx)) {
-          next.conflictText = input;
-          return { state: next, reply: conflictReply(next) };
+          return switchToNewEntry(input, next, cx);
         }
         return answered;
       }
@@ -1806,9 +1833,6 @@
   function buildPending(plan, item, cx) {
     var issue = item.issues[0];
     var options = issue.options || [];
-    if (!options.length && issue.field === 'accountId') {
-      options = cx.liveAccounts.slice(0, 5).map(function (a) { return { label: a.name, value: a.id }; });
-    }
     if (!options.length && issue.field === 'categoryId') {
       var kind = item.type === 'income' ? 'income' : 'expense';
       options = cx.liveCategories.filter(function (c) { return c.kind === kind; })
@@ -1908,17 +1932,18 @@
         if (guessed.ok) { toId = guessed.id; }
       }
       if (!toId || toId === item.accountId) {
-        return { state: state, reply: { kind: 'clarify', text: M.E_AS_TRANSFER_NEED_TO, code: E.TRANSFER_NEED_TO, options: pending.options } };
+        toId = defaultToAccountId(cx, item.accountId);
+      }
+      if (!toId) {
+        return { state: state, reply: { kind: 'clarify', text: '转账需要两个账户，先在小账本里再添加一个账户', code: E.TRANSFER_NEED_TO } };
       }
       item.toAccountId = toId;
+      item.defaulted.toAccount = true;
       item.issues = item.issues.filter(function (x) { return x.field !== 'toAccountId'; });
     } else if (pending.field === 'accountId' || pending.field === 'account') {
       var acct = chosen ? { ok: true, id: chosen.value } : resolveAccount(input, cx);
-      if (!acct.ok) {
-        return { state: state, reply: { kind: 'clarify', text: '没找到这个账户，选一个', code: E.AMBIGUOUS_ACCOUNT, options: pending.options } };
-      }
-      item.accountId = acct.id;
-      item.defaulted.account = false;
+      item.accountId = acct.ok ? acct.id : defaultAccountId(cx);
+      item.defaulted.account = true;
       item.issues = item.issues.filter(function (x) { return x.field !== 'accountId'; });
     } else if (pending.field === 'categoryId' || pending.field === 'category') {
       var cat = chosen ? { ok: true, id: chosen.value } : resolveCategory(input, item.type === 'income' ? 'income' : 'expense', cx);
@@ -2783,7 +2808,7 @@
       '规则：',
       '1 金额单位是分，正整数：35 元写 3500。禁小数负数单位字。',
       '2 accountId、categoryId 只能从下方清单原样复制，严禁编造或改名；清单没有留 ""。',
-      '3 转账：type=transfer，accountId 与 toAccountId 都要给且不同，categoryId 留 ""。',
+      '3 转账：type=transfer，categoryId 留 ""；账户不重要，accountId/toAccountId 可留 ""，系统会自动补默认账户，禁止追问账户或让用户选账户。',
       '4 支出、收入：toAccountId 留 ""。',
       '5 date/time 只在用户明说时填，否则留 ""，禁猜「今天」。',
       '6 note 取原话短语，不写「支出/记账/收入」，不写金额。',
@@ -3192,24 +3217,20 @@
     item.note = cut || short(stripKnown(text || segText || ''), MAX_NOTE);
     item.tags = tagsOf(src.tags);
 
-    /* V15 账户：只有和本地候选完全匹配才采纳，否则 resolveAccount 重解析 → 默认账户兜底 */
+    /* V15 账户：账户不重要，只有和本地候选完全匹配才采纳，否则一律默认账户 */
     var wantAccount = typeof src.accountId === 'string' ? src.accountId.trim() : '';
     if (wantAccount && findIn(cx.liveAccounts, wantAccount)) {
       item.accountId = wantAccount;
     } else {
       var acct = resolveAccount(text || segText || '', cx);
-      if (acct && acct.ok) {
-        item.accountId = acct.id;
-      } else if (acct && !acct.ok && acct.code === E.AMBIGUOUS_ACCOUNT && acct.options && acct.options.length) {
-        item.issues.push({ field: 'accountId', code: E.AMBIGUOUS_ACCOUNT, message: M.E_AS_AMBIGUOUS_ACCOUNT, options: acct.options });
-      }
+      if (acct && acct.ok) { item.accountId = acct.id; }
     }
     if (!item.accountId || !findIn(cx.liveAccounts, item.accountId)) {
       item.accountId = defaultAccountId(cx);
       item.defaulted.account = true;
     }
     if (!findIn(cx.liveAccounts, item.accountId)) {
-      item.issues.push({ field: 'accountId', code: E.AMBIGUOUS_ACCOUNT, message: '账户不可用（可能已归档），选一个' });
+      item.issues.push({ field: 'accountId', code: E.AMBIGUOUS_ACCOUNT, message: '还没有可用账户，先在小账本里添加一个' });
     }
 
     /* V16 分类：kind 必须与 type 一致，否则 resolveCategory → fallbackCategoryId */
@@ -3235,7 +3256,7 @@
       }
     }
 
-    /* V17 转账：转入账户必填且必须不同；V19 非转账强制清空 toAccountId */
+    /* V17 转账：转入账户也不问，自动补一个和转出不同的默认账户；V19 非转账清空 */
     if (item.type === 'transfer') {
       var wantTo = typeof src.toAccountId === 'string' ? src.toAccountId.trim() : '';
       if (wantTo && wantTo !== item.accountId && findIn(cx.liveAccounts, wantTo)) {
@@ -3245,14 +3266,16 @@
         var guessTo = guessToAccount(text || segText || '', cx, item.accountId);
         if (guessTo) { item.toAccountId = guessTo; }
       }
+      if ((!item.toAccountId || item.toAccountId === item.accountId) && item.accountId) {
+        var autoTo = defaultToAccountId(cx, item.accountId);
+        if (autoTo) { item.toAccountId = autoTo; item.defaulted.toAccount = true; }
+      }
       if (!item.toAccountId || item.toAccountId === item.accountId) {
         item.toAccountId = '';
         item.issues.push({
           field: 'toAccountId',
           code: E.TRANSFER_NEED_TO,
-          message: M.E_AS_TRANSFER_NEED_TO,
-          options: cx.liveAccounts.filter(function (a) { return a.id !== item.accountId; })
-            .slice(0, MAX_TARGETS).map(function (a) { return { label: a.name, value: a.id }; })
+          message: '转账需要两个账户，先在小账本里再添加一个账户'
         });
       }
     } else {
