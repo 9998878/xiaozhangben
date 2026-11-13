@@ -28,9 +28,9 @@
 
   var MAX_TURNS = 60;
   var QUICK_EXAMPLES = [
-    '午饭 35 微信',
-    '昨天打车 18 支付宝',
-    '工资 8000 招行',
+    '午饭 35',
+    '昨天打车 18',
+    '工资 8000',
     '这个月餐饮花了多少'
   ];
 
@@ -341,7 +341,7 @@
     var input = el('textarea', {
       className: 's-assistant__input',
       rows: '1',
-      placeholder: '说一句：午饭 35 微信',
+      placeholder: '说一句：午饭 35',
       'aria-label': '对助手说一句',
       autocomplete: 'off',
       enterkeyhint: 'send'
@@ -617,9 +617,13 @@
     ]);
   }
 
-  /* 2.29.2：直记成功气泡——明细一行一笔 + 撤销按钮（DIRECT_UNDO_MS 后消失） */
+  /* 2.32.5：账户不重要，成功气泡不再显示默认账户名；转账只显示类型/金额/备注 */
   function recordedRowText(row) {
-    return [row.typeText, row.amountText, row.categoryText, row.accountText, row.note]
+    if (row.type === 'transfer') {
+      return [row.typeText || '转账', row.amountText, row.note && row.note !== '转账' ? row.note : '']
+        .filter(function (part) { return !!part; }).join(' · ');
+    }
+    return [row.typeText, row.amountText, row.categoryText, row.note]
       .filter(function (part) { return !!part; }).join(' · ');
   }
 
@@ -859,13 +863,14 @@
     var rows = reply.rows || [];
     var wrap = el('div', { className: 's-assistant__table', role: 'table', 'aria-label': '待写入的账目' });
     rows.forEach(function (row) {
+      var mainLabel = row.type === 'transfer' ? '转账' : (row.categoryText || TYPE_TEXT[row.type] || '—');
       var main = el('div', { className: 's-assistant__tr-main' }, [
-        el('span', { className: 's-assistant__tr-cat', text: row.categoryText || TYPE_TEXT[row.type] || '—' }),
+        el('span', { className: 's-assistant__tr-cat', text: mainLabel }),
         el('span', { className: 's-assistant__tr-amount ' + (row.type === 'income' ? 'is-income' : 'is-expense'), text: (row.type === 'income' ? '+' : (row.type === 'transfer' ? '' : '−')) + money(row.amountCents) })
       ]);
-      var metaBits = [row.dateText, row.accountText];
-      if (row.type === 'transfer' && row.toAccountText) { metaBits = [row.dateText, row.accountText + ' → ' + row.toAccountText]; }
-      if (row.note) { metaBits.push(row.note); }
+      /* 2.32.5：账户不重要，预览也不显示默认账户/转入转出账户 */
+      var metaBits = [row.dateText];
+      if (row.note && row.note !== '转账') { metaBits.push(row.note); }
       var sub = el('div', { className: 's-assistant__tr-meta', text: metaBits.join(' · ') });
       var flags = el('div', { className: 's-assistant__tr-flags' });
       if (row.defaulted && (row.defaulted.account || row.defaulted.category)) {
@@ -1079,7 +1084,7 @@
         el('span', { className: 's-assistant__target-idx', text: String(index + 1) }),
         el('span', { className: 's-assistant__target-main' }, [
           el('span', { className: 's-assistant__target-label', text: label }),
-          el('span', { className: 's-assistant__target-meta', text: [tx.accountText, tx.note].filter(Boolean).join(' · ') })
+          el('span', { className: 's-assistant__target-meta', text: [tx.note].filter(Boolean).join(' · ') })
         ])
       ]));
     });

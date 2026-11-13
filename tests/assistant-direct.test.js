@@ -93,6 +93,14 @@ test('1.6 按钮提交保留人话标签：keep/drop 与账户 id 不应原样�
   check(ASSISTANT_JS.indexOf("pushTurn({ who: 'user', text: display })") >= 0, '用户气泡应显示 display 而非 raw');
 });
 
+test('1.7 助手不显示账户名：记录气泡/预览/示例句都不再出现微信、支付宝、招行', function () {
+  check(ASSISTANT_JS.indexOf('row.accountText') === -1, '记录/预览不得再拼 row.accountText');
+  check(ASSISTANT_JS.indexOf('row.toAccountText') === -1, '转账预览不得再拼 row.toAccountText');
+  check(ASSISTANT_JS.indexOf("'午饭 35 微信'") === -1, '示例句不得再写微信');
+  check(ASSISTANT_JS.indexOf("'昨天打车 18 支付宝'") === -1, '示例句不得再写支付宝');
+  check(ASSISTANT_JS.indexOf("'工资 8000 招行'") === -1, '示例句不得再写招行');
+});
+
 console.log('\n用例 2：常用分类快捷标签（assistant.js 源码锁）');
 
 test('2.1 chips 动态化：近 60 天高频支出分类 top6，常驻不随轮数消失', function () {

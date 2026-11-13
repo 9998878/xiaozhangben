@@ -4,6 +4,12 @@
 
 > 行号会漂移：按文件 + 符号/关键词 grep 定位，不要照抄旧行号。
 
+## 已修（2.32.5 批次）
+
+| 位置 | 问题 | 回归 |
+| --- | --- | --- |
+| `js/screens/assistant.js` `recordedRowText`/`previewTable`/`targetList`/`QUICK_EXAMPLES` | 账户选择删掉后，成功气泡和预览仍显示默认账户「微信」，用户以为账户选择还在 | `tests/assistant-direct.test.js` 用例 1.7 |
+
 ## 已修（2.32.4 批次）
 
 | 位置 | 问题 | 回归 |
