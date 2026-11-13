@@ -1427,6 +1427,11 @@
     var card = moduleCard('收支摘要', null, 's-insights-summary');
     var delta = expenseDelta(report);
     var net = report.win.netCents;
+    var totals = report.win.totals;
+    /* 2.32.8：收入只记了零头（覆盖支出 < 50%）时，结余为负和负储蓄率都是口径失真，
+       不当作「支出高于收入」下结论，只说明“可能没记全”。 */
+    var coveragePct = totals.expenseCents > 0 ? totals.incomeCents / totals.expenseCents * 100 : null;
+    var incomePartial = totals.incomeCents > 0 && coveragePct !== null && coveragePct < 50;
     var hero = el('div', { className: 's-insights-sum__hero' });
     hero.appendChild(el('span', { className: 's-insights-sum__hero-label', text: '结余' }));
     hero.appendChild(el('strong', {
@@ -1435,7 +1440,7 @@
     }));
     hero.appendChild(el('span', {
       className: 's-insights-sum__hero-sub',
-      text: net < 0 ? '支出高于收入' : '收入减去支出'
+      text: incomePartial ? '收入可能没记全' : (net < 0 ? '支出高于收入' : '收入减去支出')
     }));
     card.appendChild(hero);
     var grid = el('div', { className: 's-insights-sum__grid' });
@@ -1462,8 +1467,13 @@
     grid.appendChild(mom);
     card.appendChild(grid);
 
-    if (report.win.totals.incomeCents > 0) {
-      var rate = round1((report.win.totals.incomeCents - report.win.totals.expenseCents) / report.win.totals.incomeCents * 100);
+    if (totals.incomeCents > 0 && incomePartial) {
+      card.appendChild(el('p', {
+        className: 's-insights-muted',
+        text: '收入只记到 ' + fmt(totals.incomeCents) + '\uff0c仅覆盖支出的 ' + coveragePct.toFixed(1) + '%，结余和储蓄率会失真。'
+      }));
+    } else if (totals.incomeCents > 0) {
+      var rate = round1((totals.incomeCents - totals.expenseCents) / totals.incomeCents * 100);
       var line = el('p', { className: 's-insights-sum__saving' });
       line.appendChild(el('span', { className: 's-insights-sum__label', text: '储蓄率' }));
       line.appendChild(el('strong', {
@@ -1638,7 +1648,7 @@
       className: 's-insights-ai__hint',
       text: S.aiModuleError
         ? '模型连接模块加载失败，请检查网络后重试（离线状态下无法使用 AI 解读）。'
-        : '让 AI 结合本月聚合数据，给出不超过 5 条「是什么问题 / 证据 / 下月改什么」。'
+        : '让 AI 先说一句本月总览，再挑 2-4 条最值得看的：哪里花多了、拿什么当证据、下月怎么改。'
     }));
     card.appendChild(buttonNode('生成 AI 解读', {
       className: 's-insights-tip__action',
@@ -1822,6 +1832,10 @@
           text: '本月账单有变动，下面的结论基于生成时的数据，可能已过期。'
         }));
       }
+      /* 2.32.8：先给一句总览，再看条目——旧版只有清单，读起来像机器巡检 */
+      if (typeof cached.summary === 'string' && cached.summary) {
+        card.appendChild(el('p', { className: 's-insights-ai__summary', text: cached.summary }));
+      }
       if (items.length) {
         card.appendChild(aiItemsNode(items));
       } else if (cached.fallback === true) {
@@ -1857,7 +1871,7 @@
     }
     card.appendChild(el('p', {
       className: 's-insights-ai__hint',
-      text: '让 AI 结合本月聚合数据，给出不超过 5 条「是什么问题 / 证据 / 下月改什么」。'
+      text: '让 AI 先说一句本月总览，再挑 2-4 条最值得看的：哪里花多了、拿什么当证据、下月怎么改。'
     }));
     card.appendChild(buttonNode('生成 AI 解读', {
       className: 's-insights-tip__action',
@@ -1897,6 +1911,7 @@
   function settleAiInsights(month, metrics, cacheKey, res) {
     var okRes = !!(res && res.ok === true);
     var items = okRes && Array.isArray(res.items) ? res.items : [];
+    var summary = okRes && typeof res.summary === 'string' ? res.summary : '';
     var fallback = false;
     if (!okRes) {
       var reason = (res && res.reason) || 'bad';
@@ -1911,10 +1926,12 @@
       }
       var ai = aiModule();
       items = (ai && typeof ai.buildFallbackInsights === 'function' && ai.buildFallbackInsights(metrics)) || [];
+      summary = '';
       fallback = true;
     }
     S.aiCache[cacheKey] = {
       items: items,
+      summary: summary,
       fallback: fallback,
       reason: okRes ? '' : ((res && res.reason) || 'bad'),
       fp: aiFp(metrics),

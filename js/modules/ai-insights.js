@@ -343,6 +343,7 @@
     var datesSeen = Object.create(null);  /* 本月有账的自然日 */
     var pendingReimburseCount = 0;
     var txCount = 0;
+    var incomeRecordCount = 0;            /* 本月收入记录笔数（含「不计收支」，只判有没有记） */
     var earliestMonth = '';               /* 该账本最早有账月份（ma3 有效性判据） */
 
     /* ---- 唯一一次遍历流水：五道过滤与 core/stats.walk 完全同口径 ---- */
@@ -363,6 +364,10 @@
       /* 2.28.2：txCount 不计 transfer——与屏级空账期门对齐。纯转账月 txCount=0，
          requestAiInsights 的 'empty' 守卫才能挡住，不会对没有收支的月份发 LLM 请求 */
       if (mk === mKey && type !== TYPE_TRANSFER) { txCount += 1; }
+      /* 2.32.8：收入是否「记过」与收入金额无关。只记支出、不记收入的账本（学生记法常见），
+         结余必然是负的；解读层据此关掉「入不敷出」类结论，避免每个月都报一次假红旗。
+         放在 excludeStats 之前：标了「不计收支」的收入也算记过。 */
+      if (mk === mKey && type === TYPE_INCOME) { incomeRecordCount += 1; }
       if (mk === mKey) { datesSeen[date] = 1; }
 
       if (earliestMonth === '' || mk < earliestMonth) { earliestMonth = mk; }
@@ -706,6 +711,10 @@
         uncategorizedPct: pctOf(uncatCents, expenseCents),
         missingDays: missingDays,
         pendingReimburseCount: pendingReimburseCount,
+        incomeRecorded: incomeRecordCount > 0,
+        /* 2.32.8：收入覆盖支出的比例（%）。真实账单里收入常常只记了一部分，
+           覆盖不足 50% 时结余为负多半是「没记全」而不是真赤字，解读层据此降级。 */
+        incomeCoveragePct: pctOf(cur.incomeCents, expenseCents),
         txCount: txCount
       }
     };
@@ -729,19 +738,23 @@
   var AI_CATEGORIES = { '结余与负债':1, '必要支出':1, '支出结构':1, '连续超支':1, '高频小额':1, '负债红旗':1, '应急缓冲':1, '一次性收支':1, '数据质量':1 };
   var AI_MOM_TOP = 8;
 
-  /* system prompt：任务书 §4 的角色说明与 7 条规则逐条一行；category 取值与 AI_CATEGORIES 一致 */
+  /* system prompt：2.32.8 重写——从「体检报告」改成「像朋友一样说明白」：
+   * ① 先给一句 summary 总览（旧版只有问题清单，读起来像机器巡检）；
+   * ② 收入没记过时不判「入不敷出」（学生账本普遍只记支出，旧版每月都报假红旗）；
+   * ③ 条数收到 2-4 条、允许一条肯定，证据必须带对比，建议必须带数字。 */
   var AI_SYSTEM_LINES = [
-    '你是「小账本」的月度账单分析师，面向不懂财务术语的普通用户，请全程使用简体中文。',
-    '用户消息里是一个月的聚合账单数据（JSON）。你只输出一个 JSON，最外层形如 {"items":[...]}，禁止 markdown 围栏，禁止任何解释文字。',
-    'items 里每条形如 {"level":"red|orange|yellow|info","category":"九选一","title":"是什么问题","evidence":["具体数字"],"suggestion":"下月改什么"}；category 只能取以下 9 个值之一：结余与负债、必要支出、支出结构、连续超支、高频小额、负债红旗、应急缓冲、一次性收支、数据质量。',
-    '规则 1：evidence 只能引用用户消息 JSON 里已有的数值/日期/名称；禁止自行计算新数字，禁止编造，禁止出现交易 id。',
-    '规则 2：suggestion 必须具体可执行（如「外卖预算设 400 元，先试两周」），禁止「注意节约」这类空话。',
-    '规则 3：全月最多 5 条，每个方面最多 1 条，没问题的方面不硬凑。',
-    '规则 4：优先级：红旗（疑似以贷养贷/结余为负/必要支出未覆盖/应急缓冲不足且有突发大额）＞ 连续 2–3 个月超支 ＞ 结构问题（享受占比过高、发展过低、固定支出过重）＞ 高频小额上涨、订阅闲置 ＞ 一次性收支说明。',
-    '规则 5：数据不足降级：未分类占比 > 20 或缺记天数 > 5 时，只输出 1 条数据质量警告，另最多补 2 条高置信结论。',
-    '规则 6：金额单位是元（保留 2 位小数）；优先用环比、占比、连续月数作证据，避免绝对阈值。',
-    '规则 6.5：字段值为 null 表示数据不足或该项不适用（如缺上月数据、储蓄率无法计算），不要当成 0 解读，也不要臆造数值填充。',
-    '规则 7：level 含义：red 当月必须处理；orange 需要调整；yellow 提示留意；info 一般说明。'
+    '你是「小账本」的月度账务顾问。说话像朋友，不摆财务架子，面向不懂术语的普通用户，全程简体中文。',
+    '用户消息是一个月的聚合账单 JSON。只输出一个 JSON 对象，形如 {"summary":"…","items":[…]}；禁止 markdown 围栏，禁止任何解释文字。',
+    'summary：1-2 句、60 字以内。先给这个月一句整体判断（比上月花得多还是少、主要花在哪、有没有异常高峰），用大白话，不要堆数字。',
+    'items 每条形如 {"level":"red|orange|yellow|info","category":"九选一","title":"一句话说清是什么","evidence":["带数字的依据"],"suggestion":"下月做什么"}；category 只能取：结余与负债、必要支出、支出结构、连续超支、高频小额、负债红旗、应急缓冲、一次性收支、数据质量。',
+    '条数只给 2-4 条：挑最值得说的，不要凑数，不要把一件事拆成两条；有做得好的地方可以给 1 条 info（如「外卖比上月少花 120 元」）。',
+    'evidence 每条都要引用用户数据里已有的数字，且至少一条带对比（环比／占比／连续月数／与近 3 个月均值比）；禁止编造，禁止自己再算新数，禁止出现交易 id。',
+    '能让数字更好懂时做生活化换算（如「相当于 24 杯奶茶」），但只能用数据里已有的小类金额，不能凭空估。',
+    'suggestion 必须落到「下月一个动作 + 一个数字」（如「外卖每周限 3 次，一个月大约省 200 元」），禁止「注意节约」这类空话。',
+    '重要：收入口径不完整时不要断言「入不敷出」。dataQuality.incomeRecorded 为 false（只记了支出没记收入）时，summary 先点明「本月只记了支出」，禁止说「支出超过收入／必要支出超过稳定收入」，也不要把结余为负当红旗；incomeRecorded 为 true 但 incomeCoveragePct < 50（收入只覆盖不到一半支出）时，指出「收入可能没记全」，同样不把结余为负当红旗。两种情况都把重点放在钱花到哪、比上月变化、哪类涨得多。',
+    '数据不足降级：未分类占比 > 20 或缺记天数 > 5 时，最多再补 1 条数据质量提示，其余只保留高置信结论。',
+    '金额单位是元（2 位小数）；字段值为 null 表示数据不足或该项不适用，不要当成 0，也不要臆造数值填充。',
+    'level：red 当月必须处理；orange 需要调整；yellow 留意；info 一般说明或值得肯定。'
   ];
 
   /* 输出层专用：分 → 元字符串（任务书 §3 要求元 + 2 位小数）。
@@ -891,6 +904,8 @@
         uncategorizedPct: dq.uncategorizedPct,
         missingDays: dq.missingDays,
         pendingReimburseCount: dq.pendingReimburseCount,
+        incomeRecorded: dq.incomeRecorded === true,
+        incomeCoveragePct: dq.incomeCoveragePct,
         txCount: dq.txCount
       }
     };
@@ -918,39 +933,57 @@
     return typeof first.text === 'string' ? first.text : '';
   }
 
-  /* 解析结果 → 数组：数组直接收；{items:[...]} 收 items；其余 null */
+  /* 解析结果 → {summary, items}：数组直接收；{items:[…]} 连 summary 一起收；其余 null。
+     2.32.8 起模型可以多给一句 summary；老格式（纯数组）仍然兼容，summary 为空。 */
   function insightFromValue(v) {
-    if (Array.isArray(v)) { return v; }
-    if (v && typeof v === 'object' && Array.isArray(v.items)) { return v.items; }
+    if (Array.isArray(v)) { return { summary: '', items: v }; }
+    if (v && typeof v === 'object' && Array.isArray(v.items)) {
+      return {
+        summary: typeof v.summary === 'string' ? v.summary : '',
+        items: v.items
+      };
+    }
     return null;
   }
 
-  /* 宽容解析：剥 ```json 围栏 → 直接 JSON.parse → 失败则取首个 [...last ] 或 {...last } 切片再试 */
-  function parseInsightArray(text) {
+  /* 宽容解析：剥 ```json 围栏 → 直接 JSON.parse → 失败再按 {...} / [...] 切片各试一次。
+     切片顺序：先整体对象（新格式带 summary），对象切不出 items 时再试数组（老格式）。 */
+  function parseInsightResult(text) {
     var raw = typeof text === 'string' ? text : '';
     if (!raw) { return null; }
     var stripped = raw.replace(/^\s*`{3,}\s*json\s*/i, '').replace(/`{3,}\s*$/, '');
-    var v = null;
-    try { v = JSON.parse(stripped); } catch (e) { v = null; }
-    if (v === null) {
-      var start = stripped.indexOf('[');
-      var end = stripped.lastIndexOf(']');
-      if (start >= 0 && end > start) {
-        try { v = JSON.parse(stripped.slice(start, end + 1)); } catch (e2) { v = null; }
-      }
+    var direct = null;
+    try { direct = JSON.parse(stripped); } catch (e) { direct = null; }
+    var parsed = insightFromValue(direct);
+    if (parsed) { return parsed; }
+    var objStart = stripped.indexOf('{');
+    var objEnd = stripped.lastIndexOf('}');
+    if (objStart >= 0 && objEnd > objStart) {
+      var obj = null;
+      try { obj = JSON.parse(stripped.slice(objStart, objEnd + 1)); } catch (e2) { obj = null; }
+      parsed = insightFromValue(obj);
+      if (parsed) { return parsed; }
     }
-    if (v === null) {
-      var objStart = stripped.indexOf('{');
-      var objEnd = stripped.lastIndexOf('}');
-      if (objStart >= 0 && objEnd > objStart) {
-        try { v = JSON.parse(stripped.slice(objStart, objEnd + 1)); } catch (e3) { v = null; }
-      }
+    var arrStart = stripped.indexOf('[');
+    var arrEnd = stripped.lastIndexOf(']');
+    if (arrStart >= 0 && arrEnd > arrStart) {
+      var arr = null;
+      try { arr = JSON.parse(stripped.slice(arrStart, arrEnd + 1)); } catch (e3) { arr = null; }
+      parsed = insightFromValue(arr);
+      if (parsed) { return parsed; }
     }
-    return insightFromValue(v);
+    return null;
   }
 
   function clipText(value, max) {
     return value.length > max ? value.slice(0, max) : value;
+  }
+
+  /* summary：压掉换行与多余空白，超长截断（模型偶尔会写成一段小作文） */
+  function normalizeSummary(value) {
+    var s = typeof value === 'string' ? value : '';
+    s = s.replace(/\s+/g, ' ').trim();
+    return s ? clipText(s, 90) : '';
   }
 
   /* schema 校验：脏数据直接丢弃，字段越界降级/截断，最多 INSIGHT_MAX_ITEMS 条 */
@@ -984,6 +1017,7 @@
   }
 
   /* 本地规则兜底（任务书 §6）：不联网，按红旗优先级产出 0-4 条，条目与 AI 条目同构。
+     2.32.8：收入没记过的月份跳过结余/必要/缓冲三条（必为假红旗），改给一条「只记支出」提示。
      metrics 非法或缺 cashflow 返回 []；无命中也返回 []。 */
   function buildFallbackInsights(metrics) {
     var m = metrics && typeof metrics === 'object' && !Array.isArray(metrics) ? metrics : null;
@@ -993,9 +1027,19 @@
     var incomeCents = Number(cash.incomeCents) || 0;
     var expenseCents = Number(cash.expenseCents) || 0;
     var netCents = Number(cash.netCents) || 0;
+    var incomeCents = Number(cash.incomeCents) || 0;
+    /* 2.32.8：收入没记过的月份（只记支出的学生账本）不判结余、必要支出、应急金——
+       这三项在「收入=0」时必然为负，旧版每月都报同一批红旗，解读会变成噪音。
+       字段缺省按「记过」处理，保持旧指标对象的行为不变。 */
+    var incomeRecorded = !(m.dataQuality && m.dataQuality.incomeRecorded === false);
+    /* 收入记过但只覆盖不到一半支出（真实账单里很常见：生活费只记了零头）：
+       结余为负同样不能当赤字断言，只提示「可能没记全」。字段缺省按完整处理，旧行为不变。 */
+    var coverage = (m.dataQuality && typeof m.dataQuality.incomeCoveragePct === 'number')
+      ? m.dataQuality.incomeCoveragePct : null;
+    var incomeSolid = incomeRecorded && (coverage === null || coverage >= 50);
 
     /* 1. 结余为负（红旗） */
-    if (netCents < 0) {
+    if (netCents < 0 && incomeSolid) {
       var enjoyCents = m.structure && m.structure.enjoymentCents > 0 ? Number(m.structure.enjoymentCents) : 0;
       out.push({
         level: 'red',
@@ -1012,8 +1056,8 @@
       });
     }
 
-    /* 2. 疑似以贷养贷（红旗） */
-    if (m.debt && typeof m.debt === 'object' && m.debt.loanToLoanSuspect === true) {
+    /* 2. 疑似以贷养贷（红旗）——「当月结余为负」是判据之一，收入没记过时同样不成立 */
+    if (incomeSolid && m.debt && typeof m.debt === 'object' && m.debt.loanToLoanSuspect === true) {
       out.push({
         level: 'red',
         category: '负债红旗',
@@ -1028,7 +1072,7 @@
     }
 
     /* 3. 必要支出未被稳定收入覆盖（红旗） */
-    if (m.necessary && typeof m.necessary === 'object' && m.necessary.covered === false) {
+    if (incomeSolid && m.necessary && typeof m.necessary === 'object' && m.necessary.covered === false) {
       var necessary = m.necessary;
       var byCat = Array.isArray(necessary.byCategory) ? necessary.byCategory : [];
       var topName = byCat.length && byCat[0] && typeof byCat[0].name === 'string' && byCat[0].name ? byCat[0].name : '';
@@ -1049,8 +1093,8 @@
       });
     }
 
-    /* 4. 应急缓冲不足 1 个月（orange） */
-    if (m.buffer && typeof m.buffer === 'object' && typeof m.buffer.monthsCovered === 'number' && m.buffer.monthsCovered < 1) {
+    /* 4. 应急缓冲不足 1 个月（orange）——「可用现金」在只记支出时同样失真，跳过 */
+    if (incomeSolid && m.buffer && typeof m.buffer === 'object' && typeof m.buffer.monthsCovered === 'number' && m.buffer.monthsCovered < 1) {
       out.push({
         level: 'orange',
         category: '应急缓冲',
@@ -1062,6 +1106,31 @@
           '现金只够覆盖 ' + (m.buffer.monthsCovered < 0 ? '0.0' : m.buffer.monthsCovered.toFixed(1)) + ' 个月'
         ],
         suggestion: '先攒出 1 个月必要支出（约 ' + yuanText(m.buffer.monthlyNecessaryCents) + ' 元）作为应急金，结余优先存这笔。'
+      });
+    }
+
+    /* 5. 收入口径不完整（info）：不吓人，只提醒补全口径，否则上面的结余/应急金永远算不准 */
+    if (!incomeRecorded && expenseCents > 0) {
+      out.push({
+        level: 'info',
+        category: '数据质量',
+        title: '本月只记了支出，没有收入记录',
+        evidence: [
+          '本月支出 ' + yuanText(expenseCents) + ' 元',
+          '本月收入记录 0 笔'
+        ],
+        suggestion: '把生活费、红包、兼职这类收入也记进来（记一笔时选「收入」），结余、能撑几个月才判断得准。'
+      });
+    } else if (!incomeSolid && coverage !== null && expenseCents > 0) {
+      out.push({
+        level: 'info',
+        category: '数据质量',
+        title: '收入可能没记全',
+        evidence: [
+          '本月收入 ' + yuanText(incomeCents) + ' 元，只覆盖支出 ' + coverage.toFixed(1) + '%',
+          '本月支出 ' + yuanText(expenseCents) + ' 元'
+        ],
+        suggestion: '把本月剩下的生活费、红包也补记成收入，结余才算得准；只看支出结构的话，下面的分类结论仍然可用。'
       });
     }
 
@@ -1102,9 +1171,13 @@
 
       function step(res) {
         if (res && res.ok === true) {
-          var arr = parseInsightArray(choiceTextOf(res.json));
-          if (!arr) { return { ok: false, reason: 'bad' }; }
-          return { ok: true, items: normalizeInsightItems(arr) };
+          var parsed = parseInsightResult(choiceTextOf(res.json));
+          if (!parsed) { return { ok: false, reason: 'bad' }; }
+          return {
+            ok: true,
+            summary: normalizeSummary(parsed.summary),
+            items: normalizeInsightItems(parsed.items)
+          };
         }
         var code = res && typeof res.code === 'string' ? res.code : '';
         /* 端点不认 enable_thinking 的 400：去掉自定义字段重试一次 */

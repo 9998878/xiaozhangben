@@ -11,6 +11,7 @@
  *   - requestAiInsights 状态机（守卫三元组 / 400 剥 extraBody 重试 / 超时限流重试
  *     + onRetry 计次 / 永不 reject / E_AS_NET_CONFIG 归 config）
  *   - buildFallbackInsights 四规则（负结余/以贷养贷/必要未覆盖/缓冲不足 + 空入参）
+ *   - 2.32.8：收入未记录（incomeRecorded=false）不判入不敷出；summary 总览解析与截断
  *   - 连续超支链 consecutiveMonths 1/2/3（含「上月无预算链断」）
  *
  * 运行：node tests/ai-insights.test.js
@@ -147,6 +148,13 @@ function buildMetrics(db) {
   const m = aiInsights.buildMonthlyMetrics(db, '2026-11', BOOK);
   if (!m) { throw new Error('buildMonthlyMetrics 返回 null（装置损坏）'); }
   return m;
+}
+
+/* 只换流水的最小装置（2.32.8 用例用） */
+function buildDbWith(txs) {
+  const db = buildDb();
+  db.transactions = txs;
+  return db;
 }
 
 /* 假 assistant：脚本化 llm.chat 序列，记录每次调用（messages/opts） */
@@ -540,9 +548,114 @@ regCase('6.4 裸「游戏」不再误伤：买游戏光盘不进游戏充值聚�
   checkEq(g.totalCents, 3000, '合计只含 3000（误伤会含 20000）');
 });
 
-regCase('6.5 系统提示词含 null 语义（规则 6.5，源码级）', function () {
-  check(aiSrc.indexOf('规则 6.5：字段值为 null 表示数据不足或该项不适用') >= 0,
+regCase('6.5 系统提示词含 null 语义（源码级）', function () {
+  check(aiSrc.indexOf('字段值为 null 表示数据不足或该项不适用') >= 0,
     'prompt 缺少 null 语义说明，模型可能把 null 当 0');
+});
+
+/* ============================== 用例 7：2.32.8 收入未记录 / summary ============================== */
+
+section('用例 7：只记支出不判入不敷出、summary 总览（2.32.8）');
+
+regCase('7.1 incomeRecorded：只有支出→false；有收入→true；「不计收支」的收入也算记过', function () {
+  const onlyExpense = buildMetrics(buildDbWith([
+    tx({ amountCents: 3000, categoryId: 'ca_food' })
+  ]));
+  checkEq(onlyExpense.dataQuality.incomeRecorded, false, '只有支出的月份不得声称记过收入');
+
+  const withIncome = buildMetrics(buildRichDb());
+  checkEq(withIncome.dataQuality.incomeRecorded, true, '有收入记录');
+
+  const excluded = buildMetrics(buildDbWith([
+    tx({ type: 'income', categoryId: 'ca_salary', amountCents: 500000, excludeStats: true })
+  ]));
+  checkEq(excluded.dataQuality.incomeRecorded, true, '标了「不计收支」的收入也算记过');
+  checkEq(excluded.cashflow.incomeCents, 0, '不计收支的收入仍不进合计');
+});
+
+regCase('7.2 请求体带 dataQuality.incomeRecorded', async function () {
+  const m = buildMetrics(buildRichDb());
+  const fake = fakeAssistant([AI_OK_JSON]);
+  await withAssistant(fake, function () { return aiInsights.requestAiInsights(m, {}); });
+  const payload = JSON.parse(fake.calls[0].messages[1].content);
+  checkEq(payload.dataQuality.incomeRecorded, true, '有收入时应为 true');
+});
+
+regCase('7.3 无收入月兜底不再报结余/必要/缓冲，只给一条「只记支出」提示', function () {
+  const out = aiInsights.buildFallbackInsights({
+    cashflow: { incomeCents: 0, expenseCents: 120000, netCents: -120000, creditInflowCents: 30000 },
+    structure: { enjoymentCents: 80000 },
+    debt: { loanToLoanSuspect: true, monthlyRepaymentCents: 25000 },
+    necessary: { covered: false, totalCents: 60000, byCategory: [{ name: '房租', cents: 40000 }] },
+    income: { stableCents: 0 },
+    buffer: { availableCashCents: -20000, monthlyNecessaryCents: 30000, monthsCovered: -0.7 },
+    dataQuality: { incomeRecorded: false }
+  });
+  checkEq(out.length, 1, '只应剩一条数据质量提示，不得出现 3 红 1 橙');
+  checkEq(out[0].level, 'info', '不吓人：info');
+  checkEq(out[0].category, '数据质量', '归类数据质量');
+  check(out[0].title.indexOf('只记了支出') >= 0, '标题点明只记支出：' + out[0].title);
+  checkEq(out.filter(function (x) { return x.level === 'red'; }).length, 0, '不得有红旗');
+});
+
+regCase('7.4 有收入的月份四规则照旧（incomeRecorded=true 不误伤）', function () {
+  const out = aiInsights.buildFallbackInsights({
+    cashflow: { incomeCents: 100000, expenseCents: 120000, netCents: -20000 },
+    structure: { enjoymentCents: 8000 },
+    dataQuality: { incomeRecorded: true }
+  });
+  checkEq(out.length, 1, '仍恰一条结余红旗');
+  checkEq(out[0].level, 'red', '仍是红旗');
+});
+
+regCase('7.5 summary：对象格式收总览，纯数组兼容空总览，超长截到 90 字', async function () {
+  const m = buildMetrics(buildRichDb());
+  const objRes = { ok: true, json: { choices: [{ message: { content:
+    '{"summary":"这个月主要花在相机镜头上，比上月多花 630 元。","items":[{"level":"info","category":"数据质量","title":"一笔大额支出","evidence":["11月5日 600.00 元"],"suggestion":"下月同类支出先列进预算再买"}]}' } }] } };
+  let res = await withAssistant(fakeAssistant([objRes]), function () {
+    return aiInsights.requestAiInsights(m, {});
+  });
+  checkEq(res.ok, true, '应成功');
+  checkEq(res.summary, '这个月主要花在相机镜头上，比上月多花 630 元。', 'summary 原样带回');
+  checkEq(res.items.length, 1, 'items 照常解析');
+
+  res = await withAssistant(fakeAssistant([AI_OK_JSON]), function () {
+    return aiInsights.requestAiInsights(m, {});
+  });
+  checkEq(res.summary, '', '纯数组老格式不应造出 summary');
+
+  const longSummary = '啊'.repeat(120);
+  const longRes = { ok: true, json: { choices: [{ message: { content:
+    JSON.stringify({ summary: longSummary, items: [{ level: 'info', category: '支出结构', title: 't', evidence: ['e'], suggestion: 's' }] }) } }] } };
+  res = await withAssistant(fakeAssistant([longRes]), function () {
+    return aiInsights.requestAiInsights(m, {});
+  });
+  checkEq(res.summary.length, 90, 'summary 截断到 90 字');
+});
+
+regCase('7.6 提示词写了「收入未记录禁止断言入不敷出」（源码级）', function () {
+  check(aiSrc.indexOf('incomeRecorded 为 false') >= 0 && aiSrc.indexOf('不要断言') >= 0,
+    'prompt 缺少收入未记录时的禁用口径');
+});
+
+regCase('7.7 收入只覆盖不到一半支出：不报赤字，改提示「收入可能没记全」', function () {
+  const out = aiInsights.buildFallbackInsights({
+    cashflow: { incomeCents: 49000, expenseCents: 309085, netCents: -260085 },
+    necessary: { covered: false },
+    buffer: { monthsCovered: 0 },
+    dataQuality: { incomeRecorded: true, incomeCoveragePct: 15.9 }
+  });
+  checkEq(out.length, 1, '不能同时冒结余/必要/缓冲三条');
+  checkEq(out[0].title, '收入可能没记全', '标题应点明收入没记全');
+  check(out[0].evidence.join(' ').indexOf('15.9%') >= 0, '证据要带覆盖率');
+  checkEq(out[0].level, 'info', '不吓人');
+
+  const solid = aiInsights.buildFallbackInsights({
+    cashflow: { incomeCents: 300000, expenseCents: 300000, netCents: -28500 },
+    dataQuality: { incomeRecorded: true, incomeCoveragePct: 100 }
+  });
+  checkEq(solid.length, 1, '覆盖充分时仍按结余红旗处理');
+  checkEq(solid[0].level, 'red', '仍是红旗');
 });
 
 /* ============================== 汇总 ============================== */
