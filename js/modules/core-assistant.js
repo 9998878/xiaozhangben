@@ -4079,6 +4079,18 @@
     return { from: first + '-01', to: monthEnd(endMonth), endMonth: endMonth, months: n };
   }
 
+  /* 2.33.0「上月同期」基期截止日（口径同 ai-insights / 统计页 / 解读页）：
+   * month 为今天所在月且未过完时，返回「上月同日」（夹到上月月末）；
+   * 过去月/未来月/月末当天返回 ''（整月口径）。today 缺省回落真实今天。 */
+  function samePeriodEndOf(month, today) {
+    var t = String(today || '');
+    var day = Number(t.slice(8, 10)) || 0;
+    if (!isMonth(month) || !day || month !== t.slice(0, 7)) { return ''; }
+    if (day >= daysInMonth(month)) { return ''; }
+    var prev = addMonth(month, -1);
+    return prev + '-' + pad2(Math.min(day, daysInMonth(prev)));
+  }
+
   function monthLabel(m) {
     var parts = /^(\d{4})-(\d{2})$/.exec(String(m || ''));
     return parts ? Number(parts[1]) + '年' + Number(parts[2]) + '月' : String(m || '');
@@ -4317,25 +4329,33 @@
     return { ok: false, message: message, scope: win ? scopeText(win) : '' };
   }
 
-  /* 环比原因：本期 vs 上期（或 N 月窗口 vs 前 N 月） */
+  /* 环比原因：本期 vs 上期（或 N 月窗口 vs 前 N 月）。
+     2.33.0：本月未过完时基期改「上月同期」——基期窗口裁到上月同日，不再拿半个月对整月。 */
   function buildMom(cx, p) {
     var win = monthWindow(p.month, 1);
     var prevKey = addMonth(p.month, -1);
     var prevWin = monthWindow(prevKey, 1);
+    var cut = samePeriodEndOf(p.month, cx && cx.today);
+    if (cut) { prevWin.to = cut; }
     var cur = sumWindow(cx, win.from, win.to);
     var prv = sumWindow(cx, prevWin.from, prevWin.to);
     var label = monthLabel(p.month);
     var prevLabel = monthLabel(prevKey);
+    var baseLabel = cut ? prevLabel + '同期' : prevLabel;
+    var cutDay = cut ? Number(cut.slice(8, 10)) : 0;
+    var caliber = cut
+      ? '对比口径：' + label + ' vs ' + prevLabel + '同期（截至 ' + cutDay + ' 日），仅支出、不含转账'
+      : '对比口径：' + label + ' vs ' + prevLabel + '，仅支出、不含转账';
 
     if (!cur.expenseCents) {
-      return insufficient(label + '没有支出记录，没法和' + prevLabel + '比较。', win);
+      return insufficient(label + '没有支出记录，没法和' + baseLabel + '比较。', win);
     }
     if (!prv.expenseCents) {
       var firstCats = Object.keys(cur.byCat)
         .map(function (id) { return { id: id, amountCents: cur.byCat[id].amountCents, count: cur.byCat[id].count }; })
         .sort(function (a, b) { return b.amountCents - a.amountCents; })
         .slice(0, 3);
-      var intro = label + '支出 ' + fmt(cur.expenseCents) + '（' + cur.count + ' 笔），' + prevLabel + '没有支出，没有可比基期。最大的几类：';
+      var intro = label + '支出 ' + fmt(cur.expenseCents) + '（' + cur.count + ' 笔），' + baseLabel + '没有支出，没有可比基期。最大的几类：';
       return {
         ok: true,
         reply: {
@@ -4344,16 +4364,16 @@
           text: intro,
           metrics: [
             { label: label + '支出', value: fmt(cur.expenseCents), sub: cur.count + ' 笔' },
-            { label: prevLabel + '支出', value: fmt(0), sub: '无数据' }
+            { label: baseLabel + '支出', value: fmt(0), sub: '无数据' }
           ],
           causes: firstCats.map(function (c) {
             var ev = topOf(cur.items, c.id, 3).map(function (tx) { return evidenceRow(cx, tx); });
             return { name: catNameOf(cx, c.id) || '未分类', sign: '+', amountText: fmt(c.amountCents), countText: c.count + ' 笔', categoryId: c.id, evidence: ev };
           }),
-          assumption: '对比口径：' + label + ' vs ' + prevLabel + '，仅支出、不含转账。',
+          assumption: caliber + '。',
           links: [{ label: '看「' + (catNameOf(cx, firstCats[0] && firstCats[0].id) || '明细') + '」', hash: '#/ledger?ca=' + encodeURIComponent(firstCats[0] && firstCats[0].id || '') + '&month=' + p.month }],
           followUps: ['' + (catNameOf(cx, firstCats[0] && firstCats[0].id) || '最大一类') + '多在哪？', '最大的三笔是哪些？'],
-          scope: scopeText(win) + '（对比 ' + prevLabel + '）'
+          scope: scopeText(win) + '（对比 ' + baseLabel + '）'
         }
       };
     }
@@ -4380,7 +4400,7 @@
       var name = catNameOf(cx, d.id) || '未分类';
       return name + '（' + (d.diff > 0 ? '+' : '\u2212') + fmt(Math.abs(d.diff)) + '）';
     }).join('、');
-    var text = label + '支出 ' + fmt(cur.expenseCents) + '，比' + prevLabel +
+    var text = label + '支出 ' + fmt(cur.expenseCents) + '，比' + baseLabel +
       (pct === null ? dir + ' ' + fmt(Math.abs(diffTotal)) : dir + ' ' + pct + '%（' + fmt(Math.abs(diffTotal)) + '）') +
       '。' + (top.length ? '主要是' + causeText + '。' : '各分类基本持平。');
 
@@ -4392,7 +4412,7 @@
         text: text,
         metrics: [
           { label: label + '支出', value: fmt(cur.expenseCents), sub: cur.count + ' 笔' },
-          { label: prevLabel + '支出', value: fmt(prv.expenseCents), sub: prv.count + ' 笔' },
+          { label: baseLabel + '支出', value: fmt(prv.expenseCents), sub: prv.count + ' 笔' },
           { label: '差额', value: (diffTotal >= 0 ? '+' : '\u2212') + fmt(Math.abs(diffTotal)), tone: diffTotal > 0 ? 'expense' : 'income' }
         ],
         causes: top.map(function (d) {
@@ -4401,23 +4421,31 @@
             name: catNameOf(cx, d.id) || '未分类',
             sign: d.diff > 0 ? '+' : '\u2212',
             amountText: fmt(Math.abs(d.diff)),
-            countText: (d.prev ? '上月 ' + fmt(d.prev) + ' → ' : '') + '本期 ' + fmt(d.curr),
+            countText: (d.prev ? (cut ? '上月同期 ' : '上月 ') + fmt(d.prev) + ' → ' : '') + '本期 ' + fmt(d.curr),
             categoryId: d.id,
             evidence: ev
           };
         }),
-        assumption: '对比口径：' + label + ' vs ' + prevLabel + '，仅支出、不含转账；数字全部由本机计算。',
+        assumption: caliber + '；数字全部由本机计算。',
         links: top.length ? [{ label: '看「' + (catNameOf(cx, top[0].id) || '明细') + '」', hash: '#/ledger?ca=' + encodeURIComponent(top[0].id) + '&month=' + p.month }] : [],
         followUps: top.length ? ['' + (catNameOf(cx, top[0].id) || '最大一类') + '多在哪？', '最大的三笔是哪些？'] : [],
-        scope: scopeText(win) + '（对比 ' + prevLabel + '）'
+        scope: scopeText(win) + '（对比 ' + baseLabel + '）'
       }
     };
   }
 
-  /* 分类下钻：金额 / 笔数 / 中位数 / 最大三笔 + 环比 */
+  /* 分类下钻：金额 / 笔数 / 中位数 / 最大三笔 + 环比。
+     2.33.0：本月未过完时，对比基期（前一同长窗口）末月裁到同日，与本期窗末月自然至今对齐。 */
   function buildCategory(cx, p) {
     var win = monthWindow(p.month, p.months);
-    var prevWin = monthWindow(addMonth(p.month, -(p.months)), p.months);
+    var prevEnd = addMonth(p.month, -(p.months));
+    var prevWin = monthWindow(prevEnd, p.months);
+    var cut = samePeriodEndOf(p.month, cx && cx.today);
+    if (cut) {
+      var cutDay = Number(cut.slice(8, 10));
+      prevWin.to = prevEnd + '-' + pad2(Math.min(cutDay, daysInMonth(prevEnd)));
+    }
+    var cutNote = cut ? '（截至 ' + Number(cut.slice(8, 10)) + ' 日）' : '';
     var cur = sumWindow(cx, win.from, win.to);
     var prv = sumWindow(cx, prevWin.from, prevWin.to);
     var curCat = cur.byCat[p.categoryId] || { amountCents: 0, count: 0 };
@@ -4442,7 +4470,7 @@
     var text = name + ' ' + scopeText(win) + '支出 ' + fmt(curCat.amountCents) + '（' + curCat.count +
       ' 笔，单笔中位数 ' + fmt(medianOf(amounts)) + '）';
     if (prevCat.count) {
-      text += '，比上一同长窗口' + (diff >= 0 ? '多 ' : '少 ') + fmt(Math.abs(diff)) +
+      text += '，比上一同长窗口' + cutNote + (diff >= 0 ? '多 ' : '少 ') + fmt(Math.abs(diff)) +
         (pct === null ? '' : '（' + pct + '%）');
     }
     text += '。最大的三笔：' + topText.join('；') + '。';
@@ -4459,7 +4487,7 @@
         ],
         causes: [],
         rows: top3.map(function (tx) { return evidenceRow(cx, tx); }),
-        assumption: '口径：' + scopeText(win) + '，仅当前账本支出；对比基期 ' + scopeText(prevWin) + '。',
+        assumption: '口径：' + scopeText(win) + '，仅当前账本支出；对比基期 ' + scopeText(prevWin) + cutNote + '。',
         links: [{ label: '看「' + name + '」全部流水', hash: '#/ledger?ca=' + encodeURIComponent(p.categoryId) + '&month=' + p.month }],
         followUps: ['这个月预算还超吗？', '最大的三笔是哪些？'],
         scope: scopeText(win)

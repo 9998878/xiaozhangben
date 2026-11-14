@@ -428,7 +428,8 @@
       className: 's-stats-summary__label',
       text: (current ? '本月' : monthShort(month)) + (kind === 'expense' ? '支出' : '收入')
     }));
-    /* 环比 pill：上涨/多花 = 黄底黑字（强提醒），下降 = 灰底 */
+    /* 环比 pill：上涨/多花 = 黄底黑字（强提醒），下降 = 灰底；月中写明「同期」 */
+    var momBase = ' 较上月' + (mom && mom.isPartial === true ? '同期' : '');
     var momLine = el('span', {
       className: 's-stats-summary__mom c-delta-pill' +
         (delta.arrow === '↑' ? '' : ' c-delta-pill--down')
@@ -437,7 +438,7 @@
     momLine.appendChild(el('span', { text: delta.text }));
     momLine.appendChild(el('span', {
       className: 's-stats-summary__mom-label',
-      text: ' 较上月'
+      text: momBase
     }));
     head.appendChild(momLine);
     card.appendChild(head);
@@ -457,7 +458,7 @@
       if (incomeDelta.text !== '—') {
         meta.appendChild(el('span', {
           className: 's-stats-summary__meta-cell',
-          text: '收入较上月 ' + incomeDelta.arrow + incomeDelta.text
+          text: '收入较上月' + (mom.isPartial === true ? '同期' : '') + ' ' + incomeDelta.arrow + incomeDelta.text
         }));
       }
     } else {
@@ -465,7 +466,7 @@
       if (expenseDelta.text !== '—') {
         meta.appendChild(el('span', {
           className: 's-stats-summary__meta-cell',
-          text: '支出较上月 ' + expenseDelta.arrow + expenseDelta.text
+          text: '支出较上月' + (mom.isPartial === true ? '同期' : '') + ' ' + expenseDelta.arrow + expenseDelta.text
         }));
       }
     }
@@ -743,12 +744,15 @@
     var expense = Math.abs(Number(summary.expenseCents) || 0);
     if (expense <= 0) { return null; }
 
-    var d = mom && mom.expense ? Number(mom.expense.deltaPct) : null;
+    /* deltaPct 为 null（基期 0，即「新增」）时不说「持平」——Number(null) 是 0，须先判空 */
+    var raw = mom && mom.expense ? mom.expense.deltaPct : null;
+    var d = raw === null || raw === undefined ? null : Number(raw);
+    var base = mom && mom.isPartial === true ? '上月同期' : '上月';
     var brief = '本月支出 ' + fmt(expense);
     if (d !== null && isFinite(d)) {
       brief += Math.abs(d) < 0.05
-        ? '，和上月基本持平'
-        : ('，比上月' + (d > 0 ? '多花 ' : '少花 ') + Math.abs(d).toFixed(1) + '%');
+        ? '，和' + base + '基本持平'
+        : ('，比' + base + (d > 0 ? '多花 ' : '少花 ') + Math.abs(d).toFixed(1) + '%');
     }
 
     var card = el('section', { className: 'c-card s-stats-note', 'aria-label': '本月小结' });
@@ -836,7 +840,7 @@
     };
   }
 
-  function buildRankCard(rank, prevRank, kind) {
+  function buildRankCard(rank, prevRank, kind, samePeriod) {
     var card = el('section', {
       className: 'c-card s-stats-rank',
       'aria-label': (kind === 'expense' ? '支出' : '收入') + '分类排行'
@@ -886,13 +890,14 @@
       var pct = Number(item.pct) || 0;
       var width = Math.max(0, Math.min(100, amount / maxAmount * 100));
       var momInfo = rankMomText(amount, prevMap[item.categoryId]);
+      var momBase = '较上月' + (samePeriod ? '同期' : '');
       var slot = item.slot || toneMap[item.categoryId] || ((i % 12) + 1);
 
       var row = el('a', {
         className: 's-stats-rank__row',
         href: '#/ledger?ca=' + encodeURIComponent(String(item.categoryId || '')),
         'aria-label': (i + 1) + ' 名 ' + String(item.name || '未分类') + '，' +
-          fmt(amount) + '，占 ' + pct.toFixed(1) + '%，较上月 ' + momInfo.text
+          fmt(amount) + '，占 ' + pct.toFixed(1) + '%，' + momBase + ' ' + momInfo.text
       });
       row.appendChild(el('span', { className: 's-stats-rank__no u-tabular', text: String(i + 1) }));
 
@@ -920,7 +925,7 @@
       foot.appendChild(el('span', { className: 's-stats-rank__pct u-tabular', text: pct.toFixed(1) + '%' }));
       foot.appendChild(el('span', {
         className: 's-stats-rank__mom s-stats-rank__mom--' + momInfo.tone,
-        text: '较上月 ' + momInfo.text
+        text: momBase + ' ' + momInfo.text
       }));
       main.appendChild(foot);
       row.appendChild(main);
@@ -1153,11 +1158,16 @@
     var mom = stats && typeof stats.mom === 'function'
       ? stats.mom(db, month, scope)
       : { income: null, expense: null, net: null };
+    /* 2.33.0：「上月同期」口径与核心层同源——本月未过完时，排行基期裁到上月同日 */
+    var samePeriod = mom.isPartial === true && mom.periodDay > 0;
+    var prevEndDay = samePeriod
+      ? addMonths(month, -1) + '-' + (mom.periodDay < 10 ? '0' : '') + mom.periodDay
+      : undefined;
     var rank = stats && typeof stats.categoryRank === 'function'
       ? stats.categoryRank(db, month, { kind: S.kind, limit: RANK_LIMIT, bookId: bookId || undefined })
       : { items: [], otherCents: 0 };
     var prevRank = stats && typeof stats.categoryRank === 'function'
-      ? stats.categoryRank(db, addMonths(month, -1), { kind: S.kind, limit: 200, bookId: bookId || undefined })
+      ? stats.categoryRank(db, addMonths(month, -1), { kind: S.kind, limit: 200, bookId: bookId || undefined, endDay: prevEndDay })
       : { items: [] };
 
     /* 分类色槽兜底：stats 返回的 hex 颜色不用，统一按分类顺序取 --cat-N */
@@ -1206,7 +1216,7 @@
       inner.appendChild(shareCard);
       painters.push(shareCard);
 
-      inner.appendChild(buildRankCard(rank, prevRank, S.kind));
+      inner.appendChild(buildRankCard(rank, prevRank, S.kind, samePeriod));
 
       /* 热力图只画支出：本月没有支出（例如只记了收入）时整块是空的，不渲染卡片 */
       if (hasExpense) {

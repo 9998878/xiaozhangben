@@ -207,6 +207,24 @@
     return list;
   }
 
+  function daysInMonthOf(month) {
+    if (!isMonth(month)) { return 30; }
+    return new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
+  }
+
+  /* 2.33.0：「上月同期」口径（同 ai-insights / 统计页）。month 为今天所在月且未过完时，
+   * 返回 { isPartial:true, day:已过天数 }；过去月/月末当天返回 isPartial:false（整月口径）。
+   * 基期截止日由调用方按各自窗口的末月自行夹取（本月窗=上月同日，多月窗=前窗末月同日）。 */
+  function samePeriodOf(month, today) {
+    var t = String(today || todayStr());
+    var day = Number(t.slice(8, 10)) || 1;
+    var dim = daysInMonthOf(month);
+    if (!isMonth(month) || month !== t.slice(0, 7) || day >= dim) {
+      return { isPartial: false, day: 0 };
+    }
+    return { isPartial: true, day: day };
+  }
+
   function monthLabel(key) {
     if (!isMonth(key)) { return String(key || ''); }
     return key.slice(0, 4) + '年' + Number(key.slice(5, 7)) + '月';
@@ -352,6 +370,19 @@
       bucket.count += 1;
       if (type === 'income') {
         bucket.incomeCents += amount;
+        /* 2.33.0：item 增收收入项（带 type），供「上月同期」在窗口末月做 item 级裁剪；
+           无 type 字段的历史形态一律视为支出（向后兼容）。 */
+        model.items.push({
+          tx: tx,
+          date: date,
+          month: month,
+          type: 'income',
+          categoryId: typeof tx.categoryId === 'string' ? tx.categoryId : '',
+          categoryName: typeof tx.categoryName === 'string' ? tx.categoryName : '',
+          accountId: typeof tx.accountId === 'string' ? tx.accountId : '',
+          note: typeof tx.note === 'string' ? tx.note : '',
+          amountCents: amount
+        });
         continue;
       }
       bucket.expenseCents += amount;
@@ -364,6 +395,7 @@
         tx: tx,
         date: date,
         month: month,
+        type: 'expense',
         categoryId: categoryId,
         categoryName: typeof tx.categoryName === 'string' ? tx.categoryName : '',
         accountId: typeof tx.accountId === 'string' ? tx.accountId : '',
@@ -409,12 +441,18 @@
     return '--cat-12';
   }
 
-  function summarize(model, endMonth, count, meta) {
+  function summarize(model, endMonth, count, meta, cutDate) {
     var months = monthRange(endMonth, count);
+    /* 2.33.0「上月同期」：cutDate 落在窗口末月时，该月不再用整月桶，
+       改由 item 级流水按日期重算（收入/支出/笔数/分类）；其余月照旧。 */
+    var cut = typeof cutDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cutDate) ? cutDate : '';
+    var cutMonth = cut ? cut.slice(0, 7) : '';
+    var clampLast = !!cut && months[months.length - 1] === cutMonth;
     var inSet = {};
     var totals = { incomeCents: 0, expenseCents: 0, transferCents: 0, count: 0 };
     for (var i = 0; i < months.length; i += 1) {
       inSet[months[i]] = true;
+      if (clampLast && months[i] === cutMonth) { continue; }
       var bucket = model.byMonth[months[i]];
       if (!bucket) { continue; }
       totals.incomeCents += bucket.incomeCents;
@@ -427,6 +465,14 @@
     for (var k = 0; k < model.items.length; k += 1) {
       var item = model.items[k];
       if (!inSet[item.month]) { continue; }
+      if (clampLast && item.month === cutMonth && String(item.date) > cut) { continue; }
+      var income = item.type === 'income';
+      if (clampLast && item.month === cutMonth) {
+        /* 被裁剪月的贡献（转账数无从 item 级拆分，前窗转账数无消费方，记 0） */
+        if (income) { totals.incomeCents += item.amountCents; } else { totals.expenseCents += item.amountCents; }
+        totals.count += 1;
+      }
+      if (income) { continue; }
       items.push(item);
       var cat = cats[item.categoryId];
       if (!cat) {
@@ -493,7 +539,14 @@
     /* S.month 就是本次报告账期的锚点（上月 chip 已把锚点定为上月），这里不再叠加偏移 */
     var anchor = S.month;
     var win = summarize(model, anchor, range.months, meta);
-    var prev = summarize(model, addMonth(win.months[0], -1), range.months, meta);
+    /* 2.33.0「上月同期」：锚点是当前月且未过完时，前窗末月裁到同日，两侧同期可比 */
+    var same = samePeriodOf(anchor);
+    var cutDate = '';
+    if (same.isPartial) {
+      var prevEndMonth = addMonth(win.months[0], -1);
+      cutDate = prevEndMonth + '-' + pad2(Math.min(same.day, daysInMonthOf(prevEndMonth)));
+    }
+    var prev = summarize(model, addMonth(win.months[0], -1), range.months, meta, cutDate);
     var bars = [];
     var barMonths = monthRange(win.months[win.months.length - 1], RULES.BAR_MONTHS);
     for (var i = 0; i < barMonths.length; i += 1) {
@@ -515,6 +568,8 @@
       bars: bars,
       range: range,
       endMonth: win.months[win.months.length - 1],
+      isPartial: same.isPartial,
+      periodDay: same.isPartial ? same.day : 0,
       hasAny: hasAnyRecord(db)
     };
     report.core = buildCore(report);
@@ -823,7 +878,7 @@
         label: '让助手继续分析',
         href: assistantHash(report, { q: report.range.months > 1
           ? '近' + report.range.months + '个月支出趋势怎么样？'
-          : monthLabel(report.endMonth) + '支出和上月比差在哪？' })
+          : monthLabel(report.endMonth) + '支出和上月' + (report.isPartial ? '同期' : '') + '比差在哪？' })
       });
       return actions.slice(0, RULES.ACTION_MAX + 1);
     }
@@ -1381,8 +1436,9 @@
     }
     var delta = expenseDelta(report);
     if (!delta.hasPrev) { return monthLabel(report.endMonth) + '的支出结构是什么样的？'; }
-    if (delta.diff < 0) { return '为什么' + monthLabel(report.endMonth) + '支出比上月减少了？'; }
-    return '为什么' + monthLabel(report.endMonth) + '支出比上月增加了？';
+    var base = report.isPartial ? '上月同期' : '上月';
+    if (delta.diff < 0) { return '为什么' + monthLabel(report.endMonth) + '支出比' + base + '减少了？'; }
+    return '为什么' + monthLabel(report.endMonth) + '支出比' + base + '增加了？';
   }
 
   function coreCard(report) {
@@ -1447,7 +1503,12 @@
     grid.appendChild(sumCell('收入', report.win.totals.incomeCents, 'income'));
     grid.appendChild(sumCell('支出', report.win.totals.expenseCents, 'expense'));
     var mom = el('div', { className: 's-insights-sum__cell' });
-    mom.appendChild(el('span', { className: 's-insights-sum__label', text: report.range.months === 1 ? '支出环比' : '支出较上期' }));
+    mom.appendChild(el('span', {
+      className: 's-insights-sum__label',
+      text: report.range.months === 1
+        ? (report.isPartial ? '支出较上月同期' : '支出环比')
+        : '支出较上期'
+    }));
     var momValue = el('span', { className: 's-insights-sum__value' });
     if (!delta.hasPrev) {
       momValue.appendChild(el('span', { className: 's-insights-muted', text: '暂无上期数据' }));

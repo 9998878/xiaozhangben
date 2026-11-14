@@ -20407,6 +20407,23 @@ textarea::selection {
     return key || '';
   }
 
+  /* 「上月同期」基期截止日（2.33.0，口径同 ai-insights 同期先例）：
+   * 仅当查看月份 === 今天所在月且未到月末时返回「上月同日」（夹到上月月末），
+   * 其余（过去月/未来月/月末当天）返回 '' 表示整月、不裁剪。
+   * today 可显式传入（YYYY-MM-DD）便于测试，缺省取今天。 */
+  function samePeriodEndOf(month, today) {
+    var D = datesApi();
+    var t = normalizeDay(today) || D.todayStr();
+    var curKey = D.monthKey(t);
+    if (!curKey || month !== curKey) { return ''; }
+    var day = Number(t.slice(8, 10)) || 1;
+    var dim = Number(monthRangeOf(month).end.slice(8, 10)) || 30;
+    if (day >= dim) { return ''; }
+    var prev = prevMonthOf(month);
+    var prevDim = Number(monthRangeOf(prev).end.slice(8, 10)) || 30;
+    return prev + '-' + pad2(Math.min(day, prevDim));
+  }
+
   /* 环比/同比差值对象；除零返回 deltaPct:null（绝不出 Infinity/NaN） */
   function deltaOf(current, prev) {
     var deltaCents = current - prev;
@@ -20906,7 +20923,9 @@ textarea::selection {
     };
   }
 
-  /* 环比：MomResult（deltaPct 除零为 null） */
+  /* 环比：MomResult（deltaPct 除零为 null）。
+   * 2.33.0：月中对比改「上月同期」——本月未过完时基期裁到上月同日，不再拿半个月对整月；
+   * 过去月两侧都是整月，行为不变。当前侧不裁剪（与合计卡总额同口径）。 */
   function mom(source, month, opts) {
     var model = resolve(source);
     var o = isObj(opts) ? opts : {};
@@ -20919,21 +20938,28 @@ textarea::selection {
     var scope = bookScope(model, o);
     var currentRange = monthRangeOf(m);
     var prevRange = monthRangeOf(prev);
+    var periodEnd = samePeriodEndOf(m, o.today);
+    var isPartial = periodEnd !== '';
+    if (isPartial) { prevRange.end = periodEnd; }
     var current = totalRange(model, scope, currentRange.start, currentRange.end);
     var before = totalRange(model, scope, prevRange.start, prevRange.end);
     return {
       month: m,
       prevMonth: prev,
       bookId: scope.bookId || null,
+      isPartial: isPartial,
+      periodDay: isPartial ? (Number(periodEnd.slice(8, 10)) || 0) : 0,
       income: deltaOf(current.incomeCents, before.incomeCents),
       expense: deltaOf(current.expenseCents, before.expenseCents),
       net: deltaOf(current.netCents, before.netCents)
     };
   }
 
-  /* 分类聚合（供排行/预算复用） */
-  function categorySums(model, scope, month, kind) {
+  /* 分类聚合（供排行/预算复用）；endDay 可把区间截止日向前夹（上月同期基期用） */
+  function categorySums(model, scope, month, kind, endDay) {
     var r = monthRangeOf(month);
+    var cut = normalizeDay(endDay);
+    if (cut && cut < r.end) { r.end = cut; }
     var map = Object.create(null);
     var total = 0;
     walk(model, scope, function (tx, type, amount, date) {
@@ -20948,11 +20974,13 @@ textarea::selection {
     return { map: map, totalCents: total };
   }
 
-  /* 排行核心：金额降序 → 分类 sort 升序 → name.localeCompare('zh-Hans-CN') */
-  function rankCore(model, scope, month, kind, limit, withMom) {
-    var D = datesApi();
-    var current = categorySums(model, scope, month, kind);
-    var prevMap = withMom ? categorySums(model, scope, D.monthKey(D.addMonths(month + '-01', -1)), kind).map : null;
+  /* 排行核心：金额降序 → 分类 sort 升序 → name.localeCompare('zh-Hans-CN')。
+   * endDay 裁当前排行月（stats 页拉上月同期榜用）；prevEndDay 裁环比基期月，
+   * 缺省走 samePeriodEndOf（本月未过完时自动裁到上月同日）。 */
+  function rankCore(model, scope, month, kind, limit, withMom, endDay, prevEndDay) {
+    var current = categorySums(model, scope, month, kind, endDay);
+    var prevCut = normalizeDay(prevEndDay) || samePeriodEndOf(month);
+    var prevMap = withMom ? categorySums(model, scope, prevMonthOf(month), kind, prevCut).map : null;
     var categoryIndex = indexById(model.categories);
     var rows = [];
     for (var key in current.map) {
@@ -21017,7 +21045,7 @@ textarea::selection {
     var m = normalizeMonth(month) || normalizeMonth(o.month) || currentMonth();
     var kind = o.kind === TYPE_INCOME ? TYPE_INCOME : TYPE_EXPENSE;
     var scope = bookScope(model, o);
-    var core = rankCore(model, scope, m, kind, rankLimit(o.limit), false);
+    var core = rankCore(model, scope, m, kind, rankLimit(o.limit), false, normalizeDay(o.endDay));
     return {
       kind: kind,
       month: m,
@@ -21527,14 +21555,14 @@ textarea::selection {
     return { month: '', from: from, to: to };
   }
 
-  /* 分类排行（含占比与环比）：rankByCategory(txs, {type, limit, month}) */
+  /* 分类排行（含占比与环比）：rankByCategory(txs, {type, limit, month, endDay, today}) */
   function rankByCategory(source, opts) {
     var model = resolve(source);
     var o = isObj(opts) ? opts : {};
     var m = normalizeMonth(o.month) || currentMonth();
     var kind = (o.type === TYPE_INCOME || o.kind === TYPE_INCOME) ? TYPE_INCOME : TYPE_EXPENSE;
     var scope = bookScope(model, o);
-    var core = rankCore(model, scope, m, kind, rankLimit(o.limit), true);
+    var core = rankCore(model, scope, m, kind, rankLimit(o.limit), true, normalizeDay(o.endDay), samePeriodEndOf(m, o.today));
     return {
       kind: kind,
       month: m,
@@ -32711,7 +32739,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.32.9';
+  XZB.version = '2.33.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
