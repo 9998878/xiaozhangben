@@ -3643,7 +3643,7 @@
             if (res && res.ok) {
               toast(ctx, '已开启');
               closeCloudSheet();
-              render(ctx.root, ctx);
+              refreshData(ctx);
             } else {
               status.textContent = cloudMessage(res);
             }
@@ -3666,7 +3666,7 @@
             if (res && res.ok) {
               toast(ctx, '已备份');
               closeCloudSheet();
-              render(ctx.root, ctx);
+              refreshData(ctx);
             } else {
               status.textContent = cloudMessage(res);
             }
@@ -3696,7 +3696,7 @@
           api.disable();
           toast(ctx, '已关闭');
           closeCloudSheet();
-          render(ctx.root, ctx);
+          refreshData(ctx);
         }
       });
     }
