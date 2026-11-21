@@ -2606,6 +2606,13 @@
           return commitSetting(ctx, 'snapshotAuto', next, next ? '开启自动快照' : '关闭自动快照');
         }
       }),
+      /* 云备份（2.34.0）：删应用不丢账——自动备份到用户自己的 GitHub 私有 Gist，默认关闭 */
+      row({
+        icon: 'upload',
+        title: '云备份',
+        value: cloudStatusText(),
+        onClick: function () { openCloudSheet(ctx); }
+      }),
       photosRow,
       row({
         icon: 'import',
@@ -3546,6 +3553,154 @@
 
   function appliedToast(affected) {
     return affected > 0 ? '分类已删除，' + affected + ' 笔流水已归到「其他」' : '分类已删除';
+  }
+
+  /* ---------------- 云备份（2.34.0） ---------------- */
+
+  function cloudApi() {
+    return (XZB.core && XZB.core.cloudSync) || (XZB.Core && XZB.Core.cloudSync) || null;
+  }
+
+  function cloudAgoText(iso) {
+    if (!iso) { return ''; }
+    var ts = Date.parse(iso);
+    if (!isFinite(ts)) { return ''; }
+    var diff = Date.now() - ts;
+    if (diff < 60000) { return '刚刚'; }
+    if (diff < 3600000) { return Math.floor(diff / 60000) + ' 分钟前'; }
+    if (diff < 86400000) { return Math.floor(diff / 3600000) + ' 小时前'; }
+    return String(iso).slice(0, 10);
+  }
+
+  /* 状态行只报事实，不写说明文字 */
+  function cloudStatusText() {
+    var api = cloudApi();
+    if (!api || typeof api.status !== 'function') { return '未开启'; }
+    var st = api.status();
+    if (!st.enabled) { return '未开启'; }
+    if (st.busy || st.pending) { return '备份中…'; }
+    if (st.lastError === 'E_CLOUD_NEWER') { return '云端较新'; }
+    if (st.cloud && st.cloud.count > 0 && !st.lastSyncAt) { return '发现 ' + st.cloud.count + ' 笔备份'; }
+    if (st.lastError) { return '待重试'; }
+    if (st.lastSyncAt) { return '已备份 · ' + cloudAgoText(st.lastSyncAt); }
+    return '已开启';
+  }
+
+  function cloudMessage(res) {
+    var api = cloudApi();
+    var code = res && res.code ? String(res.code) : '';
+    if (api && api.MESSAGES && api.MESSAGES[code]) { return api.MESSAGES[code]; }
+    return messageOf(res);
+  }
+
+  function closeCloudSheet() {
+    if (XZB.ui && XZB.ui.sheet && typeof XZB.ui.sheet.close === 'function') { XZB.ui.sheet.close(); }
+  }
+
+  /* 最小 sheet：未开启 = 密钥框 + 获取链接 + 一行隐私告知 + 保存并开启；
+     已开启 = 立即备份 / 从云端恢复 / 关闭。无其他文字。 */
+  function openCloudSheet(ctx) {
+    var api = cloudApi();
+    if (!api) { toast(ctx, '云备份模块未加载'); return; }
+    var st = api.status();
+    var content = h('div');
+    var status = h('p', { className: 's-settings-note', text: cloudStatusText(), aria: { live: 'polite' } });
+    content.appendChild(status);
+
+    var input = null;
+    var actions = [];
+    if (!st.enabled) {
+      var field = h('div', { className: 's-settings-sheet__field' });
+      field.appendChild(t('span', 's-settings-sheet__label', 'GitHub 密钥'));
+      input = h('input', {
+        className: 's-settings-sheet__input', type: 'password',
+        placeholder: '粘到这里，只存这台手机', autocomplete: 'off', spellcheck: 'false',
+        aria: { label: 'GitHub 密钥' }
+      });
+      field.appendChild(input);
+      content.appendChild(field);
+
+      var linkRow = h('div', { className: 's-settings-actions' });
+      var linkBtn = h('button', { className: 'c-btn c-btn--ghost', type: 'button', text: '获取密钥（gist 权限）' });
+      linkBtn.addEventListener('click', function () {
+        try { global.open(api.TOKEN_PAGE, '_blank'); } catch (error) { /* 忽略 */ }
+      });
+      linkRow.appendChild(linkBtn);
+      content.appendChild(linkRow);
+
+      content.appendChild(h('p', {
+        className: 's-settings-group__note',
+        text: '开启后每笔账自动备份到你自己的 GitHub 私有 Gist；密钥只存本机。'
+      }));
+
+      actions.push({
+        label: '保存并开启', kind: 'primary',
+        onClick: function () {
+          var token = input ? String(input.value || '').trim() : '';
+          if (!token) { status.textContent = '还没填密钥'; return false; }
+          status.textContent = '正在开启…';
+          api.enable(token).then(function (res) {
+            if (res && res.ok) {
+              toast(ctx, '已开启');
+              closeCloudSheet();
+              render(ctx.root, ctx);
+            } else {
+              status.textContent = cloudMessage(res);
+            }
+          });
+          return false;
+        }
+      });
+    } else {
+      if (st.cloud && st.cloud.count > 0) {
+        content.appendChild(h('p', {
+          className: 's-settings-group__note',
+          text: '云端：' + st.cloud.count + ' 笔 · ' + (st.cloud.savedAt ? String(st.cloud.savedAt).slice(0, 16).replace('T', ' ') : '')
+        }));
+      }
+      actions.push({
+        label: '立即备份', kind: 'primary',
+        onClick: function () {
+          status.textContent = '备份中…';
+          api.syncNow({ force: true }).then(function (res) {
+            if (res && res.ok) {
+              toast(ctx, '已备份');
+              closeCloudSheet();
+              render(ctx.root, ctx);
+            } else {
+              status.textContent = cloudMessage(res);
+            }
+          });
+          return false;
+        }
+      });
+      actions.push({
+        label: '从云端恢复',
+        onClick: function () {
+          status.textContent = '恢复中…';
+          api.restore().then(function (res) {
+            if (res && res.ok) {
+              toast(ctx, '已恢复 ' + res.count + ' 笔');
+              closeCloudSheet();
+              refreshData(ctx);
+            } else {
+              status.textContent = cloudMessage(res);
+            }
+          });
+          return false;
+        }
+      });
+      actions.push({
+        label: '关闭', kind: 'ghost',
+        onClick: function () {
+          api.disable();
+          toast(ctx, '已关闭');
+          closeCloudSheet();
+          render(ctx.root, ctx);
+        }
+      });
+    }
+    XZB.ui.sheet.open({ title: '云备份', content: content, actions: actions });
   }
 
   /* ---------------- 关于 ---------------- */

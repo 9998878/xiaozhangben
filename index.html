@@ -24947,6 +24947,587 @@ textarea::selection {
 
 </script>
   <script>
+/* 小账本 2.0 · js/core/cloud-sync.js · owner: backend（2.34.0 云备份）
+ * 职责：把整本账自动备份到用户自己的 GitHub 私有 Gist，并在重装后一键恢复。
+ * 背景：iOS 主屏幕 Web 应用的存储独立于 Safari，删图标即清数据（WebKit 隔离机制）——
+ *       本地怎么存都挡不住「删应用」，唯一可靠出路是手机外副本。
+ * 选型：GitHub REST API 官方支持任意源 CORS，无需自建后端；私有 Gist 免费且仅用户可见。
+ * 铁律：①默认关闭、零网络——只有用户填入密钥并开启后才出站，数据只进用户自己的私有 Gist；
+ *       ②不另造备份格式——payload 复用 backup.export('json')，恢复复用 store.import（自带
+ *          pre-import 快照 + 校验 + 回滚 + 照片回填）；
+ *       ③内存克制——3s 防抖合并 + busy/pending 单飞（仿 backup.js 快照调度器），同一时刻
+ *          至多一份 JSON 文本在途；本地不存任何副本，配置仅一条 localStorage 记录；
+ *       ④覆盖保护——云端比本机新（gist.updated_at 晚于上次成功备份）时不自动覆盖；
+ *          新配置（lastSyncAt 为空，如重装后）绝不自动上传，等用户恢复或手动强制；
+ *       ⑤照片阈值——照片总字节 ≤2MB 才随备份带上（base64 会放大 ~1/3），超限自动降级纯账目；
+ *          整份 >9MB 拒传（Gist >10MB 须 git clone，REST 取不回）。
+ * 挂载：尾部三挂载 XZB.Core.cloudSync / XZB.core.cloudSync / module.exports。
+ */
+(function (global) {
+  'use strict';
+
+  var XZB = global.XZB || (global.XZB = {});
+  var Core = XZB.Core || (XZB.Core = {});
+  if (!XZB.core) { XZB.core = Core; }
+
+  var CONFIG_KEY = 'xzb.cloud.v1';
+  var GIST_FILE = 'xiaozhangben-backup.json';
+  var GIST_DESC = '小账本自动备份（私有，勿删）';
+  var API_BASE = 'https://api.github.com';
+  var TOKEN_PAGE = 'https://github.com/settings/tokens/new?scopes=gist&description=xiaozhangben';
+  var DEBOUNCE_MS = 3000;
+  var TIMEOUT_MS = 15000;
+  var PHOTO_SYNC_MAX_BYTES = 2 * 1024 * 1024;
+  var PAYLOAD_MAX_BYTES = 9 * 1024 * 1024;
+  var KEEPALIVE_MAX_BYTES = 60 * 1024;
+  var CLOCK_SKEW_MS = 1000;
+
+  var MESSAGES = {
+    E_CLOUD_NO_TOKEN: '还没填密钥',
+    E_CLOUD_AUTH: '密钥无效或没有 Gist 权限',
+    E_CLOUD_NETWORK: '网络不畅，稍后自动重试',
+    E_CLOUD_TOO_LARGE: '备份太大，超出云端单文件限制',
+    E_CLOUD_NOT_FOUND: '云端没有找到备份',
+    E_CLOUD_EMPTY: '云端备份是空的',
+    E_CLOUD_NEWER: '云端比本机新，已暂停自动覆盖',
+    E_CLOUD_DISABLED: '云备份未开启'
+  };
+
+  var cfg = null;
+  var busy = false;
+  var pending = false;
+  var timer = null;
+  var unsub = null;
+  var listening = false;
+  var lastError = null;
+  var cloudMeta = null;
+
+  function isObject(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
+
+  function fail(code, extra) {
+    var out = { ok: false, code: code, message: MESSAGES[code] || '云备份失败' };
+    if (isObject(extra)) {
+      Object.keys(extra).forEach(function (key) { out[key] = extra[key]; });
+    }
+    return out;
+  }
+
+  function nowIso() {
+    var dates = Core.dates || (XZB.core && XZB.core.dates);
+    if (dates && typeof dates.nowIso === 'function') { return dates.nowIso(); }
+    return new Date().toISOString();
+  }
+
+  function storeRef() { return Core.store || (XZB.core && XZB.core.store) || null; }
+  function backupRef() { return Core.backup || (XZB.core && XZB.core.backup) || null; }
+  function ls() { try { return global.localStorage || null; } catch (error) { return null; } }
+  function fileMap(text) { var files = {}; files[GIST_FILE] = { content: text }; return files; }
+
+  /* ============================== 配置（localStorage 单条记录） ============================== */
+
+  function readConfig() {
+    var storage = ls();
+    if (!storage) { return null; }
+    try {
+      var raw = storage.getItem(CONFIG_KEY);
+      if (!raw) { return null; }
+      var parsed = JSON.parse(raw);
+      if (!isObject(parsed) || typeof parsed.token !== 'string' || !parsed.token) { return null; }
+      return {
+        token: parsed.token,
+        gistId: typeof parsed.gistId === 'string' ? parsed.gistId : '',
+        enabled: parsed.enabled === true,
+        lastSyncAt: typeof parsed.lastSyncAt === 'string' ? parsed.lastSyncAt : null,
+        lastSyncedSavedAt: typeof parsed.lastSyncedSavedAt === 'string' ? parsed.lastSyncedSavedAt : null
+      };
+    } catch (error) { return null; }
+  }
+
+  function writeConfig() {
+    var storage = ls();
+    if (!storage || !cfg) { return; }
+    try { storage.setItem(CONFIG_KEY, JSON.stringify(cfg)); } catch (error) { /* 配额满：不阻断记账 */ }
+  }
+
+  function enabled() { return !!(cfg && cfg.enabled && cfg.token); }
+
+  /* ============================== 传输（15s 超时，错误码单一真源） ============================== */
+
+  function request(method, path, body, opts) {
+    if (!cfg || !cfg.token) { return Promise.resolve(fail('E_CLOUD_NO_TOKEN')); }
+    if (typeof global.fetch !== 'function') { return Promise.resolve(fail('E_CLOUD_NETWORK', { cause: 'fetch 缺失' })); }
+    var options = isObject(opts) ? opts : {};
+    var controller = typeof global.AbortController === 'function' ? new global.AbortController() : null;
+    var timeoutId = controller ? setTimeout(function () { controller.abort(); }, TIMEOUT_MS) : null;
+    var headers = {
+      Authorization: 'Bearer ' + cfg.token,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'xiaozhangben-cloud-sync'
+    };
+    if (body !== undefined) { headers['Content-Type'] = 'application/json'; }
+    var init = { method: method, headers: headers };
+    if (body !== undefined) { init.body = JSON.stringify(body); }
+    if (controller) { init.signal = controller.signal; }
+    if (options.keepalive) { init.keepalive = true; }
+    return global.fetch(API_BASE + path, init).then(function (resp) {
+      if (timeoutId) { clearTimeout(timeoutId); }
+      if (resp.status === 401) { return fail('E_CLOUD_AUTH'); }
+      if (resp.status === 404) { return fail('E_CLOUD_NOT_FOUND'); }
+      if (!resp.ok) { return fail('E_CLOUD_NETWORK', { status: resp.status }); }
+      if (resp.status === 204) { return { ok: true, data: null }; }
+      return resp.json().then(function (data) { return { ok: true, data: data }; },
+        function () { return fail('E_CLOUD_NETWORK'); });
+    }, function () {
+      if (timeoutId) { clearTimeout(timeoutId); }
+      return fail('E_CLOUD_NETWORK');
+    });
+  }
+
+  /* ============================== payload（复用 backup.export，不另造格式） ============================== */
+
+  function buildPayload() {
+    var backup = backupRef();
+    var store = storeRef();
+    if (!backup || typeof backup.export !== 'function' || !store) {
+      return Promise.resolve(fail('E_CLOUD_NETWORK', { cause: 'core 未加载' }));
+    }
+    var statsPromise;
+    try {
+      statsPromise = typeof store.photoStats === 'function' ? store.photoStats() : { ok: true, bytes: 0 };
+    } catch (error) { statsPromise = { ok: true, bytes: 0 }; }
+    return Promise.resolve(statsPromise).then(function (stats) {
+      var photoBytes = stats && stats.ok && isFinite(stats.bytes) ? stats.bytes : 0;
+      var withPhotos = photoBytes > 0 && photoBytes <= PHOTO_SYNC_MAX_BYTES;
+      return backup.export('json', { photos: withPhotos }).then(function (res) {
+        if (res && res.ok) { return payloadOf(res, withPhotos); }
+        /* 照片段失败（坏图/超限）→ 降级纯账目，绝不阻断备份 */
+        return backup.export('json', { photos: false }).then(function (plain) {
+          if (!plain || !plain.ok) { return plain || fail('E_CLOUD_NETWORK'); }
+          return payloadOf(plain, false);
+        });
+      });
+    }, function () {
+      return backup.export('json', { photos: false }).then(function (plain) {
+        if (!plain || !plain.ok) { return plain || fail('E_CLOUD_NETWORK'); }
+        return payloadOf(plain, false);
+      });
+    });
+
+    function payloadOf(res, withPhotos) {
+      if (res.bytes > PAYLOAD_MAX_BYTES) { return fail('E_CLOUD_TOO_LARGE', { bytes: res.bytes }); }
+      var savedAt = null;
+      try {
+        var meta = typeof store.getMeta === 'function' ? store.getMeta() : null;
+        savedAt = meta && meta.savedAt ? meta.savedAt : null;
+      } catch (error) { savedAt = null; }
+      var included = !!(withPhotos && res.photos && res.photos.included === true && res.photos.count > 0);
+      return { ok: true, text: res.content, bytes: res.bytes, savedAt: savedAt, photosIncluded: included };
+    }
+  }
+
+  /* ============================== gist 发现 / 创建 ============================== */
+
+  function findGist() {
+    return request('GET', '/gists?per_page=100').then(function (res) {
+      if (!res.ok) { return res; }
+      var list = Array.isArray(res.data) ? res.data : [];
+      for (var i = 0; i < list.length; i += 1) {
+        var item = list[i];
+        if (item && item.files && item.files[GIST_FILE] && item.id) {
+          return { ok: true, id: String(item.id) };
+        }
+      }
+      return { ok: true, id: '' };
+    });
+  }
+
+  function createGist(text) {
+    return request('POST', '/gists', {
+      description: GIST_DESC,
+      public: false,
+      files: fileMap(text)
+    }).then(function (res) {
+      if (!res.ok) { return res; }
+      if (!res.data || !res.data.id) { return fail('E_CLOUD_NETWORK'); }
+      return { ok: true, id: String(res.data.id), updatedAt: res.data.updated_at || null };
+    });
+  }
+
+  /* ============================== 同步（防抖 + 单飞 + 覆盖保护） ============================== */
+
+  function needsSync() {
+    if (!enabled()) { return false; }
+    var store = storeRef();
+    var savedAt = null;
+    try {
+      var meta = store && typeof store.getMeta === 'function' ? store.getMeta() : null;
+      savedAt = meta && meta.savedAt ? meta.savedAt : null;
+    } catch (error) { savedAt = null; }
+    return !savedAt || savedAt !== cfg.lastSyncedSavedAt;
+  }
+
+  function syncNow(opts) {
+    var options = isObject(opts) ? opts : {};
+    if (!enabled()) { return Promise.resolve(fail('E_CLOUD_DISABLED')); }
+    if (busy) { pending = true; return Promise.resolve({ ok: true, queued: true }); }
+    busy = true;
+    return runSync(options).then(done, done);
+    function done(res) {
+      busy = false;
+      if (res && res.ok) { lastError = null; }
+      else if (res && res.code) { lastError = res.code; }
+      if (pending) { pending = false; schedule(0); }
+      return res;
+    }
+  }
+
+  function runSync(options) {
+    var force = options.force === true;
+    if (!cfg.gistId) {
+      /* gist 被删 / 从未建：用当前数据重建 */
+      return buildPayload().then(function (payload) {
+        if (!payload.ok) { return payload; }
+        return createGist(payload.text).then(function (created) {
+          if (!created.ok) { return created; }
+          cfg.gistId = created.id;
+          cfg.lastSyncAt = created.updatedAt || nowIso();
+          cfg.lastSyncedSavedAt = payload.savedAt;
+          writeConfig();
+          return { ok: true, created: true, bytes: payload.bytes };
+        });
+      });
+    }
+    return request('GET', '/gists/' + cfg.gistId).then(function (meta) {
+      if (!meta.ok) {
+        if (meta.code === 'E_CLOUD_NOT_FOUND') { cfg.gistId = ''; writeConfig(); }
+        return meta;
+      }
+      var gist = meta.data || {};
+      if (!force && !overwriteAllowed(gist.updated_at || '')) {
+        return fail('E_CLOUD_NEWER');
+      }
+      return buildPayload().then(function (payload) {
+        if (!payload.ok) { return payload; }
+        if (!force && payload.savedAt && payload.savedAt === cfg.lastSyncedSavedAt) {
+          return { ok: true, skipped: true };
+        }
+        var reqOpts = options.keepalive && payload.bytes <= KEEPALIVE_MAX_BYTES ? { keepalive: true } : {};
+        return request('PATCH', '/gists/' + cfg.gistId, { files: fileMap(payload.text) }, reqOpts).then(function (res) {
+          if (!res.ok) { return res; }
+          cfg.lastSyncAt = (res.data && res.data.updated_at) || nowIso();
+          cfg.lastSyncedSavedAt = payload.savedAt;
+          writeConfig();
+          return { ok: true, bytes: payload.bytes, photosIncluded: payload.photosIncluded };
+        });
+      });
+    });
+  }
+
+  /* 覆盖保护：新配置（重装后 lastSyncAt 为空）绝不自动覆盖；
+     云端时间戳晚于上次成功备份 ⇒ 别的设备写过，暂停自动覆盖等用户裁决。 */
+  function overwriteAllowed(cloudUpdatedAt) {
+    if (!cfg.lastSyncAt) { return false; }
+    if (!cloudUpdatedAt) { return true; }
+    var cloud = Date.parse(cloudUpdatedAt);
+    var mine = Date.parse(cfg.lastSyncAt);
+    if (!isFinite(cloud) || !isFinite(mine)) { return true; }
+    return cloud <= mine + CLOCK_SKEW_MS;
+  }
+
+  /* ============================== 恢复（复用 store.import） ============================== */
+
+  function fetchCloudText() {
+    if (!enabled()) { return Promise.resolve(fail('E_CLOUD_DISABLED')); }
+    var ready = cfg.gistId
+      ? Promise.resolve({ ok: true, id: cfg.gistId })
+      : findGist().then(function (found) {
+        if (!found.ok) { return found; }
+        if (!found.id) { return fail('E_CLOUD_NOT_FOUND'); }
+        cfg.gistId = found.id; writeConfig();
+        return { ok: true, id: found.id };
+      });
+    return ready.then(function (got) {
+      if (!got.ok) { return got; }
+      return request('GET', '/gists/' + got.id).then(function (res) {
+        if (!res.ok) { return res; }
+        var gist = res.data || {};
+        var file = gist.files && gist.files[GIST_FILE];
+        if (!file) { return fail('E_CLOUD_NOT_FOUND'); }
+        if (file.truncated && file.raw_url) {
+          /* 官方截断规则：>1MB 的内容走 raw_url 取全文 */
+          return global.fetch(file.raw_url, {
+            headers: { Authorization: 'Bearer ' + cfg.token, 'User-Agent': 'xiaozhangben-cloud-sync' }
+          }).then(function (resp) {
+            if (!resp.ok) { return fail('E_CLOUD_NETWORK', { status: resp.status }); }
+            return resp.text().then(function (text) {
+              return { ok: true, text: text, updatedAt: gist.updated_at || null };
+            });
+          }, function () { return fail('E_CLOUD_NETWORK'); });
+        }
+        return { ok: true, text: file.content || '', updatedAt: gist.updated_at || null };
+      });
+    });
+  }
+
+  function parseCloud(text) {
+    var parsed;
+    try { parsed = JSON.parse(text); } catch (error) { return fail('E_CLOUD_EMPTY'); }
+    var data = parsed && parsed.data;
+    if (!isObject(data) || !Array.isArray(data.transactions)) { return fail('E_CLOUD_EMPTY'); }
+    var count = 0;
+    for (var i = 0; i < data.transactions.length; i += 1) {
+      var tx = data.transactions[i];
+      if (tx && tx.deleted !== true) { count += 1; }
+    }
+    return { ok: true, count: count, savedAt: data.updatedAt || parsed.exportedAt || null };
+  }
+
+  function refreshCloudMeta() {
+    return fetchCloudText().then(function (res) {
+      if (!res.ok) { return res; }
+      var info = parseCloud(res.text);
+      if (!info.ok) { return info; }
+      cloudMeta = { count: info.count, savedAt: info.savedAt, updatedAt: res.updatedAt };
+      return { ok: true, cloud: cloudMeta };
+    });
+  }
+
+  function restore() {
+    return fetchCloudText().then(function (res) {
+      if (!res.ok) { return res; }
+      var info = parseCloud(res.text);
+      if (!info.ok) { return info; }
+      var store = storeRef();
+      if (!store || typeof store.import !== 'function') { return fail('E_CLOUD_NETWORK', { cause: 'store 未加载' }); }
+      return store.import(res.text, { mode: 'replace' }).then(function (imp) {
+        if (!imp || !imp.ok) { return imp || fail('E_CLOUD_NETWORK'); }
+        /* 防回声：刚恢复的 savedAt 记为已同步，云端时间戳对齐基准 */
+        try {
+          var meta = typeof store.getMeta === 'function' ? store.getMeta() : null;
+          cfg.lastSyncedSavedAt = meta && meta.savedAt ? meta.savedAt : null;
+        } catch (error) { /* 忽略 */ }
+        cfg.lastSyncAt = res.updatedAt || nowIso();
+        writeConfig();
+        cloudMeta = { count: info.count, savedAt: info.savedAt, updatedAt: res.updatedAt };
+        if (XZB.app && typeof XZB.app.refresh === 'function') {
+          try { XZB.app.refresh(); } catch (error) { /* 刷新失败不影响已恢复的数据 */ }
+        }
+        return { ok: true, count: info.count, savedAt: info.savedAt };
+      });
+    });
+  }
+
+  /* ============================== 开启 / 关闭 ============================== */
+
+  function enable(token) {
+    var value = String(token === undefined || token === null ? '' : token).trim();
+    if (!value) { return Promise.resolve(fail('E_CLOUD_NO_TOKEN')); }
+    var prev = readConfig();
+    cfg = { token: value, gistId: '', enabled: false, lastSyncAt: null, lastSyncedSavedAt: null };
+    lastError = null; cloudMeta = null;
+    /* 验活 + 发现已有备份（重装场景）；没有才用当前数据新建 */
+    return findGist().then(function (found) {
+      if (!found.ok) { cfg = prev; return found; }
+      if (found.id) {
+        cfg.gistId = found.id;
+        /* 同机重新开启（同 token 同 gist）：保留同步基准，自动备份照常续跑 */
+        if (prev && prev.token === value && prev.gistId === found.id) {
+          cfg.lastSyncAt = prev.lastSyncAt;
+          cfg.lastSyncedSavedAt = prev.lastSyncedSavedAt;
+        }
+        cfg.enabled = true;
+        writeConfig();
+        start();
+        return refreshCloudMeta().then(function (meta) {
+          if (!meta.ok) { return { ok: true, discovered: true, cloud: null }; }
+          return { ok: true, discovered: true, cloud: cloudMeta };
+        });
+      }
+      return buildPayload().then(function (payload) {
+        if (!payload.ok) { cfg = prev; return payload; }
+        return createGist(payload.text).then(function (created) {
+          if (!created.ok) { cfg = prev; return created; }
+          cfg.gistId = created.id;
+          cfg.enabled = true;
+          cfg.lastSyncAt = created.updatedAt || nowIso();
+          cfg.lastSyncedSavedAt = payload.savedAt;
+          writeConfig();
+          start();
+          return { ok: true, created: true };
+        });
+      });
+    });
+  }
+
+  function disable() {
+    if (!cfg) { return { ok: true }; }
+    cfg.enabled = false;
+    writeConfig();
+    stop();
+    return { ok: true };
+  }
+
+  function clearConfig() {
+    stop();
+    cfg = null;
+    lastError = null;
+    cloudMeta = null;
+    var storage = ls();
+    if (storage) { try { storage.removeItem(CONFIG_KEY); } catch (error) { /* 不阻断出口 */ } }
+    return { ok: true };
+  }
+
+  /* ============================== 调度（仿 backup.js 快照调度器） ============================== */
+
+  function schedule(delay) {
+    if (!enabled()) { return; }
+    if (timer) { clearTimeout(timer); }
+    timer = setTimeout(function () {
+      timer = null;
+      syncNow();
+    }, delay === undefined ? DEBOUNCE_MS : delay);
+  }
+
+  function onStoreEvent(event) {
+    if (!enabled() || !event) { return; }
+    if (event.type !== 'save' && event.type !== 'restore' && event.type !== 'reset' && event.type !== 'merge') { return; }
+    var savedAt = event.savedAt || null;
+    if (!savedAt) {
+      var store = storeRef();
+      try {
+        var meta = store && typeof store.getMeta === 'function' ? store.getMeta() : null;
+        savedAt = meta && meta.savedAt ? meta.savedAt : null;
+      } catch (error) { savedAt = null; }
+    }
+    if (savedAt && savedAt === cfg.lastSyncedSavedAt) { return; }
+    schedule();
+  }
+
+  function onVisibility() {
+    try {
+      if (global.document && global.document.visibilityState === 'hidden') { flush(); return; }
+    } catch (error) { /* 忽略 */ }
+    if (enabled() && needsSync()) { schedule(500); }
+  }
+
+  function onPageHide() { flush(); }
+
+  function flush() {
+    if (!enabled() || busy) { return; }
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (!needsSync()) { return; }
+    syncNow({ keepalive: true });
+  }
+
+  function start() {
+    if (listening) { return; }
+    var store = storeRef();
+    if (store && typeof store.subscribe === 'function') {
+      try { unsub = store.subscribe(onStoreEvent); } catch (error) { unsub = null; }
+    }
+    if (typeof global.addEventListener === 'function') {
+      try {
+        global.addEventListener('visibilitychange', onVisibility);
+        global.addEventListener('pagehide', onPageHide);
+      } catch (error) { /* 忽略 */ }
+    }
+    listening = true;
+  }
+
+  function stop() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    pending = false;
+    if (typeof unsub === 'function') { try { unsub(); } catch (error) { /* 忽略 */ } }
+    unsub = null;
+    if (typeof global.removeEventListener === 'function') {
+      try {
+        global.removeEventListener('visibilitychange', onVisibility);
+        global.removeEventListener('pagehide', onPageHide);
+      } catch (error) { /* 忽略 */ }
+    }
+    listening = false;
+  }
+
+  /* ============================== 启动 ============================== */
+
+  function init() {
+    cfg = readConfig();
+    if (!enabled()) { return { ok: true, enabled: false }; }
+    start();
+    var store = storeRef();
+    var db = store && typeof store.get === 'function' ? store.get() : null;
+    var localCount = 0;
+    if (db && Array.isArray(db.transactions)) {
+      for (var i = 0; i < db.transactions.length; i += 1) {
+        var tx = db.transactions[i];
+        if (tx && tx.deleted !== true) { localCount += 1; }
+      }
+    }
+    if (localCount === 0) {
+      /* 本机空（新装/刚清空）：取云端元信息供设置状态行，不弹窗 */
+      refreshCloudMeta();
+    } else if (needsSync()) {
+      schedule(1500);
+    }
+    return { ok: true, enabled: true };
+  }
+
+  function status() {
+    return {
+      enabled: enabled(),
+      hasToken: !!(cfg && cfg.token),
+      gistId: (cfg && cfg.gistId) || '',
+      lastSyncAt: (cfg && cfg.lastSyncAt) || null,
+      lastSyncedSavedAt: (cfg && cfg.lastSyncedSavedAt) || null,
+      busy: busy,
+      pending: pending || !!timer,
+      lastError: lastError,
+      cloud: cloudMeta
+    };
+  }
+
+  var api = {
+    CONFIG_KEY: CONFIG_KEY,
+    GIST_FILE: GIST_FILE,
+    GIST_DESC: GIST_DESC,
+    TOKEN_PAGE: TOKEN_PAGE,
+    DEBOUNCE_MS: DEBOUNCE_MS,
+    PHOTO_SYNC_MAX_BYTES: PHOTO_SYNC_MAX_BYTES,
+    PAYLOAD_MAX_BYTES: PAYLOAD_MAX_BYTES,
+    MESSAGES: MESSAGES,
+    init: init,
+    enable: enable,
+    disable: disable,
+    clearConfig: clearConfig,
+    syncNow: syncNow,
+    restore: restore,
+    refreshCloudMeta: refreshCloudMeta,
+    status: status,
+    flush: flush,
+    /* 纯函数测试缝（Node 自检直接驱动，无 DOM） */
+    testKit: {
+      buildPayload: buildPayload,
+      parseCloud: parseCloud,
+      overwriteAllowed: overwriteAllowed,
+      onStoreEvent: onStoreEvent,
+      needsSync: needsSync,
+      findGist: findGist,
+      readConfig: readConfig,
+      setConfigForTest: function (next) { cfg = next; },
+      schedulerState: function () { return { busy: busy, pending: pending, timer: !!timer, listening: listening }; }
+    }
+  };
+
+  Core.cloudSync = api;
+  if (XZB.core && XZB.core !== Core) { XZB.core.cloudSync = api; }
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+  }
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+</script>
+  <script>
 /* 小账本 2.0 · js/core/photos.js · owner: frontend（F20 / PLAN §8.4 T2）
  * 契约锚点：PLAN §2（`XZB.Core.photos.PARAMS / compress / newRecord / fmtBytes`）、§6（PhotoRecord 12 字段）、
  *           §8.1（构建三处登记）、§9.4 / §9.4.1（PH-PERF-1…6、PH-EDIT 相关）、§1.5 裁决 2/9/10/17、§10 第 1/2 条。
@@ -31594,6 +32175,8 @@ textarea::selection {
       if (typeof opts.clearPrefs === 'function') try { opts.clearPrefs(); } catch (e) {}
       /* AI 密钥（xzb.ai.v1）一并删除：设备转手后不得残留前任的端点配置与密钥（2.27.1） */
       if (typeof opts.clearAiKey === 'function') try { opts.clearAiKey(); } catch (e) {}
+      /* 云备份配置（xzb.cloud.v1）一并删除（2.34.0，与 AI 密钥同语义） */
+      if (typeof opts.clearCloudKey === 'function') try { opts.clearCloudKey(); } catch (e) {}
       if (!del(keyOf('lockKey'))) msg = msg || COPY.storage;
       if (msg) throw fail('E_STORAGE', msg);
       try { if (keyOf('wipePendingKey')) global.localStorage.removeItem(keyOf('wipePendingKey')); } catch (e) {}
@@ -32739,7 +33322,7 @@ textarea::selection {
   /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
      原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
      由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.33.0';
+  XZB.version = '2.34.0';
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};
@@ -32804,6 +33387,15 @@ textarea::selection {
           if (llm && typeof llm.clearKey === 'function') { llm.clearKey(); return; }
         } catch (error) { /* 落到兜底 */ }
         try { global.localStorage.removeItem('xzb.ai.v1'); } catch (error) { /* 不阻断出口 */ }
+      },
+      /* 云备份配置（xzb.cloud.v1，含 GitHub 密钥）一并删除：与 AI 密钥同语义，
+         设备转手后不得残留前任的密钥（2.34.0）。失败不阻断闸门出口。 */
+      clearCloudKey: function () {
+        try {
+          var cs = XZB.core && XZB.core.cloudSync;
+          if (cs && typeof cs.clearConfig === 'function') { cs.clearConfig(); return; }
+        } catch (error) { /* 落到兜底 */ }
+        try { global.localStorage.removeItem('xzb.cloud.v1'); } catch (error) { /* 不阻断出口 */ }
       },
       /* ②③ 关库/删库只有 store.js 能做（L-o）；失败 reject ⇒ lock.js 停在可重试闸门 */
       wipeStore: function () {
@@ -33892,6 +34484,7 @@ textarea::selection {
 
       setupInstallGuide();
       registerServiceWorker();
+      initCloudSync();
 
       if (migrationError) {
         if (UI.toast && typeof UI.toast.show === 'function') {
@@ -33913,6 +34506,15 @@ textarea::selection {
     });
 
     return readyPromise;
+  }
+
+  /* 云备份（2.34.0）：只在用户开启后才订阅 store / 出站；未开启零网络零开销。
+     初始化失败绝不阻断启动（与 autoPostDueRecurring 同语义）。 */
+  function initCloudSync() {
+    try {
+      var cs = Core.cloudSync || (XZB.core && XZB.core.cloudSync);
+      if (cs && typeof cs.init === 'function') { cs.init(); }
+    } catch (error) { /* 云备份失败不影响记账 */ }
   }
 
   function loadedNotice() {
