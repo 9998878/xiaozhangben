@@ -77,12 +77,25 @@
 
 ## 待办（P3 摘要，全文见报告）
 
-- 传输层：非 2xx 读 body 的进一步细分（404/405 等仍归 config，仅 401/403 已点名密钥）；LLM 词表上限 60 升到 80 的评估（截断排序 2.28.1 已修，上限本身未动）。
+- 传输层：LLM 词表上限 60 升到 80 的评估（上限本身未动；2.38.0 已把 `fitBody` 改精确裁剪 + 使用频度排序，截断丢词表的伤害已缓解）；重试次数维持 R-04 决定的 0 次。
 - 解读口径：buffer 分子（跨账本全历史余额）与分母（单账本月必要支出）口径混合，需产品定口径。
 - UI：`home.js` 情境入口开关只有读取、没有 UI（注释自称「我的里可关」未兑现）——补开关或删死码，需产品定。
-- 解析边界：`午饭28打车15` 只记最后一笔，候选列表无 28 的备选（多候选需改解析器产出）；core-assistant `EXTRA_ALIASES` 与 nl.js 双词表仍有零星漂移（`ca_veg` 死键已于 2.28.2 改正为 `ca_veggie`）。
+- 解析边界：多笔无分隔已于 2.38.0 保守拆分（每段都落已知分类才拆）；剩余歧义——物品名+数字（如 `ChatGPT25`）按 ASCII 边界语义不拆（与 nl 同口径），单段多候选金额仍取「最后一个候选」口径。
 - 测试基建：20+ 条源码字符串断言易误红；harness 无共享 helper；CI 已补 GitHub Actions（跑 `scripts/test.js` + `scripts/check.js`）。
 - **iconOk 白名单**（2.28.3 已回退 2.28.2 的启用）：重新启用前必须先做「未知图标 → 默认图标」的**加载期兼容迁移**——老库图标键可能来自已下线的注册表条目，加载期严格校验会 `E_STORAGE_CORRUPT` 把用户挡在数据门外（数据与快照仍在，但打不开）。教训：加载路径上的校验收紧，必须有迁移或降级方案。
+
+## 已修（2.38.0 存档）
+
+| 位置 | 问题 | 回归 |
+| --- | --- | --- |
+| `core-assistant.js` `splitSegments`/`BRIDGE_RE` | `午饭28打车15` 只记最后一笔；连接词（然后/还有）前无空格不分句 | `tests/assistant-core-logic.test.js` 用例 1（含防误拆：苹果13手机壳50/充话费100送20） |
+| `core-assistant.js` `recentAccountId`/`defaultAccountId` | `slice(0,400)` 在插入序库上取的是最旧 400 笔，>400 笔库默认账户补错；每笔重复扫描 | 用例 2；cx 级索引缓存（不可枚举属性，流水条数变化自动作废） |
+| `core-assistant.js` `EXTRA_ALIASES` + `nl.js` | 双词表漂移：油费/机票/KTV 各只有一边有；奖金 两表各指一个分类；奶茶 跨表冲突 | 用例 3（含漂移守卫）；nl 导出 `categoryAliases` 为权威，EXTRA 降为兜底，运行时取并集 |
+| `core-assistant.js` `mapStatus`/`httpOnce` | 非 2xx 不读响应体，404/405/模型名错一律归「配置不合法」 | 用例 4：endpoint/model/auth 细分 + detail 掩码密钥、限长 120 |
+| `core-assistant.js` `fitBody` | 对半砍截断：超 3 行也丢 30 行词表 | 用例 5.2：按行字节精确裁剪（分类保底 6、账户保底 2） |
+| `core-assistant.js` `categoryPairs` | 用户分类只按 sort 排，与使用频度无关 | 用例 5.1：带 usage 时按使用频度降序，system 保底不变 |
+| `core-assistant.js` `handleRemoteResult` | 云端 intent=query 但本地装配失败，回落被误报「返回的内容看不懂」 | 改本地继续处理（mode local，不套回落文案） |
+| `assistant.js` `REASON_TEXT` | config 文案谎报「未启用」；endpoint/model 无文案；回落不挂服务端细节 | 用例 7 |
 
 ## 已修（2.28.2 批次 3 存档）
 

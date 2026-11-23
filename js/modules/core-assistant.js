@@ -146,7 +146,10 @@
   var WEEK_CN = ['日', '一', '二', '三', '四', '五', '六'];
 
   var SPLIT_RE = /[，,；;、\n]+/;
-  var BRIDGE_RE = /(?:^|\s)(?:然后|还有|另外|再记一笔|再加上|以及)\s*/;
+  /* 2.38.0：连接词前不再要求空白/行首——中文输入没有空格，
+     「午饭28然后打车15」旧版整句不分段，只记最后一笔。这些词是显式连接词，
+     出现在哪都该断句（疑问/查账路径不走这里，误伤面极小）。 */
+  var BRIDGE_RE = /(?:然后|还有|另外|再记一笔|再加上|以及)\s*/;
 
   /* ============================== 依赖 ============================== */
 
@@ -202,24 +205,42 @@
     return '¥' + ((Number(cents) || 0) / 100).toFixed(2);
   }
 
+  /* 2.38.0：同一句话会在 detectIntent / fastLocalReply / parseCreate / 云端 seg 对齐
+     里被反复要金额，nl.parseAmount 是纯函数——加有界缓存，超上限整表清空，
+     不做 LRU（句子短、条目少，简单够用，也绝不无界增长）。 */
+  var CENTS_CACHE = {};
+  var CENTS_CACHE_N = 0;
+  var CENTS_CACHE_MAX = 256;
+
   function parseCents(text) {
-    var nl = nlApi();
     var raw = String(text || '');
+    if (!raw) { return null; }
+    if (Object.prototype.hasOwnProperty.call(CENTS_CACHE, raw)) { return CENTS_CACHE[raw]; }
+    var out = null;
+    var nl = nlApi();
     if (nl && typeof nl.parseAmount === 'function') {
       var res = nl.parseAmount(raw);
-      if (res && res.ok) { return res.cents; }
+      if (res && res.ok) { out = res.cents; }
     }
-    var money = moneyApi();
-    if (money && typeof money.parseAmount === 'function') {
-      var out = money.parseAmount(raw);
-      if (out && out.ok) { return out.cents; }
-      if (typeof out === 'number' && Number.isInteger(out)) { return out; }
+    if (out === null) {
+      var money = moneyApi();
+      if (money && typeof money.parseAmount === 'function') {
+        var mout = money.parseAmount(raw);
+        if (mout && mout.ok) { out = mout.cents; }
+        else if (typeof mout === 'number' && Number.isInteger(mout)) { out = mout; }
+      }
     }
-    var m = raw.replace(/[^\d.]/g, '');
-    if (!m) { return null; }
-    var yuan = Number(m);
-    if (!isFinite(yuan) || yuan <= 0) { return null; }
-    return Math.round(yuan * 100);
+    if (out === null) {
+      var m = raw.replace(/[^\d.]/g, '');
+      if (m) {
+        var yuan = Number(m);
+        if (isFinite(yuan) && yuan > 0) { out = Math.round(yuan * 100); }
+      }
+    }
+    if (CENTS_CACHE_N >= CENTS_CACHE_MAX) { CENTS_CACHE = {}; CENTS_CACHE_N = 0; }
+    CENTS_CACHE[raw] = out;
+    CENTS_CACHE_N += 1;
+    return out;
   }
 
   /* ============================== 文本 ============================== */
@@ -277,8 +298,62 @@
     };
   }
 
-  function accountById(cx, id) { return findIn(cx.accounts, id); }
-  function categoryById(cx, id) { return findIn(cx.categories, id); }
+  /* 2.38.0：cx 级索引缓存——一条消息里 contextOf 只建一次 cx，但按 id 找账户/分类、
+     默认账户、最近使用账户会被每笔反复调用。旧实现每次 findIn 线性扫、
+     recentAccountId 每笔重扫流水。现在每个 cx 建一次索引（不可枚举属性，
+     不污染 JSON 序列化），后续查找 O(1)。流水条数变了（execute 写入后复用同一 cx）
+     自动作废账户类缓存；对象被冻结时退化为每次现算，正确性不受影响。 */
+  function cxIndex(cx) {
+    if (!cx || typeof cx !== 'object') { return null; }
+    if (cx.__idx) { return cx.__idx; }
+    var idx = {
+      acct: Object.create(null), cat: Object.create(null),
+      liveAcct: Object.create(null), liveCat: Object.create(null),
+      recent: undefined, defAcct: undefined, tokens: null, txLen: 0
+    };
+    var i;
+    var accounts = Array.isArray(cx.accounts) ? cx.accounts : [];
+    for (i = 0; i < accounts.length; i += 1) {
+      if (accounts[i] && accounts[i].id && !idx.acct[accounts[i].id]) { idx.acct[accounts[i].id] = accounts[i]; }
+    }
+    var categories = Array.isArray(cx.categories) ? cx.categories : [];
+    for (i = 0; i < categories.length; i += 1) {
+      if (categories[i] && categories[i].id && !idx.cat[categories[i].id]) { idx.cat[categories[i].id] = categories[i]; }
+    }
+    var liveA = Array.isArray(cx.liveAccounts) ? cx.liveAccounts : [];
+    for (i = 0; i < liveA.length; i += 1) {
+      if (liveA[i] && liveA[i].id && !idx.liveAcct[liveA[i].id]) { idx.liveAcct[liveA[i].id] = liveA[i]; }
+    }
+    var liveC = Array.isArray(cx.liveCategories) ? cx.liveCategories : [];
+    for (i = 0; i < liveC.length; i += 1) {
+      if (liveC[i] && liveC[i].id && !idx.liveCat[liveC[i].id]) { idx.liveCat[liveC[i].id] = liveC[i]; }
+    }
+    idx.txLen = ((cx.db && cx.db.transactions) || []).length;
+    try {
+      Object.defineProperty(cx, '__idx', { value: idx, enumerable: false, writable: true, configurable: true });
+    } catch (e) { return idx; /* 冻结对象：不缓存，每次现算 */ }
+    return idx;
+  }
+
+  function idxRefresh(idx, cx) {
+    var n = ((cx.db && cx.db.transactions) || []).length;
+    if (idx.txLen !== n) {
+      idx.txLen = n;
+      idx.recent = undefined;
+      idx.defAcct = undefined;
+    }
+  }
+
+  function accountById(cx, id) {
+    var idx = cxIndex(cx);
+    if (idx) { return idx.acct[id] || null; }
+    return findIn(cx.accounts, id);
+  }
+  function categoryById(cx, id) {
+    var idx = cxIndex(cx);
+    if (idx) { return idx.cat[id] || null; }
+    return findIn(cx.categories, id);
+  }
 
   function findIn(list, id) {
     for (var i = 0; i < list.length; i += 1) {
@@ -297,27 +372,46 @@
     return cat ? String(cat.name || '分类') : '';
   }
 
-  /* 最近使用账户：取最近 40 笔（按 createdAt 倒序）里出现过的第一个有效账户 */
+  /* 最近使用账户：全库里 createdAt 最大的有效账户。
+     2.38.0 修复：旧版 slice(0, 400)——流水按插入序存放（最旧在前），
+     超过 400 笔的库实际取的是「最旧 400 笔里最新的」，默认账户会补错。
+     改为全量扫描 + cx 级缓存（一条消息只算一次，写入后自动作废）。 */
   function recentAccountId(cx) {
-    var list = (cx.db.transactions || []).slice(0, 400);
+    var idx = cxIndex(cx);
+    if (idx) {
+      idxRefresh(idx, cx);
+      if (idx.recent !== undefined) { return idx.recent; }
+    }
+    var list = (cx.db && cx.db.transactions) || [];
     var best = null;
     var bestAt = '';
     for (var i = 0; i < list.length; i += 1) {
       var tx = list[i];
       if (!tx || tx.deleted === true || !tx.accountId) { continue; }
-      if (!findIn(cx.liveAccounts, tx.accountId)) { continue; }
+      if (idx ? !idx.liveAcct[tx.accountId] : !findIn(cx.liveAccounts, tx.accountId)) { continue; }
       var at = String(tx.createdAt || tx.updatedAt || tx.date || '');
       if (!best || at > bestAt) { best = tx.accountId; bestAt = at; }
     }
+    if (idx) { idx.recent = best; }
     return best;
   }
 
   function defaultAccountId(cx) {
+    var idx = cxIndex(cx);
+    if (idx) {
+      idxRefresh(idx, cx);
+      if (idx.defAcct !== undefined) { return idx.defAcct; }
+    }
     var fromSettings = cx.settings && cx.settings.defaultAccountId;
-    if (fromSettings && findIn(cx.liveAccounts, fromSettings)) { return fromSettings; }
-    var recent = recentAccountId(cx);
-    if (recent) { return recent; }
-    return cx.liveAccounts.length ? cx.liveAccounts[0].id : '';
+    var out = '';
+    if (fromSettings && (idx ? idx.liveAcct[fromSettings] : findIn(cx.liveAccounts, fromSettings))) {
+      out = fromSettings;
+    } else {
+      var recent = recentAccountId(cx);
+      out = recent || (cx.liveAccounts.length ? cx.liveAccounts[0].id : '');
+    }
+    if (idx) { idx.defAcct = out; }
+    return out;
   }
 
   /* 转账的转入账户也不问：取一个和转出不同的默认账户。
@@ -361,39 +455,48 @@
   function detectIntent(text) {
     var s = norm(text);
     if (!s) { return 'unknown'; }
+    /* 2.38.0：金额只解析一次（旧版守卫和兜底各调一次 parseCents） */
+    var cents = parseCents(s);
     /* 记账守卫（在 insight 之前）：明确的记账句式即使带「预算/少花」等词也归 create，
      * 例如「记一笔 加油 300 从预算出」「记一笔 少花点」——不能被吞成洞察问答。 */
-    if (parseCents(s) && /^记(一笔|一记|个|上|下|一笔账)/.test(s)) { return 'create'; }
+    if (cents && /^记(一笔|一记|个|上|下|一笔账)/.test(s)) { return 'create'; }
     for (var i = 0; i < INTENT_RULES.length; i += 1) {
       if (INTENT_RULES[i].re.test(s)) { return INTENT_RULES[i].intent; }
     }
-    var cents = parseCents(s);
     if (cents) { return 'create'; }
     return 'unknown';
   }
 
   /* ============================== 分句 ============================== */
 
-  /* 只在该分句能独立表达一笔时才拆；小数、日期、时间、「从…转到…」内部的分隔符要保护 */
-  function splitSegments(text) {
-    var s = norm(text);
-    if (!s) { return []; }
-
+  /* 只在该分句能独立表达一笔时才拆；小数、日期、时间、「从…转到…」内部的分隔符要保护。
+     2.38.0：保护逻辑抽成 guardText，多笔无分隔拆分（splitAmountPairs）复用同一套守卫。 */
+  function guardText(s) {
     var guards = [];
-    function guard(pattern, label) {
+    function guard(pattern) {
       s = s.replace(pattern, function (match) {
         guards.push(match);
         return '\u0001' + (guards.length - 1) + '\u0002';
       });
     }
     /* 1) 小数 / 金额：12.5、12.50 元 */
-    guard(/\d+\.\d+/g, 'decimal');
+    guard(/\d+\.\d+/g);
     /* 2) 日期与时间：8月1日、2026-08-01、12:30 */
-    guard(/\d{4}-\d{2}-\d{2}/g, 'date');
-    guard(/\d{1,2}月\d{1,2}[日号]/g, 'date');
-    guard(/\d{1,2}[:：]\d{2}/g, 'time');
+    guard(/\d{4}-\d{2}-\d{2}/g);
+    guard(/\d{1,2}月\d{1,2}[日号]/g);
+    guard(/\d{1,2}[:：]\d{2}/g);
     /* 3) 从 A 转/转到 B：整段视为一笔 */
-    guard(/从[^，。；;\n]{0,12}?(?:转|转到|转到账)[^，。；;\n]{0,16}/g, 'transfer');
+    guard(/从[^，。；;\n]{0,12}?(?:转|转到|转到账)[^，。；;\n]{0,16}/g);
+    return { s: s, guards: guards };
+  }
+
+  function splitSegments(text, cx) {
+    var s = norm(text);
+    if (!s) { return []; }
+
+    var g = guardText(s);
+    s = g.s;
+    var guards = g.guards;
 
     var parts = s.split(SPLIT_RE);
     var out = [];
@@ -411,7 +514,44 @@
         }
       }
     }
+    /* 2.38.0：无分隔多笔（「午饭28打车15」）——有上下文才做保守拆分，
+       独立调用（无 cx）保持旧行为。 */
+    if (cx) {
+      var expanded = [];
+      for (var k = 0; k < out.length; k += 1) {
+        var multi = splitAmountPairs(out[k], cx);
+        for (var m = 0; m < multi.length; m += 1) { expanded.push(multi[m]); }
+      }
+      out = expanded;
+    }
     return out;
+  }
+
+  /* 2.38.0：「午饭28打车15」旧版只记最后一笔（用户主诉，竞品都能拆）。
+     保守策略：段内出现 ≥2 组「词+金额」且拆出的每一段都能解析出金额、
+     都能落到已知分类，才拆。“苹果13手机壳50”（物品名带数字）、
+     “充话费100送20”（赠送不是账）这类落不到分类的不会误拆。
+     小数/日期/时间/转账先走与 splitSegments 相同的守卫，内部数字不参与配对。 */
+  function splitAmountPairs(piece, cx) {
+    var g = guardText(piece);
+    var re = /(\u0001\d+\u0002)|([\u4e00-\u9fa5A-Za-z]{1,12}?)(\d+(?:\.\d+)?)(块钱|元|块)?/g;
+    var pairs = [];
+    var m;
+    while ((m = re.exec(g.s)) !== null) {
+      if (m[1]) { continue; /* 占位符（小数/日期/时间/转账），不是金额 */ }
+      pairs.push({ start: m.index });
+      if (pairs.length > MAX_BATCH) { return [piece]; }
+    }
+    if (pairs.length < 2) { return [piece]; }
+    var segs = [];
+    for (var i = 0; i < pairs.length; i += 1) {
+      var from = i === 0 ? 0 : pairs[i].start;
+      var to = i + 1 < pairs.length ? pairs[i + 1].start : g.s.length;
+      var seg = restore(g.s.slice(from, to), g.guards).trim();
+      if (!seg || !parseCents(seg) || !resolveCategory(seg, null, cx).ok) { return [piece]; }
+      segs.push(seg);
+    }
+    return segs;
   }
 
   function restore(text, guards) {
@@ -444,7 +584,10 @@
 
   /* 分类：最长匹配（分类名 + aliases），再看 nl 的别名表（借 nl.parse 拿不到别名表，这里自带一份最小集合） */
   var EXTRA_ALIASES = {
-    /* 2.29.2：品牌别名扩充（竞品口径）——与 nl.js CATEGORY_ALIASES 同步 */
+    /* 2.38.0：本表降级为「兜底 + 补充」——运行时与 nl.categoryAliases 取并集
+       （nl 是 system 分类唯一权威词表），双词表漂移由此消灭。
+       2.38.0：ca_salary 摘掉「奖金」——nl 一直把 奖金 路由到 ca_bonus（额外收入），
+       两边各指一个分类是语义冲突，以 nl 为准。 */
     ca_food: ['吃饭', '午饭', '晚饭', '早饭', '外卖', '咖啡', '奶茶', '零食',
       '麦当劳', '肯德基', '星巴克', '瑞幸', '喜茶', '奈雪', '烧烤', '火锅', '美团', '饿了么',
       '炒菜', '炒饭', '炒面', '米线', '米粉', '宵夜'],
@@ -455,9 +598,11 @@
     ca_fun: ['电影', '游戏', '演出', '会员', '旅游'],
     ca_health: ['看病', '买药', '体检'],
     ca_social: ['红包', '请客'],
-    ca_salary: ['工资', '薪水', '奖金'],
+    ca_salary: ['工资', '薪水'],
     ca_daily: ['日用', '纸巾', '洗衣液'],
-    ca_snack: ['奶茶', '甜品', '蛋糕'],
+    /* 2.38.0：摘掉「奶茶」——nl 权威表把 奶茶 归 ca_food（golden 固化），
+       这里再挂 ca_snack 是跨表漂移；种子 ca_snack 别名里的 奶茶 由 sort 决胜，行为不变 */
+    ca_snack: ['甜品', '蛋糕'],
     /* 2.28.2：ca_veg 是 ca_veggie（蔬菜）改名前的残留——死键让 买菜/菜市场 永远路由失败 */
     ca_veggie: ['买菜', '菜市场', '水果', '生鲜'],
     /* 2.26.9 扩充分类：与种子/nl 词表同步（礼物/随礼已从 ca_social 摘除归新分类） */
@@ -475,6 +620,32 @@
     ca_settings: ['设置', '系统设置', '软件设置', '配置服务']
   };
 
+  /* 2.38.0：运行时词表 = EXTRA_ALIASES ∪ nl.categoryAliases（nl 权威，逐词去重）。
+     nl 缺席（独立加载/单测桩）时退回 EXTRA 本表，行为与旧版一致。
+     只有拿到 nl 表后才缓存合并结果——nl 是懒加载 chunk，先合并会缓存到残缺表。 */
+  var MERGED_ALIASES = null;
+  function mergedAliases() {
+    var nl = nlApi();
+    var base = (nl && nl.categoryAliases && typeof nl.categoryAliases === 'object') ? nl.categoryAliases : null;
+    if (!base) { return EXTRA_ALIASES; }
+    if (MERGED_ALIASES) { return MERGED_ALIASES; }
+    var out = {};
+    var id;
+    for (id in EXTRA_ALIASES) {
+      if (Object.prototype.hasOwnProperty.call(EXTRA_ALIASES, id)) { out[id] = EXTRA_ALIASES[id].slice(); }
+    }
+    for (id in base) {
+      if (!Object.prototype.hasOwnProperty.call(base, id) || !Array.isArray(base[id])) { continue; }
+      var list = out[id] || (out[id] = []);
+      for (var w = 0; w < base[id].length; w += 1) {
+        var word = base[id][w];
+        if (word && list.indexOf(word) < 0) { list.push(word); }
+      }
+    }
+    MERGED_ALIASES = out;
+    return out;
+  }
+
   /* 2.26.9 迭代2：别名匹配大小写不敏感，与 nl.findCategoryMatches 同语义——
      等长小写副本匹配（个别 Unicode 小写会变长则回退精确匹配）；纯 ASCII
      关键词要求两侧不是 ASCII 字母数字（'email' 里的 'ai' 不误中），
@@ -491,48 +662,65 @@
     return true;
   }
 
+  /* 2.38.0：token 预计算——旧版每次 resolveCategory 都对全部分类×别名做
+     trim/toLowerCase/findIn，多笔批量时是热路径。现在每个 cx 只建一次 token 表
+     （含合并词表），匹配语义（最长优先、等长 sort 小者胜、ASCII 边界）逐条保留。 */
+  function aliasTokens(cx) {
+    var idx = cxIndex(cx);
+    if (idx && idx.tokens) { return idx.tokens; }
+    var tokens = [];
+    function push(cat, token) {
+      if (!cat) { return; }
+      var t = String(token || '').trim();
+      if (!t) { return; }
+      var lw = t.toLowerCase();
+      tokens.push({ cat: cat, t: t, lw: lw.length === t.length ? lw : null, ascii: isAllAsciiAlnum(t) });
+    }
+    var cats = Array.isArray(cx.liveCategories) ? cx.liveCategories : [];
+    for (var i = 0; i < cats.length; i += 1) {
+      var cat = cats[i];
+      if (!cat) { continue; }
+      push(cat, cat.name);
+      var aliases = Array.isArray(cat.aliases) ? cat.aliases : [];
+      for (var a = 0; a < aliases.length; a += 1) { push(cat, aliases[a]); }
+    }
+    var extra = mergedAliases();
+    for (var key in extra) {
+      if (!Object.prototype.hasOwnProperty.call(extra, key)) { continue; }
+      var target = idx ? (idx.cat[key] || null) : findIn(cx.categories, key);
+      if (!target) { continue; }
+      var list = extra[key];
+      for (var j = 0; j < list.length; j += 1) { push(target, list[j]); }
+    }
+    if (idx) { idx.tokens = tokens; }
+    return tokens;
+  }
+
   function resolveCategory(text, kind, cx) {
     var s = String(text || '');
     var hay = s.toLowerCase();
     var ci = hay.length === s.length;
     var best = null;
     var bestLen = 0;
-    var i;
-    function consider(cat, token) {
-      var t = String(token || '').trim();
-      if (!t) { return; }
-      if (kind && cat.kind && cat.kind !== kind) { return; }
+    var tokens = aliasTokens(cx);
+    for (var i = 0; i < tokens.length; i += 1) {
+      var tok = tokens[i];
+      var cat = tok.cat;
+      if (kind && cat.kind && cat.kind !== kind) { continue; }
       var pos = -1;
-      if (ci) {
-        var lw = t.toLowerCase();
-        if (lw.length === t.length) { pos = hay.indexOf(lw); }
-      }
-      if (pos < 0) { pos = s.indexOf(t); }
-      if (pos < 0) { return; }
+      if (ci && tok.lw) { pos = hay.indexOf(tok.lw); }
+      if (pos < 0) { pos = s.indexOf(tok.t); }
+      if (pos < 0) { continue; }
       /* 边界检查对精确/小写两条命中路径同样生效（种子名 'ai' 在 'email' 内
          的老坑在精确路径下本就会误中）。 */
-      if (isAllAsciiAlnum(t)) {
+      if (tok.ascii) {
         var before = pos > 0 ? s.charAt(pos - 1) : '';
-        if (isAsciiAlnumCh(before) || isAsciiAlnumCh(s.charAt(pos + t.length))) { return; }
+        if (isAsciiAlnumCh(before) || isAsciiAlnumCh(s.charAt(pos + tok.t.length))) { continue; }
       }
-      if (t.length > bestLen || (t.length === bestLen && best && cat.sort < best.sort)) {
+      if (tok.t.length > bestLen || (tok.t.length === bestLen && best && cat.sort < best.sort)) {
         best = cat;
-        bestLen = t.length;
+        bestLen = tok.t.length;
       }
-    }
-    var cats = cx.liveCategories;
-    for (i = 0; i < cats.length; i += 1) {
-      var cat = cats[i];
-      consider(cat, cat.name);
-      var aliases = Array.isArray(cat.aliases) ? cat.aliases : [];
-      for (var a = 0; a < aliases.length; a += 1) { consider(cat, aliases[a]); }
-    }
-    for (var key in EXTRA_ALIASES) {
-      if (!Object.prototype.hasOwnProperty.call(EXTRA_ALIASES, key)) { continue; }
-      var target = findIn(cx.categories, key);
-      if (!target) { continue; }
-      var list = EXTRA_ALIASES[key];
-      for (i = 0; i < list.length; i += 1) { consider(target, list[i]); }
     }
     if (best) { return { ok: true, id: best.id, name: best.name, matched: bestLen }; }
     return { ok: false };
@@ -960,7 +1148,7 @@
   }
 
   function parseCreate(text, cx) {
-    var segments = splitSegments(text);
+    var segments = splitSegments(text, cx);
     if (!segments.length) {
       return { ok: false, code: E.UNKNOWN, message: M.E_AS_UNKNOWN };
     }
@@ -2578,23 +2766,57 @@
     return 0;
   }
 
-  function mapStatus(status, res) {
+  /* 2.38.0：错误响应体 → 人话细节（密钥掩码、限长）。只用于归因提示，
+     绝不再发回服务端；R-01 口径——服务端若回显密钥，整段掩掉后才许上屏。 */
+  function errDetailOf(bodyText, key) {
+    var s = String(bodyText || '').trim();
+    if (!s) { return ''; }
+    var msg = '';
+    try {
+      var j = JSON.parse(s);
+      if (j && typeof j === 'object') {
+        var e = j.error;
+        if (e && typeof e === 'object' && typeof e.message === 'string') { msg = e.message; }
+        else if (typeof e === 'string') { msg = e; }
+        else if (typeof j.message === 'string') { msg = j.message; }
+      }
+    } catch (err) { /* 非 JSON：取原文片段 */ }
+    if (!msg) { msg = s; }
+    msg = msg.replace(/\s+/g, ' ').trim();
+    if (key) {
+      while (msg.indexOf(key) >= 0) { msg = msg.replace(key, '••••'); }
+    }
+    return msg.length > 120 ? msg.slice(0, 120) + '…' : msg;
+  }
+
+  function mapStatus(status, res, bodyText, key) {
+    var detail = errDetailOf(bodyText, key);
+    function withDetail(o) { if (detail) { o.detail = detail; } return o; }
     if (status === 429 || status === 402) {
       /* 2.29.2：402 一并归限流——免费档的 402 是 FREE_LIMIT（约 45 秒一条），
          归进「配置不合法」桶会让界面谎报「未启用在线模型」（用户实测主诉：
          开着开关却被告知未启用）。 */
-      return { ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res), reason: 'rate' };
+      return withDetail({ ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res), reason: 'rate' });
     }
     if (status >= 500) {
       /* 5xx 是服务端故障，不是「限流」：文案方向不同（2.28.1），码保持 NET_RATE（同为可重试） */
-      return { ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res), reason: 'server' };
+      return withDetail({ ok: false, code: E.NET_RATE, retryable: true, status: status, retryAfterMs: retryAfterMs(res), reason: 'server' });
     }
     /* 2.28.2：401/403 是密钥/权限问题，与「地址/模型名配错」方向不同，细分 reason 供文案点名 */
     if (status === 401 || status === 403) {
-      return { ok: false, code: E.NET_CONFIG, retryable: false, status: status, reason: 'auth' };
+      return withDetail({ ok: false, code: E.NET_CONFIG, retryable: false, status: status, reason: 'auth' });
     }
-    /* 404/405/400 等：地址、模型或密钥配错，重试无意义 */
-    return { ok: false, code: E.NET_CONFIG, retryable: false, status: status };
+    /* 2.38.0：404/405 → 地址或路径不对（旧版一律归「配置不合法」，用户不知道改哪） */
+    if (status === 404 || status === 405) {
+      return withDetail({ ok: false, code: E.NET_CONFIG, retryable: false, status: status, reason: 'endpoint' });
+    }
+    /* 2.38.0：400 且响应体点名模型不存在 → 模型名错，引导改模型字段而不是瞎删配置 */
+    if (status === 400 && /model/i.test(detail) &&
+        /(not found|does not exist|unknown|invalid|no such|not exist|不支持|不存在|无效)/i.test(detail)) {
+      return withDetail({ ok: false, code: E.NET_CONFIG, retryable: false, status: status, reason: 'model' });
+    }
+    /* 其余 4xx：配置兜底桶，重试无意义 */
+    return withDetail({ ok: false, code: E.NET_CONFIG, retryable: false, status: status });
   }
 
   function mapNetError(error) {
@@ -2706,7 +2928,17 @@
                 return;
               }
             }
-            end(mapStatus(status, res));
+            /* 2.38.0：读错误响应体（≤2KB）细分归因——404 地址/路径、400 模型名、
+               401 密钥不再一锅烩。读不到体（桩/旧端点）按旧归因兜底，绝不因此卡住。 */
+            var errBody = '';
+            try {
+              errBody = (res && typeof res.text === 'function') ? res.text() : '';
+            } catch (errorE) { errBody = ''; }
+            Promise.resolve(errBody).then(function (text) {
+              end(mapStatus(status, res, typeof text === 'string' ? text.slice(0, 2048) : '', cfg.key));
+            }, function () {
+              end(mapStatus(status, res, '', cfg.key));
+            });
             return;
           }
           var bodyPromise;
@@ -2855,20 +3087,42 @@
     return out;
   }
 
-  function categoryPairs(list) {
+  /* 2.38.0：分类使用次数（当前账本、未删除）——云端词表按使用频度排序，
+     超体积裁剪时先砍最不常用的。一次远端解析只全量扫一遍。 */
+  function categoryUsage(cx) {
+    var use = Object.create(null);
+    var list = (cx && cx.db && cx.db.transactions) || [];
+    var bookId = cx && cx.bookId;
+    for (var i = 0; i < list.length; i += 1) {
+      var tx = list[i];
+      if (!tx || tx.deleted === true || !tx.categoryId) { continue; }
+      if (bookId && tx.bookId && tx.bookId !== bookId) { continue; }
+      use[tx.categoryId] = (use[tx.categoryId] || 0) + 1;
+    }
+    return use;
+  }
+
+  function categoryPairs(list, usage) {
     var out = [];
     var i;
     var src = Array.isArray(list) ? list : [];
+    var use = usage && typeof usage === 'object' ? usage : null;
     /* 保底排序（2.28.1）：截断前先稳定重排——system 分类全部保底（保持原序），
        其余按 sort 升序（无 sort 回落原序）。旧实现按数组序截断，而用户自建分类
        追加在数组尾部，60 上限一到先被砍的永远是用户自己的分类。
-       fitBody 的对半砍也吃到同一顺序：被裁的仍然是尾部的低优先分类。 */
+       2.38.0：带使用次数时，用户分类改按使用频度降序（并列仍按 sort 升序）——
+       fitBody 裁剪先砍最不常用的尾部，而不是用户刚建/正在用的分类。 */
     var order = [];
     for (i = 0; i < src.length; i += 1) { order.push({ one: src[i], idx: i }); }
     order.sort(function (a, b) {
       var sa = a.one && a.one.system === true ? 0 : 1;
       var sb = b.one && b.one.system === true ? 0 : 1;
       if (sa !== sb) { return sa - sb; }
+      if (sa === 1 && use) {
+        var ua = Number(use[a.one && a.one.id]) || 0;
+        var ub = Number(use[b.one && b.one.id]) || 0;
+        if (ua !== ub) { return ub - ua; }
+      }
       var ta = a.one && typeof a.one.sort === 'number' ? a.one.sort : null;
       var tb = b.one && typeof b.one.sort === 'number' ? b.one.sort : null;
       if (ta !== null && tb !== null && ta !== tb) { return ta - tb; }
@@ -2906,7 +3160,10 @@
     });
   }
 
-  /* 体积兜底：先砍分类清单，再砍账户清单，最后砍原话（硬截断），保证 ≤4KB */
+  /* 体积兜底：先砍分类清单，再砍账户清单，最后砍原话（硬截断），保证 ≤4KB。
+     2.38.0：精确裁剪——旧版每次对半砍（60→30→15），超 3 行也丢 30 行词表；
+     现在按每行字节数估算，只丢超出体积所需的尾部条数（分类保底 6、账户保底 2），
+     配合 categoryPairs 的使用频度排序，被裁的永远是最不常用的。 */
   function fitBody(cfg, payload, modelOverride) {
     var p = payload && typeof payload === 'object' ? payload : {};
     var raw = short(norm(p.raw || ''), LLM_MAX_RAW);
@@ -2918,12 +3175,24 @@
     var guard = 0;
     while (byteLen(body) > LLM_MAX_BODY && guard < 16) {
       guard += 1;
+      var over = byteLen(body) - LLM_MAX_BODY;
+      var drop = 0;
+      var freed = 0;
       if (cats.length > 6) {
-        cats = cats.slice(0, Math.max(6, Math.floor(cats.length / 2)));
+        while (drop < cats.length - 6 && freed <= over) {
+          freed += byteLen(pairText([cats[cats.length - 1 - drop]], true)) + 1;
+          drop += 1;
+        }
+        cats = cats.slice(0, cats.length - Math.max(1, drop));
       } else if (accts.length > 2) {
-        accts = accts.slice(0, Math.max(2, Math.floor(accts.length / 2)));
+        while (drop < accts.length - 2 && freed <= over) {
+          freed += byteLen(pairText([accts[accts.length - 1 - drop]])) + 1;
+          drop += 1;
+        }
+        accts = accts.slice(0, accts.length - Math.max(1, drop));
       } else if (raw.length > 16) {
-        raw = raw.slice(0, Math.max(16, Math.floor(raw.length / 2)));
+        /* 中文 UTF-8 一字 3 字节：按超出量折算要砍的字数，ASCII 多时循环再补 */
+        raw = raw.slice(0, Math.max(16, raw.length - Math.ceil(over / 3)));
       } else {
         cats = [];
         accts = [];
@@ -2978,7 +3247,7 @@
         today: ctx0.today,
         bookId: ctx0.bookId,
         accounts: accountPairs(ctx0.liveAccounts),
-        categories: categoryPairs(ctx0.liveCategories)
+        categories: categoryPairs(ctx0.liveCategories, categoryUsage(ctx0))
       };
     }
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -3015,7 +3284,9 @@
           status: (res && res.status) || 0,
           /* 2.32.1：reason 必须透传——429 与 5xx 同码不同因，丢了 reason 后
              「服务繁忙」会被 reasonOf 按最后的 NET_TIMEOUT 误报成「网络超时」 */
-          reason: (res && res.reason) || ''
+          reason: (res && res.reason) || '',
+          /* 2.38.0：服务端错误细节（已掩码）透传给界面，点名地址/模型/密钥哪个错 */
+          detail: (res && res.detail) || ''
         };
       });
     }
@@ -3046,7 +3317,7 @@
     }, aiIsPreset(cfg) ? LLM_PLAN_TIMEOUT_MS : LLM_TIMEOUT_MS).then(function (res) {
       if (!res || !res.ok) {
         /* reason 透传：5xx（server）与 429（rate）同码不同因，设置页文案要能区分（2.28.1） */
-        return { ok: false, code: (res && res.code) || E.NET_BAD, reason: res && res.reason };
+        return { ok: false, code: (res && res.code) || E.NET_BAD, reason: res && res.reason, detail: (res && res.detail) || '' };
       }
       var choice = res.json && res.json.choices && res.json.choices[0];
       if (!choice || choice.finish_reason === 'length' || !String(contentOf(choice) || '').trim()) {
@@ -3307,7 +3578,7 @@
     if (!list.length) { return { ok: false, code: E.UNKNOWN }; }
     if (list.length > MAX_BATCH) { return { ok: false, code: E.BATCH_TOO_LARGE }; }
     var segs = [];
-    try { segs = splitSegments(raw) || []; } catch (error) { segs = []; }
+    try { segs = splitSegments(raw, cx) || []; } catch (error) { segs = []; }
     /* 2.29.2：与 parseCreate 同口径——云端装配的计划 id 也带 nonce，
        否则「云端记→撤销→云端再记同句」会撞 E_AS_CONFLICT_ID。 */
     var planId = fingerprint(raw, cx, submitNonce());
@@ -3639,7 +3910,7 @@
     return 'bad';
   }
 
-  function localReply(text, state, cx, reason) {
+  function localReply(text, state, cx, reason, detail) {
     var out = null;
     try {
       out = respond(text, state, cx);
@@ -3652,7 +3923,8 @@
         reply: { kind: 'hint', text: M.E_AS_UNKNOWN, options: [] }
       };
     }
-    return { state: out.state, reply: out.reply, mode: 'local-fallback', reason: reason || '' };
+    /* 2.38.0：detail 是服务端错误的人话细节（已掩码），界面挂在回落横幅后面 */
+    return { state: out.state, reply: out.reply, mode: 'local-fallback', reason: reason || '', detail: detail || '' };
   }
 
   function safeCx(cx) {
@@ -3729,7 +4001,10 @@
           return;
         }
       }
-      resolve(localReply(text, state, cx, reasonOf(res && res.code, res)));
+      resolve(localReply(text, state, cx, reasonOf(res && res.code, res), res && res.detail));
+    }, function () {
+      /* 2.38.0：聊天出口也绝不静默——链路意外 reject 时照常回落本地 */
+      resolve(localReply(text, state, cx, 'bad'));
     });
   }
 
@@ -3834,7 +4109,7 @@
         today: ctx.today,
         bookId: ctx.bookId,
         accounts: accountPairs(ctx.liveAccounts),
-        categories: categoryPairs(ctx.liveCategories)
+        categories: categoryPairs(ctx.liveCategories, categoryUsage(ctx))
       };
       llmPlan(payload).then(function (res) {
         var out = null;
@@ -3847,7 +4122,7 @@
           resolve(out);
           return;
         }
-        resolve(localReply(text, state, ctx, reasonOf(res && res.code, res)));
+        resolve(localReply(text, state, ctx, reasonOf(res && res.code, res), res && res.detail));
       }, function () {
         resolve(localReply(text, state, ctx, 'bad'));
       });
@@ -3874,7 +4149,16 @@
       return { state: cloneState(state), reply: ask, mode: 'online', reason: '' };
     }
     if (intent === 'query') {
-      return remoteQuery(proposal, text, ctx, state);
+      var q = remoteQuery(proposal, text, ctx, state);
+      if (q) { return q; }
+      /* 2.38.0：云端判查询但本地装配失败——转本地继续处理（mode local），
+         不再落回落桶被误报「返回的内容看不懂」（旧版 reason 'bad' 归因错位）。 */
+      var qLocal = null;
+      try { qLocal = respond(text, state, ctx); } catch (error) { qLocal = null; }
+      if (qLocal && qLocal.reply) {
+        return { state: qLocal.state, reply: qLocal.reply, mode: 'local', reason: '' };
+      }
+      return null;
     }
     var built = buildPlan(proposal, text, ctx, state);
     if (!built || built.ok !== true) {

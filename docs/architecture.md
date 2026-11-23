@@ -26,6 +26,11 @@
 - 传输与错误码：`js/modules/core-assistant.js`。密钥只出现在 `Authorization` 头；错误码统一 `E_AS_*`。
 - 指标与提示词：`js/modules/ai-insights.js`（`buildMonthlyMetrics`、`requestAiInsights`、`toInsightPayload`、`buildFallbackInsights`、`buildLocalSummary`）。月中总量与分类都使用上月同期；免模型月报与 AI 请求共用同一聚合结果，不各算一套。
 - 本地解析：`js/modules/nl.js`（金额、日期、分类别名）；没有模型时全靠它。
+- 词表单一事实源（2.38.0）：system 分类别名以 `nl.js` `CATEGORY_ALIASES` 为权威（经 `nl.categoryAliases` 只读暴露）；core-assistant 的 `EXTRA_ALIASES` 降为兜底+补充，运行时取并集（`mergedAliases`），漂移由 `tests/assistant-core-logic.test.js` 用例 3.6 守卫。改 system 别名只改 nl 一处。
+- 分句（2.38.0）：`splitSegments(text, cx)` 先标点/连接词分段（连接词不要求前导空格），再做保守的「词+金额」多笔拆分（`splitAmountPairs`：每段都能解析出金额且落已知分类才拆；小数/日期/时间/转账先守卫）。无 cx 时保持旧行为。
+- 上下文索引（2.38.0）：`cxIndex` 在 cx 上挂不可枚举索引（账户/分类 id 映射、默认账户、最近账户、别名 token 表），一条消息只建一次；流水条数变化自动作废账户类缓存。`recentAccountId` 全量扫描取 createdAt 最大（流水按插入序存放，旧版 slice(0,400) 取的是最旧 400 笔）。
+- 云端词表预算（2.38.0）：`categoryPairs(list, usage)` system 保底 + 用户分类按使用频度降序（`categoryUsage` 单遍统计）；`fitBody` 超 4KB 按行字节精确裁剪尾部（分类保底 6、账户保底 2），不再对半砍。
+- 错误归因（2.38.0）：非 2xx 读响应体（≤2KB），`mapStatus` 细分 endpoint（404/405）/model（400 点名模型不存在）/auth（401/403）；`detail` 为服务端原话（密钥掩码、限长 120），经 `localReply` 透传到回落气泡。
 
 ## 云备份（2.34.0）
 

@@ -81,8 +81,12 @@
     server: '模型服务出错，已改用本地解析',
     auth: '密钥或权限不对，已改用本地解析',
     net: '在线服务连不上，已改用本地解析',
-    config: '未启用在线模型，当前用本地解析',
+    /* 2.38.0：config 是「开关开着但地址/模型/密钥没配齐」，旧文案「未启用」名不副实；
+       endpoint/model 是传输层新细分（404 地址路径 / 400 模型名），点名改哪一项 */
+    config: '联网配置不完整（地址/模型/密钥），当前用本地解析',
     disabled: '未启用在线模型，当前用本地解析',
+    endpoint: '接口地址或路径不对，已改用本地解析',
+    model: '模型名可能不对，已改用本地解析',
     privacy: '已配置在线模型：先同意隐私告知再联网',
     mixed: '网站是 https，接口地址要换成 https:// 开头，已改用本地解析',
     bad: '返回内容无法识别，已改用本地解析',
@@ -585,6 +589,11 @@
       reasonLine = REASON_TEXT[turn.reason] || '未启用在线模型，当前用本地解析';
     }
     if (reasonLine) {
+      /* 2.38.0：回落文案后挂服务端错误细节（core 已掩码密钥），点名地址/模型/密钥哪个错 */
+      if (turn.detail) {
+        var detailText = String(turn.detail);
+        reasonLine += '（' + (detailText.length > 60 ? detailText.slice(0, 60) + '…' : detailText) + '）';
+      }
       body.appendChild(el('p', { className: 's-assistant__text s-assistant__text--dim', text: reasonLine }));
       /* privacy（已配置未告知）：一行说明 + 一键去设置，闭环迭代3 的分码（2.26.9 迭代4） */
       if (turn.reason === 'privacy') {
@@ -1247,7 +1256,7 @@
       var mode = out && (out.mode === 'online' || out.mode === 'local') ? out.mode : 'fallback';
       var reason = (out && out.reason) || 'bad';
       setMode(mode, mode === 'online' ? '' : reason);
-      afterReply(raw, reply, { mode: mode, reason: reason });
+      afterReply(raw, reply, { mode: mode, reason: reason, detail: (out && out.detail) || '' });
     }, function () {
       if (token !== session.token) { return; }
       endBusy();
@@ -1337,7 +1346,8 @@
       reply: reply,
       raw: raw,
       mode: meta ? meta.mode : 'local',
-      reason: meta ? meta.reason : ''
+      reason: meta ? meta.reason : '',
+      detail: meta && meta.detail ? String(meta.detail) : ''
     };
     if (needsInputBack(reply, meta)) { restoreInput(raw); }
 
