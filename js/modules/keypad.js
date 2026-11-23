@@ -184,27 +184,36 @@
       return { ok: true, cents: total };
     }
 
+    /* 2.36.0：按键热路径——算式只求值一次（旧写法零值判定与合计提示各解析一遍），
+       金额/合计/aria-label 都是变化才写，重复 setValue 不再产生无谓 DOM 写入。 */
+    var lastDisplayText = '';
+    var lastTotalText = '';
+    var lastAriaLabel = '';
     function render() {
       var text = value || '0.00';
-      amount.textContent = text;
-      var zero = false;
-      if (!value) {
-        zero = true;
-      } else {
-        var parsed = parseCurrent();
-        zero = parsed.ok && parsed.cents === 0;
+      var parsed = value ? parseCurrent() : null;
+      var zero = !value || (parsed.ok && parsed.cents === 0);
+      var totalText = '';
+      if (parsed && /[+\-]/.test(value)) {
+        var m = money();
+        totalText = parsed.ok && m && typeof m.formatCents === 'function'
+          ? '= ' + m.formatCents(parsed.cents)
+          : '';
+      }
+      var ariaLabel = '金额 ' + text + ' 元' + (totalText ? '，合计 ' + totalText.slice(2) + ' 元' : '');
+      if (text !== lastDisplayText) {
+        lastDisplayText = text;
+        amount.textContent = text;
       }
       amount.classList.toggle('is-empty', zero);
-      if (/[+\-]/.test(value)) {
-        var ev = parseCurrent();
-        var m = money();
-        totalHint.textContent = ev.ok && m && typeof m.formatCents === 'function'
-          ? '= ' + m.formatCents(ev.cents)
-          : '';
-      } else {
-        totalHint.textContent = '';
+      if (totalText !== lastTotalText) {
+        lastTotalText = totalText;
+        totalHint.textContent = totalText;
       }
-      display.setAttribute('aria-label', '金额 ' + text + ' 元' + (totalHint.textContent ? '，合计 ' + totalHint.textContent.slice(2) + ' 元' : ''));
+      if (ariaLabel !== lastAriaLabel) {
+        lastAriaLabel = ariaLabel;
+        display.setAttribute('aria-label', ariaLabel);
+      }
 
       if (confirmBtn) {
         if (disabled || zero) {

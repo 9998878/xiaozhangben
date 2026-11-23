@@ -708,6 +708,22 @@
     var holdFired = false;
     var disposed = false;
     var listeners = [];
+    /* 2.36.0 按键热路径缓存：确认键节点只查一次；上下文/确认键文案/照片忙态/标题/键盘标记
+       都是「变化才写」。showReason 直接改上下文文本，会把 lastCtxText 置空，恢复时必然重写。 */
+    var confirmKeyEl = null;
+    var lastCtxText = '';
+    var lastConfirmLabel = '';
+    var lastPhotoBusy = null;
+    var lastTitle = '';
+    var lastKbFlag = '';
+    function confirmKeyNode() {
+      if (confirmKeyEl && confirmKeyEl.isConnected) return confirmKeyEl;
+      confirmKeyEl = keypadSlot.querySelector('[data-key="confirm"]');
+      /* 节点换了（键盘重新挂载）：文案与忙态缓存作废，下次同步必然重写 */
+      lastConfirmLabel = '';
+      lastPhotoBusy = null;
+      return confirmKeyEl;
+    }
 
     function listen(target, type, handler, options) {
       if (!target || typeof target.addEventListener !== 'function') return;
@@ -780,11 +796,15 @@
       }
     }, true);
 
-    /* ⑩ 监听 --kb：系统键盘弹起收起时重算，页面跟着回落 */
+    /* ⑩ 监听 --kb：系统键盘弹起收起时重算，页面跟着回落。
+       2.36.0：visualViewport 的 scroll/resize 高频触发，标记没变就不读不写。 */
     function onViewportChange() {
       if (!root.isConnected) { teardown(); return; }
       var kb = readVar('--kb');
-      root.setAttribute('data-kb', kb > 0 ? '1' : '0');
+      var flag = kb > 0 ? '1' : '0';
+      if (flag === lastKbFlag) return;
+      lastKbFlag = flag;
+      root.setAttribute('data-kb', flag);
       if (kb > 0 && state.keypadOpen) closeKeypad();
     }
 
@@ -819,7 +839,13 @@
       return out;
     }
 
-    /* ---------- 同步：草稿条 / 金额 ---------- */
+    /* ---------- 同步：草稿条 / 金额 ----------
+       2.36.0：按键热路径去重。每按一键都会走 syncAmount → syncDraft，旧写法无条件
+       重建分类图标 SVG、重写金额/分类文本；图标只在真的换了分类时才重建，
+       文本只在变化时才写，连续输入数字时不再产生无谓的 DOM 开销。 */
+    var lastDraftIcon = '';
+    var lastDraftAmtText = '';
+    var lastDraftCatName = '';
     function draftTypeLabel() {
       for (var i = 0; i < TYPES.length; i += 1) {
         if (TYPES[i].key === state.type) return TYPES[i].label;
@@ -829,23 +855,30 @@
 
     function syncDraft() {
       var cents = amountOf(state.amountText);
-      draftAmt.textContent = '¥' + formatMoney(cents);
+      var amtText = '¥' + formatMoney(cents);
+      if (amtText !== lastDraftAmtText) {
+        lastDraftAmtText = amtText;
+        draftAmt.textContent = amtText;
+      }
       draftAmt.classList.toggle('is-empty', !(cents > 0));
       var category = categoryById(state.categoryId);
-      if (state.type === 'transfer') {
-        draftCatName.textContent = '转账';
-      } else {
-        draftCatName.textContent = category ? category.name : '选择分类';
+      var catName = state.type === 'transfer' ? '转账' : (category ? category.name : '选择分类');
+      if (catName !== lastDraftCatName) {
+        lastDraftCatName = catName;
+        draftCatName.textContent = catName;
       }
       var iconName = state.type === 'transfer'
         ? 'transfer'
         : (category ? (category.icon || CAT_ICON[category.id] || 'tag') : 'tag');
-      clear(draftIcon);
-      draftIcon.appendChild(iconNode(iconName, 16));
+      if (iconName !== lastDraftIcon) {
+        lastDraftIcon = iconName;
+        clear(draftIcon);
+        draftIcon.appendChild(iconNode(iconName, 16));
+      }
       draftCat.classList.toggle('is-active', !!category || state.type === 'transfer');
     }
 
-    /* 键盘上下文与完成键文案（M3） */
+    /* 键盘上下文与完成键文案（M3）；确认键节点与文案同样做变化才写（2.36.0） */
     function syncKeypadContext() {
       var parts = [];
       if (state.type === 'transfer') {
@@ -855,10 +888,18 @@
         parts.push(category ? category.name : '未选分类');
         parts.push(draftTypeLabel());
       }
-      kctxText.textContent = parts.join(' · ');
-      var confirmKey = keypadSlot.querySelector('[data-key="confirm"]');
+      var ctxText = parts.join(' · ');
+      if (ctxText !== lastCtxText) {
+        lastCtxText = ctxText;
+        kctxText.textContent = ctxText;
+      }
+      var confirmKey = confirmKeyNode();
       if (confirmKey) {
-        confirmKey.textContent = amountOf(state.amountText) > 0 ? '保存' : '完成';
+        var label = amountOf(state.amountText) > 0 ? '保存' : '完成';
+        if (label !== lastConfirmLabel) {
+          lastConfirmLabel = label;
+          confirmKey.textContent = label;
+        }
       }
     }
 
@@ -895,6 +936,8 @@
     /* 不满足保存条件时，在键盘上下文行临时提示原因，2.4s 后恢复上下文 */
     function showReason(text) {
       kctxText.textContent = String(text || '');
+      /* 上下文被原因文案顶掉：缓存作废，定时恢复时 syncKeypadContext 必然重写 */
+      lastCtxText = null;
       kctxText.classList.add('is-warn');
       if (reasonTimer) { global.clearTimeout(reasonTimer); }
       reasonTimer = global.setTimeout(function () {
@@ -916,7 +959,11 @@
       if (!context || typeof context.setTitle !== 'function') return;
       /* 旧屏的延迟回调不能改到新屏的标题 */
       if (root && typeof root.isConnected === 'boolean' && !root.isConnected) return;
-      context.setTitle(baseTitle());
+      /* 2.36.0：标题没变不重复写（每按一键都会经过这里） */
+      var title = baseTitle();
+      if (title === lastTitle) return;
+      lastTitle = title;
+      context.setTitle(title);
     }
 
     function pulseAmount() {
@@ -2067,6 +2114,13 @@
           { label: '完成', kind: 'primary', onClick: commit }
         ]
       });
+      /* 2.36.0：打开即聚焦输入框，光标落在文末便于续写。focus 必须同步发生在
+         点击手势内（sheet.open 是同步挂载），iOS 才会顺势带起系统键盘，省一次点按。 */
+      try {
+        input.focus({ preventScroll: true });
+        var caret = String(input.value || '').length;
+        if (typeof input.setSelectionRange === 'function') input.setSelectionRange(caret, caret);
+      } catch (error) { /* 聚焦失败不影响手动点按输入 */ }
     }
 
     /* ---------- 同步：标签 ---------- */
@@ -2108,16 +2162,6 @@
       if (index < 0) return;
       state.tags.splice(index, 1);
       syncTags();
-    }
-
-    function applyStateToView() {
-      syncType();
-      syncDate();
-      syncNote();
-      syncTags();
-      syncKeypadValue();
-      syncAmount();
-      renderGrid();
     }
 
     /* ---------- 键盘 ---------- */
@@ -2687,11 +2731,15 @@
       photoMetaEl.textContent = text;
     }
     /* 保存键的「照片未就绪」禁用态：canSave() 判定逻辑一字不动（裁决 13），
-       只在渲染层表达「现在按不了」，并在按下时给原因 */
+       只在渲染层表达「现在按不了」，并在按下时给原因。
+       2.36.0：复用缓存的确认键节点，忙态没变不重复写属性。 */
     function paintPhotoConfirm() {
-      var confirmKey = keypadSlot.querySelector('[data-key="confirm"]');
+      var confirmKey = confirmKeyNode();
       if (!confirmKey) return;
-      if (photoBusy()) {
+      var busy = photoBusy();
+      if (busy === lastPhotoBusy) return;
+      lastPhotoBusy = busy;
+      if (busy) {
         confirmKey.setAttribute('aria-disabled', 'true');
         confirmKey.style.opacity = '0.4';
       } else {
@@ -3101,10 +3149,18 @@
             return;
           }
           /* 俏皮点评（2.25.0 由 2.24.3 合并）：成功文案后追加一条 ≤40 字的场景调侃；
-             取不到就退回原文案，主流程零影响 */
+             取不到就退回原文案，主流程零影响。
+             2.36.0：成功提示带「再记一笔」动作（toast action 窗口 5s）——默认仍回上一页，
+             连着记账时点一下直接进新的记一笔，不用回首页再点进来。 */
           var quip = XZB.core && XZB.core.quips ? XZB.core.quips.for(entity) : '';
-          showToast(quip ? '已记一笔 · ' + quip : '已记一笔',
-            quip ? { type: 'success', duration: 3600 } : { type: 'success' });
+          var successOpts = quip ? { type: 'success', duration: 3600 } : { type: 'success' };
+          if (XZB.router && typeof XZB.router.go === 'function') {
+            successOpts.action = {
+              label: '再记一笔',
+              onClick: function () { XZB.router.go('#/add'); }
+            };
+          }
+          showToast(quip ? '已记一笔 · ' + quip : '已记一笔', successOpts);
           goBack();
         }, function () {
           /* 门面自身不 reject（app.js 的 callPhotoStore 已兜底），这里是最后一道兜底：
@@ -3328,6 +3384,23 @@
         replaceOnType = false;
         state.amountText = String(state.amountText || '').slice(0, -1);
         event.preventDefault();
+      } else if (key === '+' || key === '-') {
+        /* 2.36.0：硬件键盘补上加减算式，与屏上 appendOperator 同规则：
+           空值不打头、连按换符号、悬挂小数点（5.）先收掉再接符号 */
+        var base = String(state.amountText || '');
+        if (!base) return;
+        var lastCh = base.charAt(base.length - 1);
+        if (lastCh === '+' || lastCh === '-' || lastCh === '.') base = base.slice(0, -1);
+        state.amountText = base + key;
+        event.preventDefault();
+      } else if (key === 'Enter') {
+        /* 2.36.0：回车 = 键盘「完成」（保存）。焦点在按钮/链接/下拉上时交给原生
+           click，避免一次回车触发两件事；输入框已在函数开头放行给系统。 */
+        if (tag === 'button' || tag === 'a' || tag === 'select' ||
+            (target && target.isContentEditable)) return;
+        event.preventDefault();
+        if (keypadHandle && typeof keypadHandle.confirm === 'function') keypadHandle.confirm();
+        return;
       } else if (key === 'Escape') {
         closeKeypad();
         return;
