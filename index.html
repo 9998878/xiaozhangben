@@ -39,6 +39,41 @@
   <link rel="apple-touch-startup-image" href="splash/splash-1242x2208.png"
         media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)">
 
+  <script>
+/* 小账本 2.0 · js/ui/preload-home.js · owner: frontend（2.35.0 首屏预载）
+ * 两件事：
+ *   1) 定稿 XZB.version —— 全文件唯一版本字面量（原在 app 内联块末尾）。
+ *      core 各模块的 `XZB.version = XZB.version || '2.2.0'` 是 Node standalone 兜底，
+ *      本块先执行，|| 守卫会保留这里定稿的值；app 块不再赋值。
+ *   2) 默认路由（空 hash 或 #/home）时，为首屏三件套（home + 其依赖 habit + 嵌入明细 ledger）
+ *      注入 <link rel="preload" as="script">，让 chunk 下载与后面约 1MB 内联 CSS/JS 的
+ *      下载解析并行；load-screen.js 之后注入同 URL 的 <script> 时直接命中预载，加载链一行不改。
+ * URL 与 XZB.chunks.url() 逐字一致（js/ 前缀 + ?v=版本；file:// 恒省略 query）。
+ * 预载清单只是性能提示，不是依赖真源（真源仍是 chunk-manifest.js 的 deps），只覆盖默认首屏；
+ * 其它路由保持原加载链。任何失败静默跳过，绝不阻断启动。 */
+(function (global) {
+  'use strict';
+  var XZB = global.XZB = global.XZB || {};
+  XZB.version = '2.35.0';
+  try {
+    var doc = global.document;
+    var loc = global.location;
+    if (!doc || !loc || !doc.head || typeof doc.createElement !== 'function') { return; }
+    var hash = String(loc.hash || '');
+    var view = hash.replace(/^#\/?/, '').split(/[/?]/)[0];
+    if (view !== '' && view !== 'home') { return; }
+    var query = loc.protocol === 'file:' ? '' : '?v=' + XZB.version;
+    ['js/screens/home.js', 'js/modules/habit.js', 'js/screens/ledger.js'].forEach(function (file) {
+      var link = doc.createElement('link');
+      link.rel = 'preload';
+      link.as = 'script';
+      link.href = file + query;
+      doc.head.appendChild(link);
+    });
+  } catch (error) { /* 预载是锦上添花：失败只是回到原来的串行加载 */ }
+}(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this)));
+</script>
+
   <!-- 基础样式 → 组件样式 → 各屏幕样式（顺序冻结，不可调整） -->
   <style>
 /* 唯一真源：UI.md §9「令牌清单」，裁决 D06。
@@ -33319,10 +33354,10 @@ textarea::selection {
   'use strict';
 
   var XZB = global.XZB = global.XZB || {};
-  /* 无条件赋值：core 各模块为了 Node standalone 会先写 XZB.version || '2.2.0'，
-     原来的 || 守卫永远输给它们，运行时版本停在 2.2.0。app.js 是加载链最后一环，
-     由它定稿版本（与 pwa/sw.js 的 CACHE_NAME 成对维护）。 */
-  XZB.version = '2.34.0';
+  /* 版本唯一字面量已前移到 <head> 的 js/ui/preload-home.js 内联块（2.35.0）：
+     那里先定稿 XZB.version，首屏预载才能带上与加载器一致的 ?v=；
+     core 各模块的 `XZB.version || '2.2.0'` 兜底见到已定稿值会原样保留。
+     本块不再赋值；改版本时同步 preload-home 块与 sw.js 的 CACHE_NAME/CACHE_LABEL。 */
 
   var Core = XZB.Core || XZB.core || {};
   var UI = XZB.UI || XZB.ui || {};

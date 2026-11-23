@@ -8,10 +8,11 @@
 
 ## 启动链
 
-1. `index.html` 解析内嵌的 chunk-manifest（搜 `js/chunk-manifest.js`），决定首屏需要哪些 chunk。
-2. 按需注入 `js/screens/*.js` 与 `js/modules/*.js`，统一挂到 `XZB` 命名空间。
-3. hash 路由切屏（`#/home`、`#/bills`、`#/settings` 等）；屏幕模块自己渲染、绑定事件。
-4. `sw.js` 按 manifest 预缓存；`CACHE_NAME` 一变，旧缓存被清。
+1. `<head>` 最前部的内联块 `js/ui/preload-home.js` 先定稿 `XZB.version`（全文件唯一版本字面量），默认路由（空 hash / `#/home`）时再为首屏三件套（home + habit + 嵌入 ledger）注入 `<link rel="preload" as="script">`，chunk 下载与后续约 1MB 内联 CSS/JS 的解析并行；其它路由不预载。预载只是性能提示，URL 与 `XZB.chunks.url()` 逐字一致（`?v=` 版本，file:// 省略 query），加载链本身不变。
+2. `index.html` 解析内嵌的 chunk-manifest（搜 `js/chunk-manifest.js`），决定首屏需要哪些 chunk。
+3. 按需注入 `js/screens/*.js` 与 `js/modules/*.js`，统一挂到 `XZB` 命名空间。
+4. hash 路由切屏（`#/home`、`#/bills`、`#/settings` 等）；屏幕模块自己渲染、绑定事件。
+5. `sw.js` 按 manifest 预缓存；`CACHE_NAME` 一变，旧缓存被清。
 
 ## 数据
 
@@ -40,7 +41,7 @@
 
 ## 发布与不变量
 
-- 版本三处：`index.html` 的 `XZB.version`、`sw.js` 的 `CACHE_NAME`/`CACHE_LABEL`、`tests/category-expansion.test.js` 7.1/7.2 的转义正则。
+- 版本三处：`index.html` 的 `XZB.version`（2.35.0 起唯一字面量在 `<head>` 的 `js/ui/preload-home.js` 块，app 块不再赋值）、`sw.js` 的 `CACHE_NAME`/`CACHE_LABEL`、`tests/category-expansion.test.js` 7.1/7.2 的转义正则。
 - 缓存名必须随版本变，否则用户永远停在旧 SW。
 - `tests/` 是唯一回归防线：改行为必须同批改测试；`scripts/check.js` 只守机械一致性。
 

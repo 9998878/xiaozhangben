@@ -497,6 +497,8 @@
     if (url) {
       /* alt="" 由 aria-label 承载信息（UI.md §7 第 12 条）；src 只来自 blob 注册表，不拼任何用户数据 */
       var img = el('img', { alt: '', src: url, draggable: 'false' });
+      /* 2.35.0：异步解码，照片解码不再阻塞主线程（多张大图同屏时尤其明显） */
+      img.decoding = 'async';
       img.addEventListener('error', function () {
         /* 单张破图：移除 img，保留按钮其余语义；不重排、不自动重试、不拖垮其它照片 */
         if (img.parentNode === btn) { btn.removeChild(img); }
@@ -1547,6 +1549,8 @@
     });
     var img = node.querySelector ? node.querySelector('img') : null;
     if (img) {
+      /* 2.35.0：异步解码（kit 与本地兜底两条路径都在此收口），列表滚动不被照片解码卡住 */
+      img.decoding = 'async';
       img.addEventListener('error', function () {
         /* 破图：只替换这一个媒体区，行仍可点开详情；不自动重试、不影响其它行 */
         if (!cell.isConnected) { return; }
@@ -3034,14 +3038,22 @@
     }
   }
 
-  /* 2.26.4：吸顶日头只在「真的吸住」时挂 is-stuck，下沿才渐隐；静止时若也渐隐，会把第一行内容压暗。 */
+  /* 2.26.4：吸顶日头只在「真的吸住」时挂 is-stuck，下沿才渐隐；静止时若也渐隐，会把第一行内容压暗。
+     2.35.0：先集中读、再集中写。旧写法逐头交替 getBoundingClientRect（读）与 classList.toggle（写），
+     每次写都使布局失效，下一次读就强制同步重排——几十个日组 = 每个滚动帧几十次强制重排。
+     分两阶段后一帧至多一次布局刷新；判定口径（rect.top <= top + 1）逐字不变。 */
   function syncStuck(st) {
     if (!st || st.dead || !st.nodes || !st.nodes.days) { return; }
     var heads = st.nodes.days.querySelectorAll('.s-ledger-day__head');
-    for (var i = 0; i < heads.length; i += 1) {
+    var states = [];
+    var i;
+    for (i = 0; i < heads.length; i += 1) {
       var top = parseFloat(heads[i].style.top);
       if (!isFinite(top)) { continue; }
-      heads[i].classList.toggle('is-stuck', heads[i].getBoundingClientRect().top <= top + 1);
+      states.push({ head: heads[i], stuck: heads[i].getBoundingClientRect().top <= top + 1 });
+    }
+    for (i = 0; i < states.length; i += 1) {
+      states[i].head.classList.toggle('is-stuck', states[i].stuck);
     }
   }
 
@@ -3281,9 +3293,11 @@
         request(function () {
           ticking = false;
           if (st.dead) { return; }
+          /* 2.35.0：几何读取放在所有样式写（closeSwiped / syncStuck）之前，
+             避免写完再读又强制一次同步布局；触底加载的触发条件不变。 */
+          var remain = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
           if (st.openItem) { closeSwiped(st); }
           syncStuck(st);
-          var remain = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
           if (remain < LOAD_AHEAD && st.rendered < MAX_AUTO_ROWS) { loadMore(st); }
         });
       }
