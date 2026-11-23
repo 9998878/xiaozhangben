@@ -1,7 +1,8 @@
 'use strict';
 /*
  * tests/add-page-ux.test.js
- * 自检脚本：2.36.0「记一笔页专项」——按键热路径去重 + 硬件键盘补全 + 备注聚焦 + 再记一笔。
+ * 自检脚本：2.36.0「记一笔页专项」——按键热路径去重 + 硬件键盘补全 + 备注聚焦 + 再记一笔；
+ *           2.37.0 追加——分类宫格长按跳转移除（显式管理入口保留）。
  *
  * 运行：node tests/add-page-ux.test.js（scripts/test.js 自动收集）
  *
@@ -270,6 +271,30 @@ test('4.2 成功提示带「再记一笔」动作，点击进新的记一笔；�
   check(body.indexOf("XZB.router.go('#/add')") >= 0, '动作应路由到记一笔');
   check(body.indexOf('goBack();') >= 0, '默认返回流程保留');
   check(body.indexOf('successOpts.action') >= 0, '动作挂在成功提示上');
+});
+
+/* ============================== 用例 5：长按跳转已移除（2.37.0） ============================== */
+
+section('用例 5：分类宫格长按不再跳分类管理');
+
+test('5.1 长按机制整体移除：HOLD_MS / holdTimer / holdFired / grid pointerdown 均不在', function () {
+  check(ADD_JS.indexOf('HOLD_MS') < 0, '不应再有 HOLD_MS');
+  check(ADD_JS.indexOf('holdTimer') < 0, '不应再有 holdTimer');
+  check(ADD_JS.indexOf('holdFired') < 0, '不应再有 holdFired');
+  check(ADD_JS.indexOf("grid.addEventListener('pointerdown'") < 0, '宫格不应再绑长按 pointerdown');
+  check(ADD_JS.indexOf('长按跳分类管理') < 0, '旧长按注释应已更新');
+});
+
+test('5.2 显式管理入口保留：openCategoryManage 与「管理分类」按钮、宫格「管理」格仍在', function () {
+  check(ADD_JS.indexOf('function openCategoryManage()') >= 0, '管理跳转函数应保留（显式入口用）');
+  check(ADD_JS.indexOf('管理分类') >= 0, '「全部」面板的管理分类按钮应保留');
+  check(ADD_JS.indexOf('openQuickItems()') >= 0, '宫格「管理」格入口应保留');
+  check(ADD_JS.indexOf("target.closest('.s-add-cat--quick')") >= 0, '管理格点击接线应保留');
+});
+
+test('5.3 键盘组件长按连删不受影响（keypad.js HOLD_DELAY 仍在）', function () {
+  check(KEYPAD_JS.indexOf('HOLD_DELAY') >= 0, '键盘长按连删应保留');
+  check(KEYPAD_JS.indexOf('startHold') >= 0, '键盘长按接线应保留');
 });
 
 /* ============================== 汇总 ============================== */

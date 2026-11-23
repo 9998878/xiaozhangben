@@ -58,7 +58,6 @@
     ca_bathing: 'shower', ca_haircut: 'scissors', ca_electricity: 'bolt',
     ca_aifee: 'ai', ca_documents: 'file', ca_settings: 'settings'
   };
-  var HOLD_MS = 500;
 
   /* ---------------- 依赖取用（都做存在性判断，缺件不白屏） ---------------- */
   function core(name) {
@@ -704,8 +703,6 @@
     var syncingKeypad = false;
     var replaceOnType = false;
     var reasonTimer = 0;
-    var holdTimer = 0;
-    var holdFired = false;
     var disposed = false;
     var listeners = [];
     /* 2.36.0 按键热路径缓存：确认键节点只查一次；上下文/确认键文案/照片忙态/标题/键盘标记
@@ -734,7 +731,6 @@
     function teardown() {
       if (disposed) return;
       disposed = true;
-      if (holdTimer) { global.clearTimeout(holdTimer); holdTimer = 0; }
       if (reasonTimer) { global.clearTimeout(reasonTimer); reasonTimer = 0; }
       if (photoMetaTimer) { global.clearTimeout(photoMetaTimer); photoMetaTimer = 0; }
       /* 屏内草稿随屏销毁；二进制已落库的留给 photos store（未落库的随引用一起被 GC）。
@@ -3277,27 +3273,11 @@
       setExtrasOpen(extrasBlock.getAttribute('data-open') !== '1');
     });
 
-    /* 分类宫格：点击选中，长按跳分类管理 */
-    grid.addEventListener('pointerdown', function (event) {
-      var cell = event.target && event.target.closest ? event.target.closest('[data-category]') : null;
-      if (!cell) return;
-      holdFired = false;
-      if (holdTimer) global.clearTimeout(holdTimer);
-      holdTimer = global.setTimeout(function () {
-        holdTimer = 0;
-        holdFired = true;
-        openCategoryManage();
-      }, HOLD_MS);
-    });
-    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (type) {
-      grid.addEventListener(type, function () {
-        if (holdTimer) { global.clearTimeout(holdTimer); holdTimer = 0; }
-      });
-    });
+    /* 分类宫格：点击选中。2.37.0 起长按不再跳分类管理（用户要求）——
+       长按后松开即正常选中；管理入口保留在宫格「管理」格与「全部」面板的「管理分类」按钮。 */
     grid.addEventListener('click', function (event) {
       var target = event.target;
       if (!target || !target.closest) return;
-      if (holdFired) { holdFired = false; return; }
       var quickCell = target.closest('.s-add-cat--quick');
       if (quickCell) {
         openQuickItems();
