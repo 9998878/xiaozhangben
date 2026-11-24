@@ -2755,28 +2755,48 @@
     return { ok: true };
   }
 
-  /* 2.41.0：首次运行播种内置默认服务（零配置，手机打开即用）。幂等——只要本机已有
-     xzb.ai.v1（无论用户自定义、关闭还是撤回告知）就原样不动，绝不覆盖。由应用启动链
-     在 core-assistant 加载后调用一次；本函数不在模块顶层自动执行，故 Node 单测的
-     「空配置=安全默认」语义不受影响。播种即默认开启并同意隐私告知（所有者要求）。 */
+  /* 2.41.0：首次运行播种内置默认服务（零配置，手机打开即用）。幂等——本机已有
+     xzb.ai.v1 且非旧内置预设时原样不动，绝不覆盖。由应用启动链在 core-assistant
+     加载后调用一次；本函数不在模块顶层自动执行，故 Node 单测的「空配置=安全默认」
+     语义不受影响。播种即默认开启并同意隐私告知（所有者要求）。
+     2.41.1：旧内置免费档（OVH 免密钥，含读入时已从 Pollinations 迁移来的）属于应用
+     自带预设而非用户自定义，随启动升级到新默认服务，保留用户开关/告知状态；自定义
+     配置（自填地址/模型/密钥）仍不覆盖。 */
   function seedDefaultService() {
     var ls = lsApi();
     if (!ls) { return { ok: false, seeded: false }; }
+    var existing = null;
     try {
-      if (ls.getItem(AI_KEY) !== null) { return { ok: true, seeded: false }; }
+      existing = ls.getItem(AI_KEY);
     } catch (error) {
       return { ok: false, seeded: false };
     }
-    var wrote = aiWrite({
-      v: AI_VERSION,
-      enabled: true,
-      baseURL: AI_DEFAULT_SERVICE.baseURL,
-      model: AI_DEFAULT_SERVICE.model,
-      key: AI_DEFAULT_SERVICE.key,
-      redact: 'names',
-      noticeAt: Date.now()
-    });
-    return { ok: wrote, seeded: wrote };
+    if (existing === null) {
+      var wrote = aiWrite({
+        v: AI_VERSION,
+        enabled: true,
+        baseURL: AI_DEFAULT_SERVICE.baseURL,
+        model: AI_DEFAULT_SERVICE.model,
+        key: AI_DEFAULT_SERVICE.key,
+        redact: 'names',
+        noticeAt: Date.now()
+      });
+      return { ok: wrote, seeded: wrote };
+    }
+    var cfg = aiRead();
+    if (aiIsPreset(cfg)) {
+      var up = aiWrite({
+        v: AI_VERSION,
+        enabled: cfg.enabled,
+        baseURL: AI_DEFAULT_SERVICE.baseURL,
+        model: AI_DEFAULT_SERVICE.model,
+        key: AI_DEFAULT_SERVICE.key,
+        redact: cfg.redact,
+        noticeAt: cfg.noticeAt
+      });
+      return { ok: up, seeded: up };
+    }
+    return { ok: true, seeded: false };
   }
 
   /* ---------- 传输层：单次 POST + 硬超时（AbortController） ---------- */

@@ -155,6 +155,38 @@ regCase('1.4 播种落盘形状：v/enabled/baseURL/model/key/redact/noticeAt �
   checkEq(typeof raw.key, 'string', 'key');
 });
 
+regCase('1.5 旧内置免费档（OVH 免密钥）随启动升级到新默认服务，保留开关/告知', function () {
+  ls.removeItem(AI_KEY_VALUE);
+  const p = llm.preset();
+  llm.setConfig({ baseURL: p.baseURL, model: p.model, key: '' });
+  llm.setConfig({ enabled: true });
+  llm.setConfig({ noticeAt: Date.now() });
+  checkEq(llm.isPreset(), true, '前置：命中旧内置预设');
+  const r = llm.seedDefaultService();
+  checkEq(r && r.seeded, true, '旧预设应升级');
+  const cfg = llm.getConfig().cfg;
+  checkEq(cfg.baseURL, 'https://maas.qianwenaiapi.com/compatible-mode/v1', '升级到新端点');
+  checkEq(cfg.model, 'qwen4-max', '升级到新模型');
+  checkEq(cfg.hasKey, true, '带上内置密钥');
+  checkEq(cfg.enabled, true, '开关保留');
+  check(Number(cfg.noticeAt) > 0, '告知保留');
+  checkEq(llm.ready(), true, '升级后就绪');
+});
+
+regCase('1.6 旧预设但用户已关闭：升级后仍关闭，不翻回 ready', function () {
+  ls.removeItem(AI_KEY_VALUE);
+  const p = llm.preset();
+  llm.setConfig({ baseURL: p.baseURL, model: p.model, key: '' });
+  llm.setConfig({ enabled: false });
+  llm.setConfig({ noticeAt: 0 });
+  const r = llm.seedDefaultService();
+  checkEq(r && r.seeded, true, '旧预设应升级');
+  const cfg = llm.getConfig().cfg;
+  checkEq(cfg.baseURL, 'https://maas.qianwenaiapi.com/compatible-mode/v1', '端点升级');
+  checkEq(cfg.enabled, false, '关闭状态保留');
+  checkEq(llm.ready(), false, '不翻回 ready');
+});
+
 /* ============================== 用例 2：思考型模型适配 ============================== */
 
 section('用例 2：测试探针/记账解析/通用对话都关思考（enable_thinking:false）');

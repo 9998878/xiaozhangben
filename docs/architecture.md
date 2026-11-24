@@ -36,7 +36,7 @@
 
 ## 内置默认 AI 服务（2.41.0）
 
-- 零配置即用：`core-assistant.js` 内置 `AI_DEFAULT_SERVICE`（千问 MaaS 端点 + `qwen4-max` + 密钥，按所有者要求公开）。启动链 `continueBoot` 调 `seedDefaultAiService()`：`XZB.chunks.ensure('core-assistant')` 后执行幂等 `llm.seedDefaultService()`——本机无 `xzb.ai.v1` 才播种（默认 `enabled:true` + `noticeAt>0`），已有配置（自定义/关闭/撤回）绝不覆盖。播种函数不在模块顶层自动执行，保住「空配置=安全默认」的单测语义。
+- 零配置即用：`core-assistant.js` 内置 `AI_DEFAULT_SERVICE`（千问 MaaS 端点 + `qwen4-max` + 密钥，按所有者要求公开）。启动链 `continueBoot` 调 `seedDefaultAiService()`：`XZB.chunks.ensure('core-assistant')` 后执行幂等 `llm.seedDefaultService()`——本机无 `xzb.ai.v1` 才播种（默认 `enabled:true` + `noticeAt>0`）；2.41.1 起若已存配置是旧内置免费档（`aiIsPreset` 命中 OVH 免密钥，含读入时已从 Pollinations 迁移来的）则升级到新默认服务并保留开关/告知，自定义配置绝不覆盖。播种函数不在模块顶层自动执行，保住「空配置=安全默认」的单测语义。
 - 思考型模型适配：该端点仅 `qwen4-max`/`deepseek-v4.1-flash` 有余量且默认会思考。`buildBody`（记账解析）、`llmTest`（16 token 探针）、`llmChat`（通用对话）统一带 `enable_thinking:false`；`ai-insights` 经 `extraBody` 同样关思考。端点不认时 `stripOptionalBody` 在 400 后剥 `response_format`/`enable_thinking` 重发一次。
 - 取舍：密钥公开可被任何人调用（余量可能被刷），默认开启+默认同意隐私告知是所有者明确选择的「手机打开即用」口径，是「本地优先、出站先过告知、默认关闭」铁律的一处显式例外（仅限内置服务；用户自定义配置仍走原告知门）。详见 `docs/known-issues.md`。回归 `tests/ai-default-service.test.js`。
 
