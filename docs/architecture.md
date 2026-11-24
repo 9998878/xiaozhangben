@@ -34,6 +34,12 @@
 - 云端词表预算（2.38.0）：`categoryPairs(list, usage)` system 保底 + 用户分类按使用频度降序（`categoryUsage` 单遍统计）；`fitBody` 超 4KB 按行字节精确裁剪尾部（分类保底 6、账户保底 2），不再对半砍。
 - 错误归因（2.38.0）：非 2xx 读响应体（≤2KB），`mapStatus` 细分 endpoint（404/405）/model（400 点名模型不存在）/auth（401/403）；`detail` 为服务端原话（密钥掩码、限长 120），经 `localReply` 透传到回落气泡。
 
+## 内置默认 AI 服务（2.41.0）
+
+- 零配置即用：`core-assistant.js` 内置 `AI_DEFAULT_SERVICE`（千问 MaaS 端点 + `qwen4-max` + 密钥，按所有者要求公开）。启动链 `continueBoot` 调 `seedDefaultAiService()`：`XZB.chunks.ensure('core-assistant')` 后执行幂等 `llm.seedDefaultService()`——本机无 `xzb.ai.v1` 才播种（默认 `enabled:true` + `noticeAt>0`），已有配置（自定义/关闭/撤回）绝不覆盖。播种函数不在模块顶层自动执行，保住「空配置=安全默认」的单测语义。
+- 思考型模型适配：该端点仅 `qwen4-max`/`deepseek-v4.1-flash` 有余量且默认会思考。`buildBody`（记账解析）、`llmTest`（16 token 探针）、`llmChat`（通用对话）统一带 `enable_thinking:false`；`ai-insights` 经 `extraBody` 同样关思考。端点不认时 `stripOptionalBody` 在 400 后剥 `response_format`/`enable_thinking` 重发一次。
+- 取舍：密钥公开可被任何人调用（余量可能被刷），默认开启+默认同意隐私告知是所有者明确选择的「手机打开即用」口径，是「本地优先、出站先过告知、默认关闭」铁律的一处显式例外（仅限内置服务；用户自定义配置仍走原告知门）。详见 `docs/known-issues.md`。回归 `tests/ai-default-service.test.js`。
+
 ## 云备份（2.34.0）
 
 - 威胁模型：iOS 主屏幕 Web 应用存储独立于 Safari，删图标即清数据（WebKit 隔离机制）——本地快照/软删都挡不住「删应用」，唯一可靠出路是手机外副本。
@@ -67,4 +73,4 @@
 
 - 单文件巨型 `index.html`：历史原因，换来零构建和直接 Pages 发布；新逻辑尽量放 `js/modules/`。
 - 无第三方依赖：测试用纯 node 断言，脚本用 node 内置模块。
-- 本地优先：任何要出网的能力都必须先过隐私告知，默认关闭。
+- 本地优先：任何要出网的能力都必须先过隐私告知，默认关闭。例外（2.41.0）：内置默认 AI 服务按所有者要求零配置默认开启并默认同意告知，密钥公开内置；用户自定义配置仍守原告知门。

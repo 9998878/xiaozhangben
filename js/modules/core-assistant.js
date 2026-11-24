@@ -82,6 +82,18 @@
     model: 'openai'
   };
 
+  /* 2.41.0：内置默认服务（随公开仓库发布，手机首次打开即用，零配置）。
+     千问 MaaS OpenAI 兼容端点 + qwen4-max。密钥按所有者要求公开内置——任何打开
+     页面的人都能看见并调用，余量可能被刷（见 docs/known-issues.md）。该模型默认
+     会「思考」，故测试探针/记账解析/通用对话一律带 enable_thinking:false（端点不认
+     时由 stripOptionalBody 在 400 后剥掉重试）。首次运行由 seedDefaultService 播种，
+     已有配置（含用户自定义/关闭）绝不覆盖。 */
+  var AI_DEFAULT_SERVICE = {
+    baseURL: 'https://maas.qianwenaiapi.com/compatible-mode/v1',
+    model: 'qwen4-max',
+    key: 'sk-ws-H.XMPRXLR.DVol.MEUCIB-fUnrb6BuCdxyJrKqMdPMuN3pv6zCXwLy4HmK1Unr-AiEAnjnU2DFvEqRq1A5n7FbVWEZqUv1xFYWOD4DfEc7WCzs'
+  };
+
   /* 2.29.2：快车道分类兜底 id（竞品口径）——nl 对词表有把握时给出具体分类，
      没把握时落 ca_other_expense/ca_other_income 兜底并警告「未识别分类」。
      在线模式下兜底结果升级给模型定分类（用户实测「炒土鸡20」主诉）；
@@ -2743,6 +2755,30 @@
     return { ok: true };
   }
 
+  /* 2.41.0：首次运行播种内置默认服务（零配置，手机打开即用）。幂等——只要本机已有
+     xzb.ai.v1（无论用户自定义、关闭还是撤回告知）就原样不动，绝不覆盖。由应用启动链
+     在 core-assistant 加载后调用一次；本函数不在模块顶层自动执行，故 Node 单测的
+     「空配置=安全默认」语义不受影响。播种即默认开启并同意隐私告知（所有者要求）。 */
+  function seedDefaultService() {
+    var ls = lsApi();
+    if (!ls) { return { ok: false, seeded: false }; }
+    try {
+      if (ls.getItem(AI_KEY) !== null) { return { ok: true, seeded: false }; }
+    } catch (error) {
+      return { ok: false, seeded: false };
+    }
+    var wrote = aiWrite({
+      v: AI_VERSION,
+      enabled: true,
+      baseURL: AI_DEFAULT_SERVICE.baseURL,
+      model: AI_DEFAULT_SERVICE.model,
+      key: AI_DEFAULT_SERVICE.key,
+      redact: 'names',
+      noticeAt: Date.now()
+    });
+    return { ok: wrote, seeded: wrote };
+  }
+
   /* ---------- 传输层：单次 POST + 硬超时（AbortController） ---------- */
 
   function endpointOf(base) {
@@ -3153,6 +3189,7 @@
       temperature: 0,
       max_tokens: LLM_MAX_TOKENS,
       response_format: { type: 'json_object' },
+      enable_thinking: false,
       messages: [
         { role: 'system', content: systemText(accts, cats, today, bookId) },
         { role: 'user', content: raw }
@@ -3312,6 +3349,7 @@
         model: model,
         temperature: 0,
         max_tokens: 16,
+        enable_thinking: false,
         messages: [{ role: 'user', content: '回复一个 JSON 对象：{"ok":true}' }]
       });
     }, aiIsPreset(cfg) ? LLM_PLAN_TIMEOUT_MS : LLM_TIMEOUT_MS).then(function (res) {
@@ -3351,6 +3389,7 @@
         temperature: 0,
         max_tokens: Number(o.maxTokens) > 0 ? Math.floor(Number(o.maxTokens)) : LLM_MAX_TOKENS,
         response_format: { type: 'json_object' },
+        enable_thinking: false,
         messages: list
       };
       if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
@@ -4277,7 +4316,9 @@
       preset: function () {
         return { id: AI_PRESET.id, baseURL: AI_PRESET.baseURL, model: AI_PRESET.model, keyless: true };
       },
-      isPreset: function () { return aiIsPreset(aiRead()); }
+      isPreset: function () { return aiIsPreset(aiRead()); },
+      /* 2.41.0：首次运行播种内置默认服务（应用启动链调用，幂等） */
+      seedDefaultService: seedDefaultService
     },
     respondRemote: respondRemote
   };

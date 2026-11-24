@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.40.0';
+  XZB.version = '2.41.0';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -34689,6 +34689,19 @@ textarea::selection {
 
   /* L-j2：闸门只在这里判定；continueBoot 之外没有任何 store.open/load/migrate/router.start 调用，
      所以被拦下时天然「先锁后读」——库连打开都不会发生。 */
+  /* 2.41.0：首次运行播种内置默认 AI 服务（零配置，手机打开即用）。确保 core-assistant
+     chunk 加载后调用其幂等 seedDefaultService()；本机已有配置绝不覆盖。失败只静默降级，
+     不阻断启动（与 autoPostDueRecurring 等启动副作用同口径）。 */
+  function seedDefaultAiService() {
+    if (!XZB.chunks || typeof XZB.chunks.ensure !== 'function') { return; }
+    XZB.chunks.ensure('core-assistant').then(function () {
+      var a = XZB.core && XZB.core.assistant;
+      if (a && a.llm && typeof a.llm.seedDefaultService === 'function') {
+        try { a.llm.seedDefaultService(); } catch (error) { /* 播种失败不影响启动 */ }
+      }
+    }).catch(function () { /* chunk 加载失败：小助手/解读页各自 ensure 时再试 */ });
+  }
+
   function boot() {
     if (bootStarted) return readyPromise;
     bootStarted = true;
@@ -34816,6 +34829,7 @@ textarea::selection {
       setupInstallGuide();
       registerServiceWorker();
       initCloudSync();
+      seedDefaultAiService();
 
       if (migrationError) {
         if (UI.toast && typeof UI.toast.show === 'function') {
