@@ -3,7 +3,7 @@
  * 结构：账期筛选 → 核心结论 → 收支摘要 → 消费结构（环图）→ 收支变化（六个月柱图）
  *       → AI 月度解读（第 2 轮）→ 值得留意（本地规则）→ 行动建议。
  * 契约：XZB.screens.register('insights', { title, subtitle, render, destroy })
- * 依赖：XZB.core.{dates,money,stats}、XZB.core.aiInsights；
+ * 依赖：XZB.core.{dates,money,stats}、XZB.core.aiInsights、XZB.core.audit（账单体检，2.39.0）；
  *       按需加载：XZB.core.assistant.llm（不在本屏 DEPS，首次点「生成解读」时 ensure）
  *       XZB.ui.{icons,kit,charts,sheet}、XZB.app
  * 硬规则：不碰 IndexedDB / localStorage；只读 ctx.db；金额一律整数分；
@@ -2302,6 +2302,126 @@
     });
   }
 
+  /* ---------------- 账单体检（2.39.0） ----------------
+   * 算法全在 XZB.core.audit（已进本屏 DEPS，渲染时必已加载）；这里只做取数与展示。
+   * 范围是整个账本、全部历史，不随上方账期 chip 变化；结论只陈述事实，不做评判。
+   * 复用「值得留意」的行样式与流水清单，不新增 CSS。 */
+  var AUDIT_ICONS = { high: 'flag', mid: 'info', low: 'search' };
+
+  function openAuditRows(report, title, rows) {
+    var sheet = sheetApi();
+    if (!sheet || typeof sheet.open !== 'function') { return; }
+    var body = sheetBodyShell();
+    body.appendChild(txList(report, rows, function () {
+      /* 从流水详情返回时重开本清单（与分类明细同一约定） */
+      var next = buildReport(S.ctx);
+      if (next && !next.failed) { openAuditRows(next, title, rows); }
+    }));
+    sheet.open({ title: title, content: body, actions: [{ label: '关闭', kind: 'text' }] });
+  }
+
+  function auditCard(report) {
+    try {
+      var mod = Core.audit;
+      if (!mod || typeof mod.run !== 'function') { return null; }
+      var audit = mod.run({
+        transactions: report.db && Array.isArray(report.db.transactions) ? report.db.transactions : [],
+        scope: report.model ? report.model.scope : {},
+        today: todayStr()
+      });
+      if (!audit || audit.ok !== true) { return null; }
+
+      var card = moduleCard('账单体检',
+        '整个账本 · 全部历史' + (audit.window ? '，最后一笔 ' + dateLabel(audit.window.to) : '') + ' · 只在本机计算',
+        's-insights-audit');
+      var list = el('ul', { className: 's-insights-tip__list' });
+
+      function row(options) {
+        var item = el('li', { className: 's-insights-tip' + (options.warn ? ' is-warn' : '') });
+        var chip = el('span', { className: 's-insights-tip__icon', 'aria-hidden': 'true' });
+        chip.appendChild(iconNode(options.icon, 18));
+        item.appendChild(chip);
+        var body = el('div', { className: 's-insights-tip__body' });
+        body.appendChild(el('p', { className: 's-insights-tip__title', text: options.title }));
+        body.appendChild(el('p', { className: 's-insights-tip__text', text: options.text }));
+        if (options.facts && options.facts.length) {
+          var facts = el('ul', { className: 's-insights-tip__facts' });
+          for (var i = 0; i < options.facts.length; i += 1) { facts.appendChild(el('li', { text: options.facts[i] })); }
+          body.appendChild(facts);
+        }
+        if (options.rows && options.rows.length) {
+          var title = options.sheetTitle || ('账单体检 · ' + options.title);
+          var rows = options.rows;
+          body.appendChild(buttonNode('看这 ' + rows.length + ' 笔', {
+            className: 's-insights-tip__action',
+            icon: 'list',
+            onClick: function () { openAuditRows(report, title, rows); }
+          }));
+        }
+        item.appendChild(body);
+        list.appendChild(item);
+      }
+
+      /* 1) 体检分 + 每月固定开销 */
+      var active = 0;
+      var i;
+      for (i = 0; i < audit.recurring.length; i += 1) { if (!audit.recurring[i].stale) { active += 1; } }
+      var fixed = audit.fixedMonthlyCents > 0;
+      var summaryFacts = [];
+      for (i = 0; i < audit.recurring.length && i < 4; i += 1) {
+        var s = audit.recurring[i];
+        summaryFacts.push(s.cadenceLabel + ' · ' + (s.categoryName || s.note || '未分类') + ' ' + fmt(s.amountCents) + ' · 已记 ' + s.count + ' 次' + (s.stale ? '（可能已停）' : ''));
+      }
+      if (audit.recurring.length > 4) { summaryFacts.push('另有 ' + (audit.recurring.length - 4) + ' 项'); }
+      row({
+        icon: 'shield',
+        warn: audit.score < 70,
+        title: '体检 ' + audit.score + ' 分 · ' + audit.grade,
+        text: '共 ' + (audit.counts.expense + audit.counts.income) + ' 笔记录。' + (fixed
+          ? '每月固定开销约 ' + fmt(audit.fixedMonthlyCents) + '（' + active + ' 项，按周/年出现的已折算成每月）。'
+          : (audit.recurring.length ? '识别到的规律开销预计日都已过，可能停了，未计入固定开销。' : '暂时没有识别到按规律出现的固定开销。')),
+        facts: summaryFacts
+      });
+
+      /* 2) 每条固定开销：可点开看全部期数 */
+      for (i = 0; i < audit.recurring.length && i < 3; i += 1) {
+        (function (series) {
+          row({
+            icon: 'repeat',
+            title: series.cadenceLabel + ' · ' + (series.categoryName || series.note || '未分类') + ' ' + fmt(series.amountCents),
+            text: '已记 ' + series.count + ' 次，' + dateLabel(series.firstDate) + ' ~ ' + dateLabel(series.lastDate) + '。' +
+              (series.stale ? '预计日已过还没记，可能已经停了。' : '下次预计 ' + dateLabel(series.nextDate) + '。'),
+            sheetTitle: '固定开销明细',
+            rows: series.rows
+          });
+        }(audit.recurring[i]));
+      }
+
+      /* 3) 发现：高 → 中 → 弱 */
+      for (i = 0; i < audit.findings.length && i < 5; i += 1) {
+        (function (finding) {
+          row({
+            icon: AUDIT_ICONS[finding.severity] || 'info',
+            warn: finding.severity === 'high',
+            title: finding.title,
+            text: finding.text,
+            facts: finding.facts,
+            rows: finding.rows
+          });
+        }(audit.findings[i]));
+      }
+
+      if (!audit.findings.length && !audit.recurring.length) {
+        row({ icon: 'check-circle', title: '没有发现问题', text: '没发现重复、断档或明显异常的记录。' });
+      }
+
+      card.appendChild(list);
+      return card;
+    } catch (error) {
+      return null; /* 体检只是附加信息，任何异常都不该拖垮整页 */
+    }
+  }
+
   /* ---------------- 渲染主流程 ---------------- */
 
   function paintCards(report) {
@@ -2312,6 +2432,8 @@
     var aiNode = aiCard(report);
     if (aiNode) { S.contentEl.appendChild(aiNode); }
     if (report.tips.length) { S.contentEl.appendChild(tipsCard(report)); }
+    var auditNode = auditCard(report);
+    if (auditNode) { S.contentEl.appendChild(auditNode); }
     if (report.actions.length) { S.contentEl.appendChild(actionsCard(report)); }
     S.contentEl.appendChild(footNote(report));
   }

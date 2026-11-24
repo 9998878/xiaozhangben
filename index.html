@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.38.0';
+  XZB.version = '2.39.0';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -32271,10 +32271,10 @@ textarea::selection {
     ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
     ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'],
     ['ai-insights', 'modules/ai-insights', 'modules/ai-insights'], ['habit', 'modules/habit', 'modules/habit'],
-    ['bill-import', 'modules/bill-import', 'modules/bill-import']
+    ['bill-import', 'modules/bill-import', 'modules/bill-import'], ['audit', 'modules/audit', 'modules/audit']
   ];
   /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
-  var DEPS = { home: ['habit'], add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts', 'ai-insights'], plan: ['charts'], settings: ['icon-picker', 'bill-import'], assistant: ['nl', 'core-assistant'] };
+  var DEPS = { home: ['habit'], add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts', 'ai-insights', 'audit'], plan: ['charts'], settings: ['icon-picker', 'bill-import'], assistant: ['nl', 'core-assistant'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
@@ -35258,5 +35258,6 @@ textarea::selection {
   <script type="text/xzb-module" data-xzb-chunk="ai-insights" src="js/modules/ai-insights.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="habit" src="js/modules/habit.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="bill-import" src="js/modules/bill-import.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="audit" src="js/modules/audit.js"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 
 ## 命令
 
-- `node scripts/status.js` — 接手先跑：版本、分支、脏文件、测试、最近提交
+- `node scripts/status.js` — 接手先跑：版本、分支、脏文件、测试、最近提交（没装 git 也能跑，只跳过分支相关）
 - `node scripts/test.js` — 跑 `tests/*.test.js`，必须全绿
 - `node scripts/check.js` — 提交前自检：版本三处、AGENTS 长度、文档指针、旧文档残留
 - 发布：push `main` 后 Pages 自动更新（约 1 分钟），清单见 `docs/release.md`
@@ -13,7 +13,7 @@
 
 - `index.html` — 整个应用：启动、hash 路由、账户/设置、IndexedDB schema；内嵌 chunk-manifest，首屏按需加载
 - `js/screens/` — 页面：home、ledger、stats、accounts、plan、add、settings、assistant、insights、books
-- `js/modules/` — 共用逻辑：core-assistant（LLM 传输与错误码）、ai-insights（月度指标与提示词）、nl（中文解析）、charts、keypad、icon-picker
+- `js/modules/` — 共用逻辑：core-assistant（LLM 传输与错误码）、ai-insights（月度指标与提示词）、nl（中文解析）、bill-import（账单 CSV 解析）、habit（习惯记账建议）、audit（账单体检：重复/周期/断档/异常，纯函数）、charts、keypad、icon-picker
 - `sw.js` — Service Worker，按 chunk-manifest 预缓存
 - `tests/` — 纯 node 断言，无框架；`scripts/` — 开发脚本
 - `docs/` — 按需查：`architecture.md`、`known-issues.md`、`release.md`

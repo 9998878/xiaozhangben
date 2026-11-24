@@ -616,15 +616,16 @@
         } else {
           end = p + 1;
         }
-      } else if (unit === '万' || unit === '千' || unit === '百') {
+      } else if (unit === '万' || unit === '千' || unit === '百' || unit === '亿') {
         /* 阿拉伯数字直接接中文量级：12万=120000 元，3千=3000 元；
-         * 口语尾数 1万2=12000 元、3千5=3500 元。 */
+         * 口语尾数 1万2=12000 元、3千5=3500 元。
+         * 2.38.1 补「亿」：旧版漏了它，「1亿」被当成 1 元静默入账。 */
         hasUnit = true;
         unitName = unit;
         if (!error) {
           var magBase = arabicCents(core, frac);
           if (isFinite(magBase)) {
-            var mag = unit === '万' ? 10000 : (unit === '千' ? 1000 : 100);
+            var mag = unit === '亿' ? 100000000 : (unit === '万' ? 10000 : (unit === '千' ? 1000 : 100));
             cents = magBase * mag;
             end = p + 1;
             if (work.charAt(end) === '元' || work.charAt(end) === '块' || work.charAt(end) === '圆') {
@@ -633,7 +634,7 @@
             if (!frac) {
               var magTail = readTailDigit(work, end);
               if (magTail) {
-                var tailMag = unit === '万' ? 100000 : (unit === '千' ? 10000 : 1000);
+                var tailMag = unit === '亿' ? 1000000000 : (unit === '万' ? 100000 : (unit === '千' ? 10000 : 1000));
                 cents += magTail.value * tailMag;
                 end += magTail.len;
               }
@@ -646,6 +647,10 @@
           end = p + 1;
         }
       } else {
+        /* 2.38.1：数字后紧跟 ASCII 字母不是金额——「3D电影」「2K显示器」「5G流量」「1w」「1e3」。
+         * 旧版只挡了字母在前（iPhone15），字母在后时会把 3D电影 记成 3 元、1w 记成 1 元，
+         * 极速直记下直接入账。宁可判「没听清金额」让用户重说，不静默记错。 */
+        if (/[A-Za-z]/.test(work.charAt(coreEnd))) { continue; }
         if (isQuantifierAhead(work, coreEnd) || isDateLikeAhead(work, coreEnd)) { continue; }
         var next = work.charAt(coreEnd);
         if (next === ',' || next === '.') { error = 'invalid'; }
@@ -944,11 +949,12 @@
       addDateMatch(list, dateMatch(s, e, m[0], monday, null, true, 'weekday'));
     });
 
-    /* 相对日期（长词优先用同一正则的靠前分支） */
-    eachMatch(work, /大前天|前天|昨天|昨日|今天|今日|刚才|明天|明日|后天/g, function (m, s, e) {
+    /* 相对日期（长词优先用同一正则的靠前分支；2.38.1 补「大后天」——旧版只认到「后天」，
+       「大后天午饭」日期对了但备注里残留一个「大」） */
+    eachMatch(work, /大前天|前天|昨天|昨日|今天|今日|刚才|明天|明日|大后天|后天/g, function (m, s, e) {
       var offsets = {
         '大前天': -3, '前天': -2, '昨天': -1, '昨日': -1,
-        '今天': 0, '今日': 0, '刚才': 0, '明天': 1, '明日': 1, '后天': 2
+        '今天': 0, '今日': 0, '刚才': 0, '明天': 1, '明日': 1, '大后天': 3, '后天': 2
       };
       addDateMatch(list, dateMatch(s, e, m[0], addDaysStr(today, offsets[m[0]]), null, true, 'relative'));
     });
@@ -1125,7 +1131,7 @@
       time = date === ctx.today ? nowTimeOf(ctx) : '12:00';
     }
 
-    var futureAllowed = /(明天|明日|后天|下周|下个(?:周|星期|礼拜)|下个月|下月|明年)/.test(work);
+    var futureAllowed = /(明天|明日|大后天|后天|下周|下个(?:周|星期|礼拜)|下个月|下月|明年)/.test(work);
     if (date > ctx.today && !futureAllowed) {
       pushWarning(warnings, '日期在今天之后');
     }
@@ -2088,7 +2094,7 @@
 
   function decideMdAsDate(work, ctx, mdTokens) {
     if (!mdTokens.length) { return false; }
-    var explicitDateRe = /(今天|今日|昨天|昨日|前天|大前天|明天|后天|周[一二三四五六日天]|星期[一二三四五六日天]|礼拜[一二三四五六日天]|上周|下周|本月|上月|下月|\d{4}[-/年]\d|\d{1,2}月\d{1,2}[日号])/;
+    var explicitDateRe = /(今天|今日|昨天|昨日|前天|大前天|明天|大后天|后天|周[一二三四五六日天]|星期[一二三四五六日天]|礼拜[一二三四五六日天]|上周|下周|本月|上月|下月|\d{4}[-/年]\d|\d{1,2}月\d{1,2}[日号])/;
     if (explicitDateRe.test(work)) { return false; }
 
     var mdSpan = mdTokens[0];

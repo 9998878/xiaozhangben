@@ -11,26 +11,66 @@ function line(label, value) {
   console.log(`${label}：${value}`);
 }
 
-console.log('小账本 status');
-
-const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
-let upstream = '';
-try {
-  upstream = git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
-} catch {}
-
-let ahead = 0;
-let behind = 0;
-if (upstream) {
-  const [a, b] = git(['rev-list', '--left-right', '--count', `HEAD...${upstream}`])
-    .split(/\s+/)
-    .map(Number);
-  ahead = a;
-  behind = b;
+/* git 三态：已安装且在仓库内 / 已安装但不在仓库 / 没装。
+   旧版没装 git 时第一条命令就抛 spawnSync git ENOENT 整个脚本崩掉，
+   连后面的测试汇总都出不来（2.38.1）。 */
+function probeGit() {
+  try {
+    git(['--version']);
+  } catch (error) {
+    return { ok: false, text: '未安装——分支、同步、工作树、最近提交跳过（装好 Git 并重开终端后可用）' };
+  }
+  try {
+    git(['rev-parse', '--git-dir']);
+  } catch (error) {
+    return { ok: false, text: '当前目录不是 git 仓库——分支、同步、工作树、最近提交跳过' };
+  }
+  return { ok: true, text: '' };
 }
 
-line('分支', `${branch}${upstream ? ` → ${upstream}` : '（无上游）'}`);
-if (upstream && (ahead || behind)) line('同步', `ahead ${ahead} / behind ${behind}`);
+function printGitState() {
+  const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
+  let upstream = '';
+  try {
+    upstream = git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+  } catch {}
+
+  let ahead = 0;
+  let behind = 0;
+  if (upstream) {
+    const [a, b] = git(['rev-list', '--left-right', '--count', `HEAD...${upstream}`])
+      .split(/\s+/)
+      .map(Number);
+    ahead = a;
+    behind = b;
+  }
+
+  line('分支', `${branch}${upstream ? ` → ${upstream}` : '（无上游）'}`);
+  if (upstream && (ahead || behind)) line('同步', `ahead ${ahead} / behind ${behind}`);
+
+  const dirty = git(['status', '--porcelain']);
+  if (dirty) {
+    const lines = dirty.split('\n');
+    line('工作树', `${lines.length} 处未提交`);
+    lines.slice(0, 12).forEach((l) => console.log(`  ${l}`));
+  } else {
+    line('工作树', '干净');
+  }
+
+  console.log('最近提交：');
+  git(['log', '--oneline', '-5'])
+    .split('\n')
+    .forEach((l) => console.log(`  ${l}`));
+}
+
+console.log('小账本 status');
+
+const gitInfo = probeGit();
+if (gitInfo.ok) {
+  printGitState();
+} else {
+  line('git', gitInfo.text);
+}
 
 const version = currentVersion();
 const cache = currentCache();
@@ -40,24 +80,13 @@ if (version && cache.name) {
   line('缓存名', consistent ? '与版本一致' : '与版本不一致（跑 node scripts/check.js）');
 }
 
-const dirty = git(['status', '--porcelain']);
-if (dirty) {
-  const lines = dirty.split('\n');
-  line('工作树', `${lines.length} 处未提交`);
-  lines.slice(0, 12).forEach((l) => console.log(`  ${l}`));
-} else {
-  line('工作树', '干净');
-}
-
-console.log('最近提交：');
-git(['log', '--oneline', '-5'])
-  .split('\n')
-  .forEach((l) => console.log(`  ${l}`));
-
+/* 带上标记：tests/scripts-status.test.js 看到它就直接退出——
+   否则 status → test.js → 该测试 → 再起 status，无限套娃（2.38.1） */
 const testRun = spawnSync(process.execPath, [path.join(__dirname, 'test.js'), '--json'], {
   cwd: ROOT,
   encoding: 'utf8',
   windowsHide: true,
+  env: { ...process.env, XZB_STATUS_RUN: '1' },
 });
 let tests = null;
 try {

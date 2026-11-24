@@ -105,6 +105,54 @@ if (fs.existsSync(kiPath)) {
   else bad('docs/known-issues.md', '没有二级标题');
 }
 
+/* ---- README / AGENTS 与真实产物对账（2.38.1）----
+   README 曾停在 2.18.0 落后 20 版：文件数、隐私说明、仓库定位全失真，
+   而这些数字人肉维护必漂。这里全部从磁盘上数出来再和文档比。 */
+function jsFilesIn(rel) {
+  const dir = path.join(ROOT, rel);
+  if (!fs.existsSync(dir)) { return []; }
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.js'))
+    .sort();
+}
+
+const chunks = [...jsFilesIn('js/screens'), ...jsFilesIn('js/modules')];
+const screens = jsFilesIn('js/screens').length;
+const modules = jsFilesIn('js/modules').length;
+const readme = fs.existsSync(path.join(ROOT, 'README.md')) ? readDoc('README.md') : '';
+
+if (version && readme) {
+  const heading = new RegExp(`^##\\s*${version.replace(/\./g, '\\.')}\\s*更新了什么`, 'm');
+  if (heading.test(readme)) ok(`README 顶部「更新了什么」是当前版本 ${version}`);
+  else bad('README.md', `没有「## ${version} 更新了什么」——版本说明落后于代码`);
+}
+
+if (chunks.length && readme) {
+  if (readme.includes(`${chunks.length} 个页面/模块文件`)) {
+    ok(`README 页面/模块文件数 = ${chunks.length}（页面 ${screens} + 模块 ${modules}）`);
+  } else {
+    bad('README.md', `没有写「${chunks.length} 个页面/模块文件」——磁盘上实际 ${chunks.length} 个（页面 ${screens} + 模块 ${modules}）`);
+  }
+}
+
+if (fs.existsSync(path.join(ROOT, 'sw.js')) && readme) {
+  const block = /var PRECACHE = \[([\s\S]*?)\];/.exec(readDoc('sw.js'));
+  const precacheCount = block ? block[1].split('\n').filter((l) => l.includes("'./")).length : 0;
+  if (precacheCount && readme.includes(`${precacheCount} 项`)) {
+    ok(`README 预缓存项数 = ${precacheCount}`);
+  } else {
+    bad('README.md', `没有写「${precacheCount} 项」——sw.js PRECACHE 实际 ${precacheCount} 项`);
+  }
+}
+
+if (fs.existsSync(agentsPath) && chunks.length) {
+  const agents = fs.readFileSync(agentsPath, 'utf8');
+  const missing = chunks.filter((f) => agents.indexOf(f.replace(/\.js$/, '')) < 0);
+  if (!missing.length) ok(`AGENTS.md 地图覆盖全部 ${chunks.length} 个页面/模块文件`);
+  else bad('AGENTS.md', `地图漏了 ${missing.join('、')}`);
+}
+
 console.log('');
 if (problems.length) {
   console.error(`自检失败：${problems.length} 项`);
