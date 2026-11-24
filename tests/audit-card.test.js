@@ -1,9 +1,9 @@
 'use strict';
 /*
- * tests/audit-card.test.js —— 「账单体检」卡片接入冒烟测试（2.39.0）
+ * tests/audit-card.test.js —— 「账单体检」卡片接入冒烟测试（2.39.0；2.40.0 随解读并入统计改读 stats.js）
  *
- * auditCard / openAuditRows 是 insights 屏里的界面代码，Node 里没有 DOM。
- * 做法：从 insights.js 源码切出这两个函数，放进沙箱，用最小的 DOM 桩执行，
+ * auditCard / openAuditRows 是统计屏里的界面代码，Node 里没有 DOM。
+ * 做法：从 stats.js 源码切出这两个函数，放进沙箱，用最小的 DOM 桩执行，
  * 验证取数、行数、按钮与「看这 N 笔 → 开弹层 → 返回重开」的控制流与字段名。
  * 另含接线断言：清单标签、依赖图、预缓存、paintCards 调用点。
  * 运行：node tests/audit-card.test.js（scripts/test.js 自动收集）。只读业务代码。
@@ -38,17 +38,17 @@ function checkEq(actual, expected, label) {
   if (actual !== expected) { throw new Error(label + '：期望 ' + JSON.stringify(expected) + '，实际 ' + JSON.stringify(actual)); }
 }
 
-/* ---------------- 装配：算法 + 从 insights.js 切出的卡片代码 ---------------- */
+/* ---------------- 装配：算法 + 从 stats.js 切出的卡片代码 ---------------- */
 
 const moduleSandbox = { console };
 vm.createContext(moduleSandbox);
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'js', 'modules', 'audit.js'), 'utf8'), moduleSandbox, { filename: 'js/modules/audit.js' });
 const auditApi = moduleSandbox.XZB.Core.audit;
 
-const INSIGHTS = fs.readFileSync(path.join(ROOT, 'js', 'screens', 'insights.js'), 'utf8');
+const INSIGHTS = fs.readFileSync(path.join(ROOT, 'js', 'screens', 'stats.js'), 'utf8');
 const START = INSIGHTS.indexOf('  var AUDIT_ICONS = '); /* 卡片代码从图标表开始，到「渲染主流程」注释前结束 */
 const END = INSIGHTS.indexOf('  /* ---------------- 渲染主流程');
-check(START > 0 && END > START && INSIGHTS.indexOf('  function openAuditRows(') > START, 'insights.js 里找不到卡片代码边界');
+check(START > 0 && END > START && INSIGHTS.indexOf('  function openAuditRows(') > START, 'stats.js 里找不到卡片代码边界');
 
 function fakeEl(tag, attrs) {
   return {
@@ -84,7 +84,7 @@ function build(withAudit) {
     S: { ctx: {} }
   };
   vm.createContext(sandbox);
-  vm.runInContext(INSIGHTS.slice(START, END), sandbox, { filename: 'insights.js#auditCard' });
+  vm.runInContext(INSIGHTS.slice(START, END), sandbox, { filename: 'stats.js#auditCard' });
   return { sandbox, opened };
 }
 
@@ -199,17 +199,17 @@ console.log('\n===== 用例 2：接线（清单 / 依赖图 / 预缓存 / 调用
 const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const SW_JS = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 
-test('2.1 index.html 有 audit chunk 声明标签，insights 依赖图含 audit', function () {
+test('2.1 index.html 有 audit chunk 声明标签，stats 依赖图含 audit', function () {
   check(/<script type="text\/xzb-module" data-xzb-chunk="audit" src="js\/modules\/audit\.js"><\/script>/.test(INDEX_HTML), '声明标签');
   check(INDEX_HTML.indexOf("['audit', 'modules/audit', 'modules/audit']") >= 0, 'ROWS 条目');
-  check(INDEX_HTML.indexOf("insights: ['charts', 'ai-insights', 'audit']") >= 0, 'insights DEPS');
+  check(INDEX_HTML.indexOf("stats: ['charts', 'ai-insights', 'audit']") >= 0, 'stats DEPS');
 });
 
 test('2.2 sw.js 预缓存含 audit.js', function () {
   check(SW_JS.indexOf("'./js/modules/audit.js'") >= 0, 'PRECACHE 缺 audit.js');
 });
 
-test('2.3 insights.js：paintCards 调用 auditCard，位置在「值得留意」之后、「行动建议」之前', function () {
+test('2.3 stats.js：paintCards 调用 auditCard，位置在「值得留意」之后、「行动建议」之前', function () {
   const fn = INSIGHTS.slice(INSIGHTS.indexOf('function paintCards('), INSIGHTS.indexOf('function paint('));
   const a = fn.indexOf('tipsCard(report)');
   const b = fn.indexOf('auditCard(report)');

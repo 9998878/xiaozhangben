@@ -1420,7 +1420,8 @@
         };
       } else {
         cellStyle = {
-          fill: 'var(--heat-' + level + ')'
+          /* 2.40.0：热力令牌改为中性＋红/绿双系；支出热图用红档（0 档仍中性） */
+          fill: 'var(--heat-' + (level ? 'r' + level : '0') + ')'
         };
         if (isToday) {
           cellStyle.stroke = 'var(--c-tint)';
@@ -1436,7 +1437,7 @@
         x: n2(x + cell * 0.17),
         y: n2(y + cell * 0.36)
       }, {
-        fill: future ? 'var(--c-text-4)' : 'var(--heat-fg-' + level + ')',
+        fill: future ? 'var(--c-text-4)' : 'var(--heat-fg-' + (level ? 'r' + level : '0') + ')',
         'font-size': FS_11,
         'font-variant-numeric': 'tabular-nums'
       });
@@ -1467,7 +1468,7 @@
       svg.appendChild(mk(doc, 'rect', {
         x: n2(lx + lv * 16), y: n2(legendY), width: 12, height: 12, rx: 3
       }, {
-        fill: 'var(--heat-' + lv + ')'
+        fill: 'var(--heat-' + (lv ? 'r' + lv : '0') + ')'
       }));
     }
     addText(doc, svg, '多', {

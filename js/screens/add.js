@@ -400,6 +400,9 @@
         categories: allCategories,
         noteMax: noteMax
       }) : null;
+    /* 日历补记（2.40.0）：#/add?date=YYYY-MM-DD 只预填日期，严格校验，编辑模式不生效 */
+    var dateParam = !editing && context.params && context.params.date ? String(context.params.date) : '';
+    var prefillDate = /^\d{4}-\d{2}-\d{2}$/.test(dateParam) && dates.isValidDateStr(dateParam) ? dateParam : '';
 
     /* ---------- 会话状态（每次渲染重建） ---------- */
     var state = {
@@ -411,7 +414,7 @@
       /* 历史智能默认（2.28.9）：用户手动选过分类（宫格/现成种类/全部面板）后置 true，
          之后账户切换不再覆盖用户选择；编辑模式直接置 true。 */
       categoryTouched: false,
-      date: today,
+      date: prefillDate || today,
       note: '',
       tags: [],
       keypadOpen: false,
@@ -452,7 +455,7 @@
       state.categoryTouched = true;
       state.amountText = centsToText(prefill.amountCents);
       state.note = prefill.note;
-      state.date = today;
+      state.date = prefillDate || today;
     } else {
       state.type = 'expense';
       state.accountId = defaultAccountId(accounts, app, settings);
@@ -460,7 +463,7 @@
          当前账户+类型最近 3 笔分类一致则直接带出，否则回落设置里的默认分类。 */
       state.categoryId = suggestCategoryByAccount(db, state.accountId, state.type) ||
         defaultCategoryId(state.type, categoriesAll, settings);
-      state.date = today;
+      state.date = prefillDate || today;
     }
 
     if (state.type === 'transfer' && (!state.toAccountId || state.toAccountId === state.accountId)) {

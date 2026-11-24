@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.39.1';
+  XZB.version = '2.40.0';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -233,12 +233,16 @@
   --acc-credit: #C2410C;  --acc-credit-soft: #C2410C14;
   --acc-savings: #4338CA; --acc-savings-soft: #4338CA14;
 
-  /* ---------- 日历热图（浅） ---------- */
+  /* ---------- 日历净额色阶（2.40.0：中性＋绿4档＋红4档；赚钱红/亏钱绿仅日历页） ---------- */
   --heat-0: #ECECF1; --heat-fg-0: #48484A;
-  --heat-1: #CFE0F6; --heat-fg-1: #48484A;
-  --heat-2: #9DC1EC; --heat-fg-2: #173D66;
-  --heat-3: #2C6FC9; --heat-fg-3: #FFFFFF;
-  --heat-4: #0B4C99; --heat-fg-4: #FFFFFF;
+  --heat-g1: #DCF5E7; --heat-fg-g1: #14532D;
+  --heat-g2: #A9E8C5; --heat-fg-g2: #14532D;
+  --heat-g3: #5BC99A; --heat-fg-g3: #0B3D2A;
+  --heat-g4: #157A55; --heat-fg-g4: #FFFFFF;
+  --heat-r1: #FBD9D5; --heat-fg-r1: #7A1D15;
+  --heat-r2: #F79E94; --heat-fg-r2: #7A1D15;
+  --heat-r3: #F5483B; --heat-fg-r3: #FFFFFF;
+  --heat-r4: #B3271C; --heat-fg-r4: #FFFFFF;
   --heat-cell: 40px;
   --heat-gap: 6px;
 
@@ -539,10 +543,14 @@
   --acc-savings: #818CF8; --acc-savings-soft: #818CF833;
 
   --heat-0: #222228; --heat-fg-0: #AEAEB2;
-  --heat-1: #12395C; --heat-fg-1: #FFFFFF;
-  --heat-2: #1A5C94; --heat-fg-2: #FFFFFF;
-  --heat-3: #1F6FBF; --heat-fg-3: #FFFFFF;
-  --heat-4: #64B5FF; --heat-fg-4: #002B52;
+  --heat-g1: #123528; --heat-fg-g1: #C9F2DC;
+  --heat-g2: #17543C; --heat-fg-g2: #D9F7E7;
+  --heat-g3: #1E7A55; --heat-fg-g3: #FFFFFF;
+  --heat-g4: #34D399; --heat-fg-g4: #052E1C;
+  --heat-r1: #3A1D1B; --heat-fg-r1: #FBD9D5;
+  --heat-r2: #6E2A24; --heat-fg-r2: #FDE7E4;
+  --heat-r3: #C93A2E; --heat-fg-r3: #FFFFFF;
+  --heat-r4: #F87171; --heat-fg-r4: #450A0A;
 
   /* ---------- 照片附件（D1）：深色只覆盖一项（UI.md §2.9） ---------- */
   --ph-viewer-bg: #000000F2;    /* 深色：95% 黑 */
@@ -652,10 +660,14 @@
     --acc-savings: #818CF8; --acc-savings-soft: #818CF833;
 
     --heat-0: #222228; --heat-fg-0: #AEAEB2;
-    --heat-1: #12395C; --heat-fg-1: #FFFFFF;
-    --heat-2: #1A5C94; --heat-fg-2: #FFFFFF;
-    --heat-3: #1F6FBF; --heat-fg-3: #FFFFFF;
-    --heat-4: #64B5FF; --heat-fg-4: #002B52;
+    --heat-g1: #123528; --heat-fg-g1: #C9F2DC;
+    --heat-g2: #17543C; --heat-fg-g2: #D9F7E7;
+    --heat-g3: #1E7A55; --heat-fg-g3: #FFFFFF;
+    --heat-g4: #34D399; --heat-fg-g4: #052E1C;
+    --heat-r1: #3A1D1B; --heat-fg-r1: #FBD9D5;
+    --heat-r2: #6E2A24; --heat-fg-r2: #FDE7E4;
+    --heat-r3: #C93A2E; --heat-fg-r3: #FFFFFF;
+    --heat-r4: #F87171; --heat-fg-r4: #450A0A;
 
     /* ---------- 照片附件（D1）：与 :root[data-theme="dark"] 同步（UI.md §2.9） ---------- */
     --ph-viewer-bg: #000000F2;  /* 深色：95% 黑 */
@@ -8377,7 +8389,7 @@ textarea::selection {
   height: 8px;
   border-radius: var(--r-full);
   background: linear-gradient(90deg,
-    var(--heat-0), var(--heat-1), var(--heat-2), var(--heat-3), var(--heat-4));
+    var(--heat-0), var(--heat-r1), var(--heat-r2), var(--heat-r3), var(--heat-r4));
 }
 
 .s-stats-heat__note {
@@ -9609,6 +9621,115 @@ textarea::selection {
 .s-insights-core__ask { display: flex; justify-content: flex-end; margin-top: var(--sp-3); }
 .s-insights-core__more { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: var(--tap); padding: 0 var(--sp-2); border: 0; background: none; color: var(--c-text-2); font-size: var(--fs-subhead); cursor: pointer; }
 
+/* ===== 2.40.0 合并统计页补充 ===== */
+.s-insights-monthbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex: none;
+  border: 0; border-radius: var(--r-full);
+  background: var(--c-fill); color: var(--c-text-2); cursor: pointer;
+}
+.s-insights-monthbtn:disabled { opacity: 0.35; cursor: default; }
+.s-insights-kind { margin-top: var(--sp-2); }
+.s-insights-legend__mom { display: block; font-size: var(--fs-caption-2); line-height: var(--lh-caption-2); }
+.s-insights-legend__toggle { margin-top: var(--sp-2); }
+.s-insights-tx__amt--income { color: var(--c-income); }
+.s-insights-report__go { display: flex; width: 100%; justify-content: center; margin-top: var(--sp-3); text-decoration: none; }
+.s-insights-report__archive {
+  display: inline-flex; align-items: center; min-height: var(--tap); margin-top: var(--sp-2);
+  color: var(--c-tint-soft-text); font-size: var(--fs-footnote); font-weight: var(--fw-semibold); text-decoration: none;
+}
+.s-insights-ai__hint.is-red { color: var(--c-danger); }
+
+/* ===== 日历页（2.40.0）：净额红绿仅本页生效 ===== */
+.s-cal { padding-bottom: var(--sp-6); }
+.s-cal-head { display: flex; align-items: center; gap: var(--sp-2); margin: 0 var(--page-x) var(--sp-3); }
+.s-cal-title { flex: 1; margin: 0; text-align: center; font-size: var(--fs-subhead); font-weight: var(--fw-semibold); color: var(--c-text); }
+.s-cal-nav {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex: none;
+  border: 0; border-radius: var(--r-full);
+  background: var(--c-fill); color: var(--c-text-2); cursor: pointer;
+}
+.s-cal-nav:disabled { opacity: 0.35; cursor: default; }
+.s-cal-reset { border: 0; background: none; min-height: var(--tap); cursor: pointer; color: var(--c-tint-soft-text); font-size: var(--fs-footnote); font-weight: var(--fw-semibold); }
+.s-cal-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-2); margin: 0 var(--page-x) var(--sp-3); }
+.s-cal-strip__cell {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  padding: var(--sp-2); border-radius: var(--r-card);
+  background: var(--c-bg-elev); border: var(--hairline) solid var(--c-stroke);
+}
+.s-cal-strip__label { font-size: var(--fs-caption-2); color: var(--c-text-3); }
+.s-cal-strip__value { font-size: var(--fs-footnote); font-weight: var(--fw-semibold); color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s-cal-strip__value--expense { color: var(--c-expense); }
+.s-cal-strip__value--income { color: var(--c-income); }
+.s-cal-strip__value--neg { color: var(--c-expense); }
+.s-cal-strip__link { font-size: var(--fs-footnote); font-weight: var(--fw-semibold); color: var(--c-tint-soft-text); text-decoration: none; }
+.s-cal-gridcard { padding: var(--sp-3); }
+.s-cal-week { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: var(--sp-2); }
+.s-cal-week span { text-align: center; font-size: var(--fs-caption-2); color: var(--c-text-3); }
+.s-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.s-cal-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  aspect-ratio: 1 / 1; min-height: 44px; min-width: 0; padding: 2px;
+  border: 0; border-radius: 10px; cursor: pointer;
+  background: var(--heat-0); color: var(--heat-fg-0);
+}
+.s-cal-cell__day { font-size: var(--fs-caption); font-weight: var(--fw-semibold); line-height: 1.1; }
+.s-cal-cell__net { font-size: 9px; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-cal-cell--g1 { background: var(--heat-g1); color: var(--heat-fg-g1); }
+.s-cal-cell--g2 { background: var(--heat-g2); color: var(--heat-fg-g2); }
+.s-cal-cell--g3 { background: var(--heat-g3); color: var(--heat-fg-g3); }
+.s-cal-cell--g4 { background: var(--heat-g4); color: var(--heat-fg-g4); }
+.s-cal-cell--r1 { background: var(--heat-r1); color: var(--heat-fg-r1); }
+.s-cal-cell--r2 { background: var(--heat-r2); color: var(--heat-fg-r2); }
+.s-cal-cell--r3 { background: var(--heat-r3); color: var(--heat-fg-r3); }
+.s-cal-cell--r4 { background: var(--heat-r4); color: var(--heat-fg-r4); }
+.s-cal-cell--out { background: transparent; color: var(--c-text-4); cursor: default; }
+.s-cal-cell.is-today { box-shadow: inset 0 0 0 2px var(--c-tint); }
+.s-cal-cell.is-selected { box-shadow: inset 0 0 0 2px var(--c-text); }
+.s-cal-hint { margin: var(--sp-3) var(--page-x) 0; text-align: center; color: var(--c-text-3); font-size: var(--fs-caption); }
+.s-cal-day { margin-top: var(--sp-3); }
+.s-cal-day__add { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--c-tint-soft-text); font-size: var(--fs-footnote); font-weight: var(--fw-semibold); text-decoration: none; }
+.s-cal-day__list { display: flex; flex-direction: column; }
+.s-cal-tx {
+  display: flex; align-items: center; gap: var(--sp-3); width: 100%;
+  padding: var(--sp-2) 0; border: 0; border-bottom: var(--hairline) solid var(--c-stroke);
+  background: none; text-align: left; cursor: pointer;
+}
+.s-cal-tx:last-child { border-bottom: 0; }
+.s-cal-tx__icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex: none; border-radius: var(--r-full); background: var(--c-fill); color: var(--c-text-2); }
+.s-cal-tx__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.s-cal-tx__note { font-size: var(--fs-subhead); color: var(--c-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-cal-tx__meta { font-size: var(--fs-caption); color: var(--c-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-cal-tx__amt { font-size: var(--fs-subhead); font-weight: var(--fw-semibold); flex: none; }
+.s-cal-tx__amt--pos { color: var(--c-expense); }
+.s-cal-tx__amt--neg { color: var(--c-income); }
+.s-cal-detail { display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-3) 0; }
+.s-cal-detail__row { display: flex; justify-content: space-between; gap: var(--sp-3); }
+.s-cal-detail__label { flex: none; color: var(--c-text-3); font-size: var(--fs-footnote); }
+.s-cal-detail__value { min-width: 0; color: var(--c-text); font-size: var(--fs-footnote); text-align: right; overflow-wrap: anywhere; }
+.s-cal-detail__edit { display: flex; justify-content: center; text-decoration: none; }
+.s-cal-glyph { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 10px; color: var(--c-text-3); }
+
+/* ===== 报告页（2.40.0） ===== */
+.s-report { display: flex; flex-direction: column; gap: var(--sp-3); padding-bottom: var(--sp-6); }
+.s-report-list { display: flex; flex-direction: column; }
+.s-report-row {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-3) 0; border-bottom: var(--hairline) solid var(--c-stroke);
+  text-decoration: none; color: var(--c-text);
+}
+.s-report-row:last-child { border-bottom: 0; }
+.s-report-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.s-report-row__title { font-size: var(--fs-subhead); font-weight: var(--fw-semibold); }
+.s-report-row__meta { font-size: var(--fs-caption); color: var(--c-text-3); }
+.s-report-row__amt { flex: none; font-size: var(--fs-subhead); font-weight: var(--fw-semibold); color: var(--c-expense); }
+.s-report-ops { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0 var(--page-x); }
+.s-report__go { display: flex; justify-content: center; text-decoration: none; }
+.s-report__del { color: var(--c-danger); }
+.s-report-delrow { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
+.s-report-delrow .c-btn { flex: 1; }
+.s-report-glyph { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 10px; color: var(--c-text-3); }
 </style>
   <style>
 /* ============================================================
@@ -14040,17 +14161,17 @@ textarea::selection {
   <div id="app" aria-busy="true">
     <main id="view-root"></main>
 
-    <!-- 固定标签栏：首页 / 解读 / 记一笔 / 统计 / 我的，五列等分；中央「记一笔」是
+    <!-- 固定标签栏：首页 / 日历 / 记一笔 / 统计 / 我的，五列等分；中央「记一笔」是
          普通列（无 data-tab，只保留黄圆 +），图标由 app.js 注入。
-         2.16.0 起新增「账单解读」#/insights，加号仍居第三列几何中点 -->
+         2.40.0 起解读并入统计，第二列改为「日历」#/calendar，加号仍居第三列几何中点 -->
     <nav id="tabbar" class="c-tabbar app-tabbar" aria-label="主导航">
       <a class="c-tabbar__item" href="#/home" data-tab="home">
         <span class="c-tabbar__icon" data-tab-icon="home" aria-hidden="true"></span>
         <span class="c-tabbar__label">首页</span>
       </a>
-      <a class="c-tabbar__item" href="#/insights" data-tab="insights">
-        <span class="c-tabbar__icon" data-tab-icon="chart-line" aria-hidden="true"></span>
-        <span class="c-tabbar__label">解读</span>
+      <a class="c-tabbar__item" href="#/calendar" data-tab="calendar">
+        <span class="c-tabbar__icon" data-tab-icon="calendar" aria-hidden="true"></span>
+        <span class="c-tabbar__label">日历</span>
       </a>
       <a class="c-tabbar__compose" href="#/add" aria-label="记一笔">
         <span class="c-tabbar__compose-dot">
@@ -19221,7 +19342,171 @@ textarea::selection {
     });
   }
 
-  /* ============================== API 组装 ============================== */
+  /* ============================== 解读报告存档（2.40.0） ==============================
+     独立 key 'reports' 与账本主记录平行存放在 state store（keyPath:key，无需升 DB 版本）。
+     报告是派生内容：不进 schema.validateDb / TABLES / 导出备份 / 云备份，删了可再生成。
+     同一天同月同账期唯一（覆盖）；上限 REPORTS_MAX 条，按生成时间淘汰最旧。 */
+
+  var REPORTS_KEY = 'reports';
+  var REPORTS_MAX = 100;
+  var memReports = null;        // 内存模式下的报告数组
+
+  function reportsReadRaw() {
+    if (mode === 'memory' || state === 'memory') {
+      return Promise.resolve(memReports ? { value: clone(memReports) } : null);
+    }
+    if (!rawDb) { return Promise.reject(new Error('数据库未打开')); }
+    return new Promise(function (resolve, reject) {
+      var tx;
+      try {
+        tx = rawDb.transaction([STORE_STATE], 'readonly');
+      } catch (error) { reject(error); return; }
+      var request;
+      try {
+        request = tx.objectStore(STORE_STATE).get(REPORTS_KEY);
+      } catch (error) { reject(error); return; }
+      request.onsuccess = function () { resolve(request.result || null); };
+      request.onerror = function () { reject(request.error || new Error('读取报告失败')); };
+      tx.onerror = function () { reject(tx.error || new Error('读取报告失败')); };
+      tx.onabort = function () { reject(tx.error || new Error('读取报告中止')); };
+    });
+  }
+
+  function reportsList() {
+    return ensureDbOpen().then(function () {
+      return reportsReadRaw();
+    }).then(function (record) {
+      return record && Array.isArray(record.value) ? record.value : [];
+    }, function () { return []; });
+  }
+
+  function reportsGet(id) {
+    if (typeof id !== 'string' || !id) { return Promise.resolve(null); }
+    return reportsList().then(function (list) {
+      for (var i = 0; i < list.length; i += 1) {
+        if (list[i] && list[i].id === id) { return list[i]; }
+      }
+      return null;
+    });
+  }
+
+  function reportsNormalize(entry) {
+    if (!entry || typeof entry !== 'object') { return null; }
+    if (typeof entry.id !== 'string' || !entry.id) { return null; }
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(entry.month || ''))) { return null; }
+    if (['month', 'prev', '3m', '6m'].indexOf(entry.rangeKey) < 0) { return null; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(entry.generatedOn || ''))) { return null; }
+    if (!entry.payload || typeof entry.payload !== 'object') { return null; }
+    return {
+      id: entry.id,
+      month: entry.month,
+      rangeKey: entry.rangeKey,
+      generatedOn: entry.generatedOn,
+      generatedAt: Number(entry.generatedAt) || Date.now(),
+      source: entry.source === 'ai' ? 'ai' : 'local',
+      model: typeof entry.model === 'string' ? entry.model : '',
+      payload: entry.payload
+    };
+  }
+
+  /* 同日同月同账期覆盖；其余保留；按生成时间倒序；超上限淘汰最旧 */
+  function reportsUpsert(list, entry) {
+    var out = [];
+    var replaced = false;
+    for (var i = 0; i < list.length; i += 1) {
+      var r = list[i];
+      if (!r) { continue; }
+      if (r.generatedOn === entry.generatedOn && r.month === entry.month && r.rangeKey === entry.rangeKey) {
+        out.push(entry);
+        replaced = true;
+      } else if (r.id !== entry.id) {
+        out.push(r);
+      }
+    }
+    if (!replaced) { out.push(entry); }
+    out.sort(function (a, b) { return Number(b.generatedAt) - Number(a.generatedAt); });
+    if (out.length > REPORTS_MAX) { out = out.slice(0, REPORTS_MAX); }
+    return out;
+  }
+
+  function reportsSave(entry) {
+    var normalized = reportsNormalize(entry);
+    if (!normalized) { return Promise.resolve({ ok: false, code: 'E_INVALID_INPUT' }); }
+    if (mode === 'memory' || state === 'memory') {
+      memReports = reportsUpsert(memReports || [], normalized);
+      return Promise.resolve({ ok: true, entry: clone(normalized) });
+    }
+    return ensureDbOpen().then(function (opened) {
+      if (!opened) { return { ok: false, code: 'E_STORAGE_WRITE' }; }
+      return new Promise(function (resolve, reject) {
+        var tx;
+        try {
+          tx = rawDb.transaction([STORE_STATE], 'readwrite');
+        } catch (error) { reject(error); return; }
+        var store;
+        try { store = tx.objectStore(STORE_STATE); } catch (error) { reject(error); return; }
+        var request;
+        try { request = store.get(REPORTS_KEY); } catch (error) { reject(error); return; }
+        var outcome = { ok: true, entry: normalized };
+        request.onsuccess = function () {
+          try {
+            var current = request.result && Array.isArray(request.result.value) ? request.result.value : [];
+            var next = reportsUpsert(current, normalized);
+            store.put({ key: REPORTS_KEY, value: next, savedAt: new Date().toISOString() });
+          } catch (error) {
+            outcome = { ok: false, code: 'E_STORAGE_WRITE' };
+            try { tx.abort(); } catch (abortError) { /* 已结束 */ }
+          }
+        };
+        tx.oncomplete = function () { resolve(outcome); };
+        tx.onerror = function () { reject(tx.error || new Error('写入报告失败')); };
+        tx.onabort = function () {
+          if (outcome.ok === false) { resolve(outcome); return; }
+          reject(tx.error || new Error('写入报告中止'));
+        };
+      });
+    }).catch(function () { return { ok: false, code: 'E_STORAGE_WRITE' }; });
+  }
+
+  function reportsRemove(id) {
+    if (typeof id !== 'string' || !id) { return Promise.resolve({ ok: false, removed: 0 }); }
+    if (mode === 'memory' || state === 'memory') {
+      var before = (memReports || []).length;
+      memReports = (memReports || []).filter(function (r) { return r && r.id !== id; });
+      return Promise.resolve({ ok: true, removed: before - memReports.length });
+    }
+    return ensureDbOpen().then(function (opened) {
+      if (!opened) { return { ok: false, removed: 0 }; }
+      return new Promise(function (resolve, reject) {
+        var tx;
+        try {
+          tx = rawDb.transaction([STORE_STATE], 'readwrite');
+        } catch (error) { reject(error); return; }
+        var store;
+        try { store = tx.objectStore(STORE_STATE); } catch (error) { reject(error); return; }
+        var request;
+        try { request = store.get(REPORTS_KEY); } catch (error) { reject(error); return; }
+        var outcome = { ok: true, removed: 0 };
+        request.onsuccess = function () {
+          try {
+            var current = request.result && Array.isArray(request.result.value) ? request.result.value : [];
+            var next = current.filter(function (r) { return r && r.id !== id; });
+            outcome.removed = current.length - next.length;
+            store.put({ key: REPORTS_KEY, value: next, savedAt: new Date().toISOString() });
+          } catch (error) {
+            outcome = { ok: false, removed: 0 };
+            try { tx.abort(); } catch (abortError) { /* 已结束 */ }
+          }
+        };
+        tx.oncomplete = function () { resolve(outcome); };
+        tx.onerror = function () { reject(tx.error || new Error('删除报告失败')); };
+        tx.onabort = function () {
+          if (outcome.ok === false) { resolve(outcome); return; }
+          reject(tx.error || new Error('删除报告中止'));
+        };
+      });
+    }).catch(function () { return { ok: false, removed: 0 }; });
+  }  /* ============================== API 组装 ============================== */
 
   var api = {
     /* 常量（供其他模块引用，避免各写一份） */
@@ -19246,6 +19531,14 @@ textarea::selection {
     getBytes: function () { return bytes; },
     getCounts: counts,
     counts: counts,
+
+    /* 解读报告存档（2.40.0）：派生内容，独立 key，不进备份 */
+    reports: Object.freeze({
+      list: reportsList,
+      get: reportsGet,
+      save: reportsSave,
+      remove: reportsRemove
+    }),
 
     /* 读 */
     get: function () { return cache; },
@@ -32260,21 +32553,21 @@ textarea::selection {
 
 </script>
   <script>
-/* 小账本 2.0 · js/chunk-manifest.js · owner: frontend（T-02）：16 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
+/* 小账本 2.40.0 · js/chunk-manifest.js · owner: frontend（T-02）：20 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
 (function (global) {
   'use strict';
   var XZB = global.XZB || (global.XZB = {});
   var SRC = 'src/js/', OUT = 'js/';
   var ROWS = [
     ['home', 'screens/home', 'screens/home'], ['add', 'screens/add', 'screens/add'], ['ledger', 'screens/ledger', 'screens/ledger'], ['stats', 'screens/stats', 'screens/stats'],
-    ['insights', 'screens/insights', 'screens/insights'], ['accounts', 'screens/accounts', 'screens/accounts'], ['books', 'screens/books', 'screens/books'], ['plan', 'screens/plan', 'screens/plan'],
+    ['calendar', 'screens/calendar', 'screens/calendar'], ['report', 'screens/report', 'screens/report'], ['accounts', 'screens/accounts', 'screens/accounts'], ['books', 'screens/books', 'screens/books'], ['plan', 'screens/plan', 'screens/plan'],
     ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
     ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'],
     ['ai-insights', 'modules/ai-insights', 'modules/ai-insights'], ['habit', 'modules/habit', 'modules/habit'],
     ['bill-import', 'modules/bill-import', 'modules/bill-import'], ['audit', 'modules/audit', 'modules/audit']
   ];
   /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
-  var DEPS = { home: ['habit'], add: ['keypad', 'icon-picker'], stats: ['charts'], insights: ['charts', 'ai-insights', 'audit'], plan: ['charts'], settings: ['icon-picker', 'bill-import'], assistant: ['nl', 'core-assistant'] };
+  var DEPS = { home: ['habit'], add: ['keypad', 'icon-picker'], stats: ['charts', 'ai-insights', 'audit'], calendar: ['charts'], report: ['charts'], plan: ['charts'], settings: ['icon-picker', 'bill-import'], assistant: ['nl', 'core-assistant'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
@@ -32290,7 +32583,7 @@ textarea::selection {
     ROWS.forEach(function (r) { var f = path.join(dir, OUT + r[2] + '.js'); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, fs.readFileSync(path.join(__dirname, '..', '..', SRC + r[1] + '.js'))); });
     return outputFiles();
   }
-  /* 构建期静态校验（§2.5/B1′/B2）：16 个声明标签、产物存在、deps 双射、内联区无 lazy 屏前 5 行特征串；失败恒 throw */
+  /* 构建期静态校验（§2.5/B1′/B2）：20 个声明标签、产物存在、deps 双射、内联区无 lazy 屏前 5 行特征串；失败恒 throw */
   function checkSync(dir) {
     var fs = require('fs'), path = require('path'), root = path.join(__dirname, '..', '..'), out = path.resolve(dir || path.join(root, '手机版'));
     var html = fs.readFileSync(path.join(out, 'index.html'), 'utf8'), errs = [];
@@ -32417,19 +32710,20 @@ textarea::selection {
   var XZB = global.XZB = global.XZB || {};
 
   /* 九个冻结视图；顺序仅用于诊断输出。
-     2.16.0 新增 insights（账单解读）：底栏升为「首页 / 解读 / ＋ / 统计 / 我的」，
-     它是一级 Tab 根，但不承载账本切换，也不参与明细别名归一。 */
-  var VIEWS = ['home', 'insights', 'add', 'ledger', 'stats', 'accounts', 'books', 'plan', 'settings', 'assistant'];
+     2.40.0 合并解读进统计、新增日历与报告：底栏为「首页 / 日历 / ＋ / 统计 / 我的」，
+     calendar 是一级 Tab 根，但不承载账本切换，也不参与明细别名归一。 */
+  var VIEWS = ['home', 'calendar', 'add', 'ledger', 'stats', 'report', 'accounts', 'books', 'plan', 'settings', 'assistant'];
   /* 四个一级 Tab 根；ledger 仍归一到 home（D1-5/D1-7），plan 是二级页，
      二者都不出现在 TabBar */
-  var TAB_ROOTS = ['home', 'insights', 'stats', 'settings'];
+  var TAB_ROOTS = ['home', 'calendar', 'stats', 'settings'];
 
   var DEFAULT_TITLES = {
     home: '首页',
-    insights: '账单解读',
+    calendar: '日历',
     add: '记一笔',
     ledger: '明细',
     stats: '统计',
+    report: '解读报告',
     accounts: '账户',
     books: '账本',
     plan: '计划',
@@ -32597,6 +32891,8 @@ textarea::selection {
       view = 'home';
       sub = '';
     }
+    /* 2.40.0：#/insights 是合并后统计页的历史别名，m/r/regen 参数原样保留。 */
+    if (view === 'insights') { view = 'stats'; }
 
     var route = { view: view, sub: sub, params: params };
     route.hash = buildHash(route);
@@ -32735,7 +33031,7 @@ textarea::selection {
         并立即重渲染，恢复被 app.js releaseBlobUrls() 释放的缩略图。 */
   function syncAliasBar(route) {
     var liveHash = String(global.location.hash);
-    return liveHash !== route.hash && /^#\/ledger(\?|$|\/)/.test(liveHash);
+    return liveHash !== route.hash && /^#\/(ledger|insights)(\?|$|\/)/.test(liveHash);
   }
 
   /* 进入 Tab 根：历史栈重置为单条，浏览器后退不回到上一个 Tab */
@@ -35215,6 +35511,13 @@ textarea::selection {
       pendingCount: photosPendingCount,
       retryPending: photosRetryPending
     }),
+    /* 解读报告存档门面（2.40.0）：屏幕层只经这里读写报告；store 未就绪时安全降级 */
+    reports: Object.freeze({
+      list: function () { return store && store.reports ? store.reports.list() : Promise.resolve([]); },
+      get: function (id) { return store && store.reports ? store.reports.get(id) : Promise.resolve(null); },
+      save: function (entry) { return store && store.reports ? store.reports.save(entry) : Promise.resolve({ ok: false, code: 'E_UNKNOWN' }); },
+      remove: function (id) { return store && store.reports ? store.reports.remove(id) : Promise.resolve({ ok: false, removed: 0 }); }
+    }),
     getState: function () { return state; }
   };
   Object.defineProperty(api, 'state', {
@@ -35244,7 +35547,8 @@ textarea::selection {
   <script type="text/xzb-module" data-xzb-chunk="add" src="js/screens/add.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="ledger" src="js/screens/ledger.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="stats" src="js/screens/stats.js"></script>
-  <script type="text/xzb-module" data-xzb-chunk="insights" src="js/screens/insights.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="calendar" src="js/screens/calendar.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="report" src="js/screens/report.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="accounts" src="js/screens/accounts.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="books" src="js/screens/books.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="plan" src="js/screens/plan.js"></script>

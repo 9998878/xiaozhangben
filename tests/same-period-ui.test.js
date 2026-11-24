@@ -1,14 +1,15 @@
 'use strict';
 /*
  * tests/same-period-ui.test.js
- * 自检脚本：2.33.0「上月同期」环比口径——小助手洞察问答（行为）+ 统计页/解读页（源码锁）。
+ * 自检脚本：2.33.0「上月同期」环比口径——小助手洞察问答（行为）+ 统计页（源码锁）。
+ * 2.40.0 解读并入统计后，原 insights.js 的口径锁改读合并后的 stats.js。
  *
  * 口径契约：
  *   - core-assistant buildMom：本月未过完时基期窗口裁到上月同日，文案写「上月同期」、
  *     assumption 注明「截至 N 日」；过去月保持整月对整月、不出现「同期」字样。
  *   - core-assistant buildCategory：多月窗口的对比基期裁到前窗末月同日。
- *   - stats.js：prevRank 传 endDay；排行 chip / 合计卡 / 本月小结在 isPartial 时写「同期」。
- *   - insights.js：collect 收入项带 type；summarize 支持窗口末月 cutDate；
+ *   - stats.js（合并页）：排行环比 baseLabel / 摘要 label / 追问标题在 isPartial 时写「同期」。
+ *   - stats.js：collect 收入项带 type；summarize 支持窗口末月 cutDate；
  *     buildReport 传 cutDate；摘要 label「支出较上月同期」。
  *   - ai-insights.js 已是同期口径（2.32.9），由 tests/ai-insights.test.js 覆盖，此处不重复。
  *
@@ -23,7 +24,7 @@ const vm = require('vm');
 const ROOT = path.resolve(__dirname, '..');
 const CA_JS = fs.readFileSync(path.join(ROOT, 'js', 'modules', 'core-assistant.js'), 'utf8');
 const STATS_JS = fs.readFileSync(path.join(ROOT, 'js', 'screens', 'stats.js'), 'utf8');
-const INSIGHTS_JS = fs.readFileSync(path.join(ROOT, 'js', 'screens', 'insights.js'), 'utf8');
+const INSIGHTS_JS = fs.readFileSync(path.join(ROOT, 'js', 'screens', 'stats.js'), 'utf8');
 
 /* ============================== 极简测试骨架 ============================== */
 
@@ -216,20 +217,18 @@ test('3.1 本月未过完：前一同长窗口末月裁到同日', function () {
   check(r2.reply.text.indexOf('比上一同长窗口') < 0, '基期无流水时不输出对比句：' + r2.reply.text);
 });
 
-section('用例 4：统计页 stats.js 源码锁');
+section('用例 4：合并统计页 stats.js 同期措辞源码锁');
 
-test('4.1 prevRank 传 endDay，chip/合计/小结写「同期」', function () {
-  lock(STATS_JS.indexOf('endDay: prevEndDay') >= 0, 'prevRank 应传 endDay');
-  lock(STATS_JS.indexOf("var samePeriod = mom.isPartial === true && mom.periodDay > 0;") >= 0, 'samePeriod 取自核心 mom');
-  lock(STATS_JS.indexOf("'较上月' + (samePeriod ? '同期' : '')") >= 0, '排行 chip/aria 基期措辞');
-  lock(STATS_JS.indexOf("mom && mom.isPartial === true ? '同期' : ''") >= 0, '合计卡 pill 基期措辞');
-  lock(STATS_JS.indexOf("'收入较上月' + (mom.isPartial === true ? '同期' : '')") >= 0, '收入 meta 措辞');
-  lock(STATS_JS.indexOf("'支出较上月' + (mom.isPartial === true ? '同期' : '')") >= 0, '支出 meta 措辞');
-  lock(STATS_JS.indexOf("? '上月同期' : '上月'") >= 0, '本月小结基期措辞');
-  lock(STATS_JS.indexOf('raw === null || raw === undefined ? null : Number(raw)') >= 0, '小结基期 0 时不误报「持平」（Number(null) 陷阱）');
+test('4.1 排行环比 / 摘要 / 追问 / 核心结论在 isPartial 时写「同期」', function () {
+  lock(STATS_JS.indexOf("var baseLabel = '较上月' + (report.isPartial ? '同期' : '');") >= 0, '排行环比基期措辞');
+  lock(STATS_JS.indexOf("report.isPartial ? '支出较上月同期' : '支出环比'") >= 0, '摘要 label 同期措辞');
+  lock(STATS_JS.indexOf("var base = report.isPartial ? '上月同期' : '上月';") >= 0, '追问标题基期措辞');
+  lock(STATS_JS.indexOf("'支出和上月' + (report.isPartial ? '同期' : '')") >= 0, '核心结论追问基期措辞');
+  lock(STATS_JS.indexOf('isPartial: same.isPartial') >= 0, 'report 暴露 isPartial');
+  lock(STATS_JS.indexOf('periodDay: same.isPartial ? same.day : 0') >= 0, 'report 暴露同期截止日');
 });
 
-section('用例 5：解读页 insights.js 源码锁');
+section('用例 5：合并统计页（原解读页）取数口径源码锁');
 
 test('5.1 collect 收入项、summarize cutDate、buildReport 同期接线', function () {
   lock(INSIGHTS_JS.indexOf("type: 'income'") >= 0, 'collect 应推送带 type 的收入项');

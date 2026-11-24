@@ -22,12 +22,12 @@
 
 ## AI 链路
 
-- UI：`js/screens/assistant.js`（说话记账）、`js/screens/insights.js`（月度解读卡）、`js/screens/settings.js`（AI 配置页）。
+- UI：`js/screens/assistant.js`（说话记账）、`js/screens/stats.js`（月度解读卡，2.40.0 起与原 insights 合并）、`js/screens/report.js`（报告存档/详情）、`js/screens/settings.js`（AI 配置页）。
 - 传输与错误码：`js/modules/core-assistant.js`。密钥只出现在 `Authorization` 头；错误码统一 `E_AS_*`。
 - 指标与提示词：`js/modules/ai-insights.js`（`buildMonthlyMetrics`、`requestAiInsights`、`toInsightPayload`、`buildFallbackInsights`、`buildLocalSummary`）。月中总量与分类都使用上月同期；免模型月报与 AI 请求共用同一聚合结果，不各算一套。
 - 本地解析：`js/modules/nl.js`（金额、日期、分类别名）；没有模型时全靠它。
 - 金额扫描边界（2.38.1）：阿拉伯数字后紧跟 ASCII 字母（`3D` / `2K` / `5G` / `1w` / `1e3`）一律不是金额，宁可报 `E_NL_NO_AMOUNT` 也不静默记错——「极速直记」默认开，解析器放过的错会直接变成错账。字母在前（`iPhone15`）本就跳过。回归 `tests/nl-alnum-amount.test.js`。
-- 账单体检（2.39.0）：`js/modules/audit.js`，纯函数 `XZB.Core.audit.run({ transactions, scope, today })`，与统计同一套过滤（外加 `excludeStats`）。阈值集中在 `RULES`；判重靠「记录时间差 ≤ 2 分钟」，周期识别靠「同额同分类 → 规律链（允许桥接 1~2 期）→ 几号/星期几形状校验 → 高频分类至少 5 期」。insights 屏只做取数与展示。回归 `tests/audit.test.js`。
+- 账单体检（2.39.0）：`js/modules/audit.js`，纯函数 `XZB.Core.audit.run({ transactions, scope, today })`，与统计同一套过滤（外加 `excludeStats`）。阈值集中在 `RULES`；判重靠「记录时间差 ≤ 2 分钟」，周期识别靠「同额同分类 → 规律链（允许桥接 1~2 期）→ 几号/星期几形状校验 → 高频分类至少 5 期」。insights 屏只做取数与展示（2.40.0 起并入 stats 屏）。回归 `tests/audit.test.js`。
 - 词表单一事实源（2.38.0）：system 分类别名以 `nl.js` `CATEGORY_ALIASES` 为权威（经 `nl.categoryAliases` 只读暴露）；core-assistant 的 `EXTRA_ALIASES` 降为兜底+补充，运行时取并集（`mergedAliases`），漂移由 `tests/assistant-core-logic.test.js` 用例 3.6 守卫。改 system 别名只改 nl 一处。
 - 分句（2.38.0）：`splitSegments(text, cx)` 先标点/连接词分段（连接词不要求前导空格），再做保守的「词+金额」多笔拆分（`splitAmountPairs`：每段都能解析出金额且落已知分类才拆；小数/日期/时间/转账先守卫）。无 cx 时保持旧行为。
 - 上下文索引（2.38.0）：`cxIndex` 在 cx 上挂不可枚举索引（账户/分类 id 映射、默认账户、最近账户、别名 token 表），一条消息只建一次；流水条数变化自动作废账户类缓存。`recentAccountId` 全量扫描取 createdAt 最大（流水按插入序存放，旧版 slice(0,400) 取的是最旧 400 笔）。
@@ -45,6 +45,17 @@
 - 照片阈值：`photoStats().bytes ≤ 2MB` 才随备份带照片，超限或照片段失败自动降级纯账目；整份 >9MB 拒传（Gist >10MB REST 取不回）。
 - 截断规则：Gist GET 单文件 >1MB 截断，`truncated:true` 时走 `raw_url` 取全文。
 - 默认关闭、零网络：未填密钥不开启则无任何出站；开启后数据只进用户自己的私有 Gist，符合「本地优先 + 出站先过隐私告知」铁律。
+
+## 统计合并 / 日历 / 报告存档（2.40.0）
+
+- 合并方向：以原 insights 为基干重写 `stats.js`（独有模块体量大），旧 stats 的趋势/排行移植进来；`insights.js` 删除。`#/insights` 降为历史别名：只在 `parseHash` 层归一到 `stats`（m/r/regen 参数原样保留），地址栏字面改写由 `syncAliasBar` 负责，与 `#/ledger`、`#/mine` 同一套路。底栏四根 `home / calendar / stats / settings`；chunk-manifest 20 项、sw 预缓存 34 项。
+- 收入结构：collect 增 `incomeCats` 桶、summarize 增 `incomeItems`，结构卡/钻取按 `S.kind` 分流；核心结论、值得留意、体检、报告恒支出口径。结构卡＝环图（top5+其他）＋排行合一清单（默认前 5＋其他行，展开看 8＋其他），行带环比，收入口径 tone 反转。
+- 日历页 `calendar.js`：DOM 7 列网格（周一起始），不用 canvas 热力。净额＝收入−支出，`+` 红 / `−` 绿（股市惯例，**仅本页**，其余页面仍是支出红/收入绿）；深浅四档 r=|净额|÷日基准 ≤0.5/1/2/>2，日基准＝`stats.budgetProgress().totalCents ÷ 当月天数`，未设预算退回固定档 ¥100（`FALLBACK_BASE_CENTS`）并给「设预算 ›」入口。当日流水与日历格同源五道过滤（deleted/账本/类型/金额/日期），转账不计；点日开当日清单 → 单笔弹层 → `#/add?id=` 编辑，「补一笔」走 `#/add?date=`。
+- 热力令牌取舍：`charts.heatmap` 未扩展双色阶，改为把原红档重映射到 `--heat-r1..r4`（语义仍是「花得多」），保持统计页支出热力自洽；日历另用 `--heat-g1..g4` / `--heat-r1..r4` 令牌渲染净额格，浅深两套主题各一份。
+- 报告存档：store 层独立 key `'reports'` 与账本主记录平行存放（keyPath:key，**不升 DB 版本**）；报告是派生内容，不进 `schema.validateDb` / `TABLES` / 导出备份 / 云备份（`exportJson` 只走 `buildBackup(ready.db)`）。同日同月同账期覆盖、按 `generatedAt` 倒序、上限 100 淘汰最旧。门面 `XZB.app.reports` 冻结透传 list/get/save/remove。
+- 报告生命周期：统计页 `reportCard` 状态机 3m/6m 引导 → 模块加载 → 隐私告知（`noticeAt`）→ busy → 有今日记录（查看报告＋快照变动提示 `localFp`）→ 无记录（生成解读/重试＋本地兜底＋去设置）；存档入口恒在。AI 失败不落档可重试；`settleReport` ok 分支即使 `S.dead` 也落档（已计费不能丢）。0 点刷新＝`todayCache` 比对＋`scheduleMidnight`（到下个本地 0 点+500ms 自续）＋visibilitychange/focus 唤醒。`report.js` 列表＋详情只读渲染生成时快照，删除走确认弹层；重新生成仅 `generatedOn===today` 可用，深链 `#/stats?m=&r=&regen=1`。
+- 记一笔日期预填：`add.js` 仅新建分支消费 `?date=`，严格 `YYYY-MM-DD`＋`dates.isValidDateStr` 双重校验，编辑分支不受影响。
+- 回归：`tests/calendar-report.test.js` 32 项（日历纯函数、报告 store 内存模式、reportCard 状态机、路由别名、日期预填、合并接线）；`audit-card` / `same-period-ui` 改读合并后的 `stats.js`。
 
 ## 发布与不变量
 

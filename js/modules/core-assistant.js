@@ -4968,7 +4968,7 @@
         metrics: metrics,
         causes: [],
         assumption: '口径：' + scopeText(monthWindow(endMonth, n)) + '，仅当前账本支出。',
-        links: [{ label: '看解读', hash: '#/insights?m=' + endMonth + '&r=month' }],
+        links: [{ label: '看统计', hash: '#/stats?m=' + endMonth + '&r=month' }],
         followUps: ['为什么' + monthLabel(endMonth) + '支出比上月多了？', '最大的三笔是哪些？'],
         scope: scopeText(monthWindow(endMonth, n))
       }
