@@ -1708,8 +1708,16 @@
     for (var r = 0; r < parsed.rows.length; r++) {
       var row0 = parsed.rows[r];
       var dupe = billDupeOf(row0, existing, refSet);
-      var categoryId = row0.category ? pickCat(row0.category, row0.type, cats) : '';
-      var accountId2 = row0.accountName ? pickAcc(row0.accountName, accounts) : '';
+      var categoryId = '';
+      var accountId2 = '';
+      /* 归位只是锦上添花：万一分类/账户表结构不对，也让它退回手选，不能让整个预览炸掉 */
+      try {
+        categoryId = row0.category ? pickCat(row0.category, row0.type, cats) : '';
+        accountId2 = row0.accountName ? pickAcc(row0.accountName, accounts) : '';
+      } catch (error) {
+        categoryId = '';
+        accountId2 = '';
+      }
       if (categoryId) { matchedCats += 1; }
       if (accountId2) { matchedAccs += 1; }
       items.push({ row: row0, dupe: dupe, checked: !dupe, categoryId: categoryId, accountId: accountId2 });
