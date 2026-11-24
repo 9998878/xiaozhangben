@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.41.1';
+  XZB.version = '2.41.2';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -34692,14 +34692,36 @@ textarea::selection {
   /* 2.41.0：首次运行播种内置默认 AI 服务（零配置，手机打开即用）。确保 core-assistant
      chunk 加载后调用其幂等 seedDefaultService()；本机已有配置绝不覆盖。失败只静默降级，
      不阻断启动（与 autoPostDueRecurring 等启动副作用同口径）。 */
+  /* 2.41.2：播种/升级内联在启动链、直接写 localStorage，不依赖 core-assistant 分块。
+     index.html 导航网络优先、每次打开拉新；旧 Service Worker 可能仍喂旧分块，若升级逻辑
+     放在分块里就永远加载不到（2.41.1 手机仍停旧免费档的根因）。内联版保证只要 index.html
+     是新的，启动即把「无配置」播种、「旧内置免费档」升级到新默认服务；旧分块读到的已是
+     新配置。自定义配置（自填地址/模型/密钥）不覆盖。与 core-assistant.seedDefaultService
+     同口径（后者保留供单测与 API）。 */
   function seedDefaultAiService() {
-    if (!XZB.chunks || typeof XZB.chunks.ensure !== 'function') { return; }
-    XZB.chunks.ensure('core-assistant').then(function () {
-      var a = XZB.core && XZB.core.assistant;
-      if (a && a.llm && typeof a.llm.seedDefaultService === 'function') {
-        try { a.llm.seedDefaultService(); } catch (error) { /* 播种失败不影响启动 */ }
+    try {
+      var ls = global.localStorage;
+      if (!ls) { return; }
+      var KEY = 'xzb.ai.v1';
+      var DEF_BASE = 'https://maas.qianwenaiapi.com/compatible-mode/v1';
+      var DEF_MODEL = 'qwen4-max';
+      var DEF_KEY = 'sk-ws-H.XMPRXLR.DVol.MEUCIB-fUnrb6BuCdxyJrKqMdPMuN3pv6zCXwLy4HmK1Unr-AiEAnjnU2DFvEqRq1A5n7FbVWEZqUv1xFYWOD4DfEc7WCzs';
+      var raw = ls.getItem(KEY);
+      if (raw === null) {
+        ls.setItem(KEY, JSON.stringify({ v: 1, enabled: true, baseURL: DEF_BASE, model: DEF_MODEL, key: DEF_KEY, redact: 'names', noticeAt: Date.now() }));
+        return;
       }
-    }).catch(function () { /* chunk 加载失败：小助手/解读页各自 ensure 时再试 */ });
+      var c = null;
+      try { c = JSON.parse(raw); } catch (error) { return; }
+      if (!c || typeof c !== 'object') { return; }
+      var keyless = !c.key;
+      var oldOvh = keyless && c.baseURL === 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1' && c.model === 'Meta-Llama-3_3-70B-Instruct';
+      var oldPoll = keyless && c.baseURL === 'https://text.pollinations.ai/openai' && c.model === 'openai';
+      if (oldOvh || oldPoll) {
+        c.baseURL = DEF_BASE; c.model = DEF_MODEL; c.key = DEF_KEY;
+        ls.setItem(KEY, JSON.stringify(c));
+      }
+    } catch (error) { /* 播种失败不影响启动 */ }
   }
 
   function boot() {

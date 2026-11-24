@@ -277,11 +277,42 @@ regCase('3.2 三条出站口都带 enable_thinking:false', function () {
   check(hits.length >= 3, 'buildBody/llmTest/llmChat 应各带一处，实际 ' + hits.length);
 });
 
-regCase('3.3 启动链确保 core-assistant 后调用播种（手机首次打开即用）', function () {
-  check(INDEX_HTML.indexOf('function seedDefaultAiService()') >= 0, '应有启动播种辅助函数');
-  check(INDEX_HTML.indexOf("XZB.chunks.ensure('core-assistant')") >= 0, '启动应确保 core-assistant 加载');
-  check(INDEX_HTML.indexOf('a.llm.seedDefaultService()') >= 0, '加载后应调用播种');
+regCase('3.3 启动链内联播种/升级（不依赖分块，旧 SW 喂旧分块也能升级）', function () {
+  check(INDEX_HTML.indexOf('function seedDefaultAiService()') >= 0, '应有内联播种函数');
+  check(INDEX_HTML.indexOf("var KEY = 'xzb.ai.v1'") >= 0, '内联直写 localStorage');
+  check(INDEX_HTML.indexOf('oldOvh') >= 0 && INDEX_HTML.indexOf('oldPoll') >= 0, '应识别旧 OVH/Pollinations 预设');
   check(INDEX_HTML.indexOf('seedDefaultAiService();') >= 0, 'continueBoot 应调用播种');
+  check(INDEX_HTML.indexOf("XZB.chunks.ensure('core-assistant')") < 0, '播种不应再依赖分块加载');
+});
+
+regCase('3.4 内联播种函数功能：空配置播种/旧预设升级/自定义不覆盖', function () {
+  const start = INDEX_HTML.indexOf('function seedDefaultAiService()');
+  const end = INDEX_HTML.indexOf('function boot()', start);
+  check(start >= 0 && end > start, '应能抽出内联函数源码');
+  const src = INDEX_HTML.slice(start, end);
+  const ils = makeLS();
+  const sb = { localStorage: ils, Date, JSON };
+  sb.global = sb;
+  vm.createContext(sb);
+  vm.runInContext(src + '\nseedDefaultAiService();', sb, { filename: 'inline-seed' });
+  // 空配置 → 播种就绪
+  let c = JSON.parse(ils.getItem('xzb.ai.v1'));
+  checkEq(c.baseURL, 'https://maas.qianwenaiapi.com/compatible-mode/v1', '空配置播种端点');
+  checkEq(c.enabled, true, '空配置默认开启');
+  // 旧 OVH 预设 → 升级，保留开关/告知
+  ils.setItem('xzb.ai.v1', JSON.stringify({ v: 1, enabled: true, baseURL: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1', model: 'Meta-Llama-3_3-70B-Instruct', key: '', redact: 'names', noticeAt: 12345 }));
+  vm.runInContext('seedDefaultAiService();', sb);
+  c = JSON.parse(ils.getItem('xzb.ai.v1'));
+  checkEq(c.baseURL, 'https://maas.qianwenaiapi.com/compatible-mode/v1', '旧预设升级端点');
+  checkEq(c.model, 'qwen4-max', '旧预设升级模型');
+  checkEq(c.noticeAt, 12345, '告知保留');
+  checkEq(c.enabled, true, '开关保留');
+  // 自定义 → 不覆盖
+  ils.setItem('xzb.ai.v1', JSON.stringify({ v: 1, enabled: true, baseURL: 'https://api.example.com/v1', model: 'gpt-4o-mini', key: 'sk-mine', redact: 'names', noticeAt: 999 }));
+  vm.runInContext('seedDefaultAiService();', sb);
+  c = JSON.parse(ils.getItem('xzb.ai.v1'));
+  checkEq(c.baseURL, 'https://api.example.com/v1', '自定义不覆盖');
+  checkEq(c.key, 'sk-mine', '自定义密钥保留');
 });
 
 /* ============================== 汇总 ============================== */
