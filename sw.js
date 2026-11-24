@@ -1,6 +1,6 @@
 /* ============================================================
-   小账本 2.41.2 · Service Worker（播种/升级内联启动链，绕开旧 SW 分块缓存）
-   缓存名：小账本2-v2.41.2（英文缓存键 xzb2-v2.41.2）
+   小账本 2.41.3 · Service Worker（缓存键保留版本 query·导航超时放宽，慢网不再喂旧码）
+   缓存名：小账本2-v2.41.3（英文缓存键 xzb2-v2.41.3）
    策略：导航请求网络优先（3 秒超时）→ 缓存；其余静态资源缓存优先。
    约束：只处理 GET；只处理 http(s) 同源请求；不缓存 chrome-extension 等协议。
    ============================================================ */
@@ -8,15 +8,15 @@
   'use strict';
 
   /* 人类可读的缓存版本标签，仅用于日志与排查 */
-  var CACHE_LABEL = '小账本2-v2.41.2';
+  var CACHE_LABEL = '小账本2-v2.41.3';
   /* 真正的 Cache Storage 键：换版本号即触发本应用旧缓存清除（activate 时 cleanupCaches） */
-  var CACHE_NAME = 'xzb2-v2.41.2';
+  var CACHE_NAME = 'xzb2-v2.41.3';
   /* 预取失败清单的旁路缓存：名字同样带 xzb2- 前缀，清理时必须显式保留（见 cleanupCaches） */
   var META_CACHE = 'xzb2-meta';
   /* 预取失败清单在旁路缓存里的键；内容形如 { v: CACHE_NAME, list: [url, ...] } */
   var MISSING_KEY = '/precache-missing.json';
   /* 导航请求的网络等待上限：超过即回退缓存，避免弱网白屏 */
-  var NAV_TIMEOUT_MS = 3000;
+  var NAV_TIMEOUT_MS = 8000;
   /* install 预缓存清单：入口与壳资源；css/js 为外链，由运行时 cacheFirst 兜底 */
   var PRECACHE = [
     './',
@@ -94,7 +94,9 @@
      读和写都用同一个归一化键，二者才能命中同一条缓存。 */
   function normalizeKey(request) {
     var url = new URL(request.url, global.location.href);
-    url.searchParams.delete('v');
+    /* 2.41.3：保留版本 query v 作为缓存键的一部分——旧版删掉 v 导致所有版本共用一条
+       缓存，慢网下长期喂旧分块（手机停旧免费档根因之一）。保留 v 后新版本 ?v= 立即
+       未命中走网络；旧缓存整体由 activate 的 cleanupCaches 按 CACHE_NAME 清除，不泄漏。 */
     url.searchParams.delete('r');
     return url.href;
   }
