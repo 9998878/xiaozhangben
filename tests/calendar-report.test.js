@@ -543,14 +543,14 @@ await test('6.2 chunk-manifest：21 项、无 insights、stats 依赖含 ai-insi
   lock(INDEX_HTML.indexOf("report: ['charts']") >= 0, 'report DEPS');
 });
 
-await test('6.3 sw.js：预缓存 35 项，含 calendar/report，无 insights，版本 2.42.0', function () {
+await test('6.3 sw.js：预缓存 35 项，含 calendar/report，无 insights，版本 2.42.1', function () {
   const pre = slice(SW_JS, 'var PRECACHE = [', '];', 'PRECACHE');
   const count = (pre.match(/'\.\//g) || []).length;
   checkEq(count, 35, 'PRECACHE 35 项');
   lock(pre.indexOf("'./js/screens/calendar.js'") >= 0, '含 calendar.js');
   lock(pre.indexOf("'./js/screens/report.js'") >= 0, '含 report.js');
   check(pre.indexOf("'./js/screens/insights.js'") < 0, '无 insights.js');
-  lock(/CACHE_NAME\s*=\s*'xzb2-v2\.42\.0'/.test(SW_JS), '缓存版本 2.42.0');
+  lock(/CACHE_NAME\s*=\s*'xzb2-v2\.42\.1'/.test(SW_JS), '缓存版本 2.42.1');
 });
 
 await test('6.4 底栏与路由：首页/日历/＋/统计/我的', function () {

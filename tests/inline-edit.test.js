@@ -253,6 +253,8 @@ test('7.1 ledger 四热区与唯一写通道', () => {
   check(LEDGER_SRC.indexOf('IE.buildTxPatchMutator') >= 0, 'mutator 接线');
   check(LEDGER_SRC.indexOf("commit(mutator, { label: '行内编辑' })") >= 0, 'commit 通道');
   check(LEDGER_SRC.indexOf('function openCatZone') >= 0, 'openCatZone');
+  check(/function openCatZone\(st, tx\) \{\s*navigate\(st, '#\/add\?id='/.test(LEDGER_SRC), '图标热区跳记一笔页');
+  check(LEDGER_SRC.indexOf('IE.openPopover(anchor, 320') < 0, '种类宫格浮层已移除');
   check(LEDGER_SRC.indexOf('function openTimeZone') >= 0, 'openTimeZone');
 });
 

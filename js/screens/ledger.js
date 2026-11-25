@@ -1642,8 +1642,8 @@
     });
   }
 
-  /* ---------------- 行内编辑（2.42.0）：四热区全部本页完成 ----------------
-     图标→种类 / 文字→批注 / 金额→金额 / 时间→日期时间。写通道与 doDelete 同源：
+  /* ---------------- 行内编辑（2.42.0；2.42.1 图标热区改跳页） ----------------
+     图标→跳记一笔页换种类 / 文字→批注 / 金额→金额 / 时间→日期时间。写通道与 doDelete 同源：
      ctx.commit || app.commit；成功后 app refresh → router.rerender 整屏重建，
      这里只负责恢复滚动位置与高亮目标行，不做第二套写路径。 */
   function inlineEditApi() {
@@ -1704,40 +1704,9 @@
     });
   }
 
-  /* ① 图标热区：同 kind 分类宫格浮层（转账行不挂该热区） */
-  function openCatZone(st, tx, anchor) {
-    var IE = inlineEditApi();
-    if (!IE) { return; }
-    var kind = tx.type === 'income' ? 'income' : 'expense';
-    var cats = IE.categoriesForKind(rows(st.db, 'categories'), kind);
-    IE.openPopover(anchor, 320, function (pop) {
-      var head = el('p', { className: 's-ledger-pop__title' });
-      head.appendChild(el('span', { text: '更换种类' }));
-      var closeBtn = el('button', { type: 'button', className: 's-ledger-pop__close', text: '关闭' });
-      closeBtn.addEventListener('click', function () { IE.closePopover(); });
-      head.appendChild(closeBtn);
-      pop.appendChild(head);
-      var grid = el('div', { className: 's-ledger-pop__grid' });
-      cats.forEach(function (cat) {
-        var cell = el('button', {
-          type: 'button',
-          className: 's-ledger-pop__cell' + (cat.id === tx.categoryId ? ' is-on' : ''),
-          'aria-label': String(cat.name || '')
-        });
-        var tileWrap = el('span', { className: 's-ledger-pop__tile' });
-        renderIconMedia(tileWrap, cat.icon ? String(cat.icon) : 'ellipsis', categorySlot(st, cat.id));
-        cell.appendChild(tileWrap);
-        cell.appendChild(el('span', { text: String(cat.name || '') }));
-        cell.addEventListener('click', function () {
-          IE.closePopover();
-          if (cat.id !== tx.categoryId) {
-            commitInlinePatch(st, tx, { categoryId: cat.id }, '种类已改为「' + String(cat.name || '') + '」');
-          }
-        });
-        grid.appendChild(cell);
-      });
-      pop.appendChild(grid);
-    });
+  /* ① 图标热区：2.42.1 改跳记一笔编辑页换种类（本页宫格浮层在手机端有缺陷）；转账行不挂该热区 */
+  function openCatZone(st, tx) {
+    navigate(st, '#/add?id=' + encodeURIComponent(String(tx.id || '')));
   }
 
   /* ② 文字热区：批注行内输入（输入框挂 __text 下、热区按钮外，避免 button 套 input） */
@@ -1904,12 +1873,13 @@
     });
 
     /* 第一列：64px 媒体区。无照片 = 分类图标；有照片 = 骨架 → 缩略图 / 占位（一行只放一张）。
-       2.42.0：无照片且非转账行升级为「更换种类」热区按钮；有照片行保留原语义不加热区。 */
+       2.42.0：无照片且非转账行升级为「更换种类」热区按钮；有照片行保留原语义不加热区。
+       2.42.1：热区点击跳记一笔编辑页换种类（手机端浮层缺陷），不再开本页宫格。 */
     var catZoneOn = !!IE && !isTransfer && !photoIds.length;
     var media = el(catZoneOn ? 'button' : 'span', {
       className: 's-ledger-item__media c-row__media' + (catZoneOn ? ' s-ledger-item__zone s-ledger-item__zone--media' : ''),
       type: catZoneOn ? 'button' : undefined,
-      'aria-label': catZoneOn ? '更换种类：' + title : undefined,
+      'aria-label': catZoneOn ? '去记一笔页更换种类：' + title : undefined,
       dataset: { id: String(tx.id || '') }
     });
     if (photoIds.length) { renderSkeletonMedia(media); }
@@ -1917,7 +1887,7 @@
     if (catZoneOn) {
       media.addEventListener('click', function (event) {
         event.stopPropagation();
-        openCatZone(st, tx, media);
+        openCatZone(st, tx);
       });
     }
     main.appendChild(media);

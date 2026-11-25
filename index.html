@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.42.0';
+  XZB.version = '2.42.1';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -7226,51 +7226,6 @@ textarea::selection {
   font-family: inherit;
   font-size: var(--fs-caption-2);
   cursor: pointer;
-}
-.s-ledger-pop__grid {
-  display: grid;
-  grid-template-columns: repeat(4, 68px);
-  gap: var(--sp-2);
-}
-.s-ledger-pop__cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 2px 6px;
-  border: 0;
-  border-radius: 12px;
-  background: none;
-  color: var(--c-text-2);
-  font-family: inherit;
-  font-size: var(--fs-caption-2);
-  cursor: pointer;
-}
-@media (hover: hover) {
-  .s-ledger-pop__cell:hover { background: var(--c-fill); }
-}
-.s-ledger-pop__cell.is-on {
-  background: #fff6c2;
-  color: var(--c-text);
-  font-weight: var(--fw-medium);
-}
-.s-ledger-pop__tile { display: grid; place-items: center; }
-.s-ledger-pop__tile .c-tile { position: relative; }
-.s-ledger-pop__cell.is-on .c-tile::after {
-  content: "✓";
-  position: absolute;
-  right: -5px;
-  top: -5px;
-  display: grid;
-  place-items: center;
-  width: 17px;
-  height: 17px;
-  border: 2px solid var(--c-card, #fff);
-  border-radius: 50%;
-  background: var(--c-brand, #ffd900);
-  color: #1c1c1e;
-  font-size: 10px;
-  font-weight: 700;
 }
 .s-ledger-pop__field {
   display: flex;
