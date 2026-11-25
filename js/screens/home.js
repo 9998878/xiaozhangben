@@ -269,19 +269,31 @@
   /* 大金额降档（任务书 §八 要求处理「大金额」；修的是「金额被省略号吃掉」）。
      三列等分时每列只有约 1/3 视口宽（390px 下约 111px），而 34px 字号每字符约 14.6px
      （tabular-nums 实测 0.43em/字符）⇒ 只能容下 7 个字符，「¥1,234.56」9 字符就会截断。
-     这里按「已格式化文本的字符数」降档，保证金额完整可读：
-       ≤ 7 字符（¥99,999.99 以内）  34px / 窄屏 28px
-       8–9 字符（¥1,234.56 一级）    28px / 窄屏 17px
-       ≥ 10 字符（¥10,000 以上）     17px / 窄屏 15px
+     这里按「已格式化文本的字符数」逐级降档（避免 34px 直落 17px 的断崖），
+     保证金额完整可读：
+       ≤ 7 字符（¥9,999.99 以内）   34px / 窄屏 28px
+       8–9 字符（¥12,345.67 一级）  28px / 窄屏 22px
+       10 字符（¥12,039.06 一级）   24px / 窄屏 20px
+       11 字符（¥123,456.78 一级）  22px / 窄屏 18px
+       ≥ 12 字符（百万级以上）      17px / 窄屏 15px
      用字符数而非视口宽度：金额长度由用户数据决定，与视口无关。
      具体字号在 home.css 末尾（intentional 放最后，才能压过窄屏媒体查询）。 */
+  var FIT_TIERS = [
+    { min: 12, cls: 's-home-head__value--tight' },
+    { min: 11, cls: 's-home-head__value--smaller' },
+    { min: 10, cls: 's-home-head__value--small' },
+    { min: 8, cls: 's-home-head__value--compact' }
+  ];
   function fitValueClass(node) {
     if (!node || !node.classList) { return; }
-    node.classList.remove('s-home-head__value--tight');
-    node.classList.remove('s-home-head__value--compact');
     var len = String(node.textContent || '').length;
-    if (len >= 10) { node.classList.add('s-home-head__value--tight'); }
-    else if (len >= 8) { node.classList.add('s-home-head__value--compact'); }
+    for (var i = 0; i < FIT_TIERS.length; i++) {
+      node.classList.remove(FIT_TIERS[i].cls);
+    }
+    /* 档位从高到低排列，只命中首个（最长阈值）档 */
+    for (var j = 0; j < FIT_TIERS.length; j++) {
+      if (len >= FIT_TIERS[j].min) { node.classList.add(FIT_TIERS[j].cls); break; }
+    }
     return node;
   }
 

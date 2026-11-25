@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.41.3';
+  XZB.version = '2.41.4';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -421,6 +421,10 @@
   --fs-summary: 34px;
   --fw-summary: 600;
   --fs-summary-min: 28px;
+  --fs-summary-2: 24px;          /* 汇总金额降档：10 字符 */
+  --fs-summary-3: 22px;          /* 11 字符 / 窄屏 8–9 字符 */
+  --fs-summary-4: 20px;          /* 窄屏 10 字符 */
+  --fs-summary-5: 18px;          /* 窄屏 11 字符 */
   --fs-row: 16px;
   --fw-row: 600;                /* CONTRACT 给 500–600，取 600 与 §6.5 一致 */
   --fs-row-lg: 17px;
@@ -4662,13 +4666,22 @@ textarea::selection {
 /* ---------------- 头部汇总金额降档（配 home.js summaryColumn） ----------------
  * 「汇总金额 28–34px」的字号层级只在短金额上成立：三列等分下每列约 1/3 视口宽，
  * 390px 下 34px 每字符约 14.6px（tabular-nums 实测 0.43em），只容得下 7 个字符。
- * 降档口径（阈值标定见 home.js 注释）：8–9 字符降到 28px，≥10 字符降到 17px。
+ * 降档口径（阈值标定见 home.js 注释）：按字符数逐级递减，不再从 34px 断崖落到 17px——
+ * 8–9 字符 28px / 10 字符 24px / 11 字符 22px / ≥12 字符 17px。
  *
- * 故意放在文件最末尾：这三条的原文在上方 @media (max-width:360px) 里也有一条
+ * 故意放在文件最末尾：这几条的原文在上方 @media (max-width:360px) 里也有一条
  * 单类规则设置 __value 的 28px，同特异度下靠「后出现者胜出」才能让窄屏档位生效。
  */
 .s-home-head__value--compact {
   font-size: var(--fs-summary-min);
+}
+
+.s-home-head__value--small {
+  font-size: var(--fs-summary-2);
+}
+
+.s-home-head__value--smaller {
+  font-size: var(--fs-summary-3);
 }
 
 .s-home-head__value--tight {
@@ -4677,7 +4690,15 @@ textarea::selection {
 
 @media (max-width: 360px) {
   .s-home-head__value--compact {
-    font-size: var(--fs-money-list);
+    font-size: var(--fs-summary-3);
+  }
+
+  .s-home-head__value--small {
+    font-size: var(--fs-summary-4);
+  }
+
+  .s-home-head__value--smaller {
+    font-size: var(--fs-summary-5);
   }
 
   .s-home-head__value--tight {
