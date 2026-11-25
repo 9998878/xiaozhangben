@@ -391,6 +391,10 @@
     var bookId = pickBookId(books, app);
     var editId = context.params && context.params.id ? String(context.params.id) : '';
     var editing = editId ? findTransaction(db, editId) : null;
+    /* 换种类直选模式（2.42.2，学鲨鱼记账「选分类即完成」）：#/add?id=…&pick=cat，
+       仅编辑模式生效；点新分类立即保存并返回上一页，不再多按一次保存。 */
+    var pickCat = !!editing && !!context.params && String(context.params.pick || '') === 'cat';
+    var pickSaveName = '';
     var limitedTags = tagLimit();
     var noteMax = noteLimit();
     /* 习惯建议/外部唤起预填（2.28.10）：解析 #/add?pre=<JSON>，白名单校验，只在新建生效 */
@@ -949,6 +953,7 @@
 
     /* 标题：编辑 / 记一笔 / 还款（信用卡为转入方，UI.md §6.4） */
     function baseTitle() {
+      if (pickCat) return '更换种类';
       if (editing) return '编辑';
       var to = state.type === 'transfer' ? accountById(state.toAccountId) : null;
       return to && to.type === 'credit' ? '还款' : '记一笔';
@@ -1321,6 +1326,12 @@
       state.categoryTouched = true;
       renderGrid();
       syncAmount();
+      /* pick=cat：选中即保存（鲨鱼记账交互）；点当前种类视为取消，直接返回 */
+      if (pickCat) {
+        if (String(id) === String(editing.categoryId)) { goBack(); return; }
+        pickSaveName = String(category.name || '');
+        attemptSave();
+      }
     }
 
     /* ---------- 「全部」分类底部面板（N1） ----------
@@ -2215,6 +2226,7 @@
     }
 
     function openKeypad() {
+      if (pickCat) return; /* 直选模式不需要键盘：选分类即保存返回 */
       if (state.keypadOpen) return;
       var handle = ensureKeypad();
       if (!handle) {
@@ -3151,6 +3163,12 @@
              取不到就退回原文案，主流程零影响。
              2.36.0：成功提示带「再记一笔」动作（toast action 窗口 5s）——默认仍回上一页，
              连着记账时点一下直接进新的记一笔，不用回首页再点进来。 */
+          /* pick=cat：成功文案报新种类名，不带「再记一笔」动作 */
+          if (pickSaveName) {
+            showToast('种类已改为「' + pickSaveName + '」', { type: 'success' });
+            goBack();
+            return;
+          }
           var quip = XZB.core && XZB.core.quips ? XZB.core.quips.for(entity) : '';
           var successOpts = quip ? { type: 'success', duration: 3600 } : { type: 'success' };
           if (XZB.router && typeof XZB.router.go === 'function') {
@@ -3404,7 +3422,8 @@
     /* ============================================================
        首次同步
        ============================================================ */
-    if (editing && typeof context.setTitle === 'function') context.setTitle('编辑');
+    if (editing && typeof context.setTitle === 'function') context.setTitle(pickCat ? '更换种类' : '编辑');
+    if (pickCat) showToast('点新分类即保存并返回');
     /* 路由在 callScreen 之后才把新导航栏挂进 DOM，同步设置会被旧的 h1 吃掉 */
     if (typeof global.setTimeout === 'function') {
       global.setTimeout(function () { syncTitle(); }, 0);

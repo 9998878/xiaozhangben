@@ -19,6 +19,7 @@ const vm = require('vm');
 const ROOT = path.resolve(__dirname, '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'js', 'modules', 'inline-edit.js'), 'utf8');
 const LEDGER_SRC = fs.readFileSync(path.join(ROOT, 'js', 'screens', 'ledger.js'), 'utf8');
+const ADD_SRC = fs.readFileSync(path.join(ROOT, 'js', 'screens', 'add.js'), 'utf8');
 const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const SW_JS = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 
@@ -253,8 +254,11 @@ test('7.1 ledger 四热区与唯一写通道', () => {
   check(LEDGER_SRC.indexOf('IE.buildTxPatchMutator') >= 0, 'mutator 接线');
   check(LEDGER_SRC.indexOf("commit(mutator, { label: '行内编辑' })") >= 0, 'commit 通道');
   check(LEDGER_SRC.indexOf('function openCatZone') >= 0, 'openCatZone');
-  check(/function openCatZone\(st, tx\) \{\s*navigate\(st, '#\/add\?id='/.test(LEDGER_SRC), '图标热区跳记一笔页');
+  check(/function openCatZone\(st, tx\) \{\s*navigate\(st, '#\/add\?id=' \+ encodeURIComponent\(String\(tx\.id \|\| ''\)\) \+ '&pick=cat'/.test(LEDGER_SRC), '图标热区跳记一笔页 pick=cat');
   check(LEDGER_SRC.indexOf('IE.openPopover(anchor, 320') < 0, '种类宫格浮层已移除');
+  check(ADD_SRC.indexOf("String(context.params.pick || '') === 'cat'") >= 0, 'add 识别 pick=cat');
+  check(ADD_SRC.indexOf('if (pickCat) {') >= 0 && ADD_SRC.indexOf('pickSaveName = String(category.name') >= 0, '选分类即保存');
+  check(ADD_SRC.indexOf("showToast('种类已改为「' + pickSaveName + '」'") >= 0, '直选成功文案');
   check(LEDGER_SRC.indexOf('function openTimeZone') >= 0, 'openTimeZone');
 });
 

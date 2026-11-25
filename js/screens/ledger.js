@@ -1704,9 +1704,9 @@
     });
   }
 
-  /* ① 图标热区：2.42.1 改跳记一笔编辑页换种类（本页宫格浮层在手机端有缺陷）；转账行不挂该热区 */
+  /* ① 图标热区：2.42.1 改跳记一笔编辑页换种类；2.42.2 加 pick=cat，选分类即保存返回（鲨鱼记账交互） */
   function openCatZone(st, tx) {
-    navigate(st, '#/add?id=' + encodeURIComponent(String(tx.id || '')));
+    navigate(st, '#/add?id=' + encodeURIComponent(String(tx.id || '')) + '&pick=cat');
   }
 
   /* ② 文字热区：批注行内输入（输入框挂 __text 下、热区按钮外，避免 button 套 input） */
