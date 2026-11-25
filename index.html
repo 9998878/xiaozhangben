@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.41.4';
+  XZB.version = '2.42.0';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -63,7 +63,7 @@
     var view = hash.replace(/^#\/?/, '').split(/[/?]/)[0];
     if (view !== '' && view !== 'home') { return; }
     var query = loc.protocol === 'file:' ? '' : '?v=' + XZB.version;
-    ['js/screens/home.js', 'js/modules/habit.js', 'js/screens/ledger.js'].forEach(function (file) {
+    ['js/screens/home.js', 'js/modules/habit.js', 'js/screens/ledger.js', 'js/modules/inline-edit.js'].forEach(function (file) {
       var link = doc.createElement('link');
       link.rel = 'preload';
       link.as = 'script';
@@ -7110,6 +7110,214 @@ textarea::selection {
   font-size: var(--fs-caption-2);
   line-height: var(--lh-caption-2);
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- 行内编辑热区与浮层（2.42.0） ----------------
+   四热区（种类/批注/金额/日期时间）是 button 重置 + hover/按压/焦点反馈；
+   浮层与行内输入沿用 s-ledger-* 封闭集合。时间热区用负 margin 补触控高度，不改行高。 */
+.s-ledger-item__zone {
+  margin: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: var(--r-thumb);
+  transition: background 0.15s;
+}
+@media (hover: hover) {
+  .s-ledger-item__zone:hover { background: var(--c-fill); }
+}
+.s-ledger-item__zone:active { background: var(--c-pressed); }
+.s-ledger-item__zone:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: calc(var(--focus-offset) * -1);
+}
+.s-ledger-item__zone--text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+}
+.s-ledger-item__zone--amount,
+.s-ledger-item__zone--time {
+  display: block;
+  text-align: right;
+}
+.s-ledger-item__zone--time {
+  padding: var(--sp-2) var(--sp-1);
+  margin: calc(var(--sp-2) * -1) calc(var(--sp-1) * -1);
+}
+.s-ledger-item__text.is-editing .s-ledger-item__zone--text { display: none; }
+.s-ledger-item__note-input {
+  width: 100%;
+  margin-top: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border: 0;
+  border-bottom: 2px solid var(--c-brand, #ffd900);
+  border-radius: var(--sp-1) var(--sp-1) 0 0;
+  background: var(--c-fill);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs-subhead);
+  outline: none;
+}
+.s-ledger-item__edit-hint {
+  margin-top: 2px;
+  color: var(--c-text-4);
+  font-size: var(--fs-caption-2);
+  line-height: var(--lh-caption-2);
+}
+.s-ledger-item__amount-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1px;
+  padding: 1px var(--sp-1);
+  border-bottom: 2px solid var(--c-brand, #ffd900);
+  border-radius: var(--sp-1) var(--sp-1) 0 0;
+  background: var(--c-fill);
+}
+.s-ledger-item__amount-sign {
+  color: var(--c-text);
+  font-size: var(--fs-row);
+  font-weight: var(--fw-row);
+}
+.s-ledger-item__amount-input {
+  width: 88px;
+  border: 0;
+  background: none;
+  outline: none;
+  text-align: right;
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs-row);
+  font-weight: var(--fw-row);
+  font-variant-numeric: tabular-nums;
+}
+.s-ledger-item.is-flash { animation: s-ledger-flash 1.1s ease-out; }
+@keyframes s-ledger-flash {
+  0% { background: #fff6c2; }
+  100% { background: transparent; }
+}
+.s-ledger-pop {
+  position: fixed;
+  z-index: 60;
+  padding: var(--sp-3);
+  border: 1px solid var(--c-line, #ececee);
+  border-radius: 18px;
+  background: var(--c-card, #fff);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.24);
+}
+.s-ledger-pop__title {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 2px var(--sp-2);
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-2);
+}
+.s-ledger-pop__close {
+  border: 0;
+  background: none;
+  color: var(--c-text-4);
+  font-family: inherit;
+  font-size: var(--fs-caption-2);
+  cursor: pointer;
+}
+.s-ledger-pop__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 68px);
+  gap: var(--sp-2);
+}
+.s-ledger-pop__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 2px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--c-text-2);
+  font-family: inherit;
+  font-size: var(--fs-caption-2);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .s-ledger-pop__cell:hover { background: var(--c-fill); }
+}
+.s-ledger-pop__cell.is-on {
+  background: #fff6c2;
+  color: var(--c-text);
+  font-weight: var(--fw-medium);
+}
+.s-ledger-pop__tile { display: grid; place-items: center; }
+.s-ledger-pop__tile .c-tile { position: relative; }
+.s-ledger-pop__cell.is-on .c-tile::after {
+  content: "✓";
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border: 2px solid var(--c-card, #fff);
+  border-radius: 50%;
+  background: var(--c-brand, #ffd900);
+  color: #1c1c1e;
+  font-size: 10px;
+  font-weight: 700;
+}
+.s-ledger-pop__field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: var(--sp-2);
+  color: var(--c-text-3);
+  font-size: var(--fs-subhead);
+}
+.s-ledger-pop__field input {
+  padding: 6px var(--sp-2);
+  border: 1px solid var(--c-line, #e2e2e5);
+  border-radius: 9px;
+  background: var(--c-card, #fff);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs-subhead);
+  outline: none;
+}
+.s-ledger-pop__field input:focus { border-color: var(--c-brand, #ffd900); }
+.s-ledger-pop__quick {
+  display: flex;
+  gap: 6px;
+  margin-bottom: var(--sp-3);
+}
+.s-ledger-pop__quick button {
+  padding: 5px 11px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--c-fill);
+  color: var(--c-text-2);
+  font-family: inherit;
+  font-size: var(--fs-caption-2);
+  cursor: pointer;
+}
+.s-ledger-pop__save {
+  width: 100%;
+  padding: 9px 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--c-brand, #ffd900);
+  color: #1c1c1e;
+  font-family: inherit;
+  font-size: var(--fs-subhead);
+  font-weight: 700;
+  cursor: pointer;
 }
 
 /* ---------------- 分页 / 空态 ---------------- */
@@ -32585,10 +32793,11 @@ textarea::selection {
     ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
     ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'],
     ['ai-insights', 'modules/ai-insights', 'modules/ai-insights'], ['habit', 'modules/habit', 'modules/habit'],
-    ['bill-import', 'modules/bill-import', 'modules/bill-import'], ['audit', 'modules/audit', 'modules/audit']
+    ['bill-import', 'modules/bill-import', 'modules/bill-import'], ['audit', 'modules/audit', 'modules/audit'],
+    ['inline-edit', 'modules/inline-edit', 'modules/inline-edit']
   ];
   /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
-  var DEPS = { home: ['habit'], add: ['keypad', 'icon-picker'], stats: ['charts', 'ai-insights', 'audit'], calendar: ['charts'], report: ['charts'], plan: ['charts'], settings: ['icon-picker', 'bill-import'], assistant: ['nl', 'core-assistant'] };
+  var DEPS = { home: ['habit'], ledger: ['inline-edit'], add: ['keypad', 'icon-picker'], stats: ['charts', 'ai-insights', 'audit'], calendar: ['charts'], report: ['charts'], plan: ['charts'], settings: ['icon-picker', 'bill-import'], assistant: ['nl', 'core-assistant'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
@@ -35620,5 +35829,6 @@ textarea::selection {
   <script type="text/xzb-module" data-xzb-chunk="habit" src="js/modules/habit.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="bill-import" src="js/modules/bill-import.js"></script>
   <script type="text/xzb-module" data-xzb-chunk="audit" src="js/modules/audit.js"></script>
+  <script type="text/xzb-module" data-xzb-chunk="inline-edit" src="js/modules/inline-edit.js"></script>
 </body>
 </html>

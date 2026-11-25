@@ -111,9 +111,9 @@ function runPreload(hash, protocol) {
   return { links: links, XZB: sandbox.XZB };
 }
 
-test('1.1 空 hash（默认首屏）→ 预载 home/habit/ledger 三件套，rel=preload as=script', function () {
+test('1.1 空 hash（默认首屏）→ 预载 home/habit/ledger/inline-edit 四件套，rel=preload as=script', function () {
   const r = runPreload('');
-  checkEq(r.links.length, 3, '预载链接数');
+  checkEq(r.links.length, 4, '预载链接数');
   for (const link of r.links) {
     checkEq(link.rel, 'preload', 'rel');
     checkEq(link.as, 'script', 'as');
@@ -121,11 +121,12 @@ test('1.1 空 hash（默认首屏）→ 预载 home/habit/ledger 三件套，rel
   checkEq(r.links[0].href, 'js/screens/home.js?v=' + VERSION, 'home URL');
   checkEq(r.links[1].href, 'js/modules/habit.js?v=' + VERSION, 'habit URL');
   checkEq(r.links[2].href, 'js/screens/ledger.js?v=' + VERSION, 'ledger URL');
+  checkEq(r.links[3].href, 'js/modules/inline-edit.js?v=' + VERSION, 'inline-edit URL');
 });
 
 test('1.2 #/home 与 #/home?focus=budget 同样预载', function () {
-  checkEq(runPreload('#/home').links.length, 3, '#/home');
-  checkEq(runPreload('#/home?focus=budget').links.length, 3, '#/home?focus=budget');
+  checkEq(runPreload('#/home').links.length, 4, '#/home');
+  checkEq(runPreload('#/home?focus=budget').links.length, 4, '#/home?focus=budget');
 });
 
 test('1.3 非默认路由（#/add、#/settings/ai）不预载，保持原加载链', function () {
@@ -135,7 +136,7 @@ test('1.3 非默认路由（#/add、#/settings/ai）不预载，保持原加载�
 
 test('1.4 file:// 恒省略 query（与 chunk-manifest E2′ 一致）', function () {
   const r = runPreload('', 'file:');
-  checkEq(r.links.length, 3, 'file:// 仍预载');
+  checkEq(r.links.length, 4, 'file:// 仍预载');
   checkEq(r.links[0].href, 'js/screens/home.js', 'file:// 无 ?v=');
 });
 
@@ -148,9 +149,11 @@ test('1.5 预载 URL 与 chunk-manifest.url() 逐字一致（真源比对）', f
   checkEq(r.links[0].href, sandbox.XZB.chunks.url('home'), 'home 与 manifest 一致');
   checkEq(r.links[1].href, sandbox.XZB.chunks.url('habit'), 'habit 与 manifest 一致');
   checkEq(r.links[2].href, sandbox.XZB.chunks.url('ledger'), 'ledger 与 manifest 一致');
-  /* habit 必须是 home 的声明依赖，ledger 必须无依赖（预载清单的结构性前提） */
+  checkEq(r.links[3].href, sandbox.XZB.chunks.url('inline-edit'), 'inline-edit 与 manifest 一致');
+  /* habit 必须是 home 的声明依赖；ledger 依赖 inline-edit（2.42.0 行内编辑底座） */
   check(sandbox.XZB.chunks.deps.home.indexOf('habit') >= 0, 'home 依赖 habit');
-  checkEq(sandbox.XZB.chunks.deps.ledger.length, 0, 'ledger 无依赖');
+  checkEq(sandbox.XZB.chunks.deps.ledger.length, 1, 'ledger 依赖数');
+  check(sandbox.XZB.chunks.deps.ledger.indexOf('inline-edit') >= 0, 'ledger 依赖 inline-edit');
 });
 
 test('1.6 Node 环境（无 document/location）不抛错，版本仍定稿', function () {

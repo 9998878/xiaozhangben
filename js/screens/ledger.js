@@ -1642,6 +1642,196 @@
     });
   }
 
+  /* ---------------- 行内编辑（2.42.0）：四热区全部本页完成 ----------------
+     图标→种类 / 文字→批注 / 金额→金额 / 时间→日期时间。写通道与 doDelete 同源：
+     ctx.commit || app.commit；成功后 app refresh → router.rerender 整屏重建，
+     这里只负责恢复滚动位置与高亮目标行，不做第二套写路径。 */
+  function inlineEditApi() {
+    var ui = XZB.ui || XZB.UI || {};
+    return ui.inlineEdit || null;
+  }
+
+  function shiftDayStr(dayStr, delta) {
+    var p = String(dayStr || '').split('-');
+    if (p.length !== 3) { return String(dayStr || ''); }
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + delta);
+    var mm = String(d.getMonth() + 1); if (mm.length < 2) { mm = '0' + mm; }
+    var dd = String(d.getDate()); if (dd.length < 2) { dd = '0' + dd; }
+    return d.getFullYear() + '-' + mm + '-' + dd;
+  }
+
+  function commitInlinePatch(st, tx, patch, successText) {
+    var IE = inlineEditApi();
+    var app = appApi();
+    var commit = st && st.ctx && typeof st.ctx.commit === 'function' ? st.ctx.commit : (app && app.commit);
+    if (!IE || typeof commit !== 'function') {
+      toast('保存失败，请重试', { type: 'danger' });
+      return Promise.resolve({ ok: false, code: 'E_COMMIT' });
+    }
+    var nowIso = dates && typeof dates.nowIso === 'function' ? dates.nowIso() : new Date().toISOString();
+    var scroller = st && st.root && st.root.closest ? st.root.closest('.app-screen') : null;
+    var scrollTop = scroller ? scroller.scrollTop : 0;
+    var txId = String(tx.id || '');
+    var mutator = IE.buildTxPatchMutator(txId, patch, nowIso,
+      schema && typeof schema.normalizeTransaction === 'function' ? schema.normalizeTransaction : null);
+    var pending;
+    try {
+      pending = commit(mutator, { label: '行内编辑' });
+    } catch (error) {
+      toast('保存失败，请重试', { type: 'danger' });
+      return Promise.resolve({ ok: false, code: 'E_COMMIT' });
+    }
+    return Promise.resolve(pending).then(function (result) {
+      if (!result || !result.ok) {
+        /* 失败：数据未动，行 DOM 已由编辑器 cleanup 还原，只提示 */
+        toast(messageOf(result && result.code, result && result.message), { type: 'danger' });
+        return { ok: false, code: result && result.code };
+      }
+      toast(successText, { type: 'success' });
+      /* 整屏重建后旧 st 已 dead：重建完成后恢复滚动并高亮目标行 */
+      global.setTimeout(function () {
+        var d = global.document;
+        if (!d) { return; }
+        var sc = d.querySelector('.app-screen');
+        if (sc) { sc.scrollTop = scrollTop; }
+        var row = d.querySelector('.s-ledger-item[data-id="' + txId.replace(/"/g, '\\"') + '"]');
+        if (row) { IE.flashRow(row); }
+      }, 60);
+      return { ok: true };
+    }, function () {
+      toast('保存失败，请重试', { type: 'danger' });
+      return { ok: false, code: 'E_COMMIT' };
+    });
+  }
+
+  /* ① 图标热区：同 kind 分类宫格浮层（转账行不挂该热区） */
+  function openCatZone(st, tx, anchor) {
+    var IE = inlineEditApi();
+    if (!IE) { return; }
+    var kind = tx.type === 'income' ? 'income' : 'expense';
+    var cats = IE.categoriesForKind(rows(st.db, 'categories'), kind);
+    IE.openPopover(anchor, 320, function (pop) {
+      var head = el('p', { className: 's-ledger-pop__title' });
+      head.appendChild(el('span', { text: '更换种类' }));
+      var closeBtn = el('button', { type: 'button', className: 's-ledger-pop__close', text: '关闭' });
+      closeBtn.addEventListener('click', function () { IE.closePopover(); });
+      head.appendChild(closeBtn);
+      pop.appendChild(head);
+      var grid = el('div', { className: 's-ledger-pop__grid' });
+      cats.forEach(function (cat) {
+        var cell = el('button', {
+          type: 'button',
+          className: 's-ledger-pop__cell' + (cat.id === tx.categoryId ? ' is-on' : ''),
+          'aria-label': String(cat.name || '')
+        });
+        var tileWrap = el('span', { className: 's-ledger-pop__tile' });
+        renderIconMedia(tileWrap, cat.icon ? String(cat.icon) : 'ellipsis', categorySlot(st, cat.id));
+        cell.appendChild(tileWrap);
+        cell.appendChild(el('span', { text: String(cat.name || '') }));
+        cell.addEventListener('click', function () {
+          IE.closePopover();
+          if (cat.id !== tx.categoryId) {
+            commitInlinePatch(st, tx, { categoryId: cat.id }, '种类已改为「' + String(cat.name || '') + '」');
+          }
+        });
+        grid.appendChild(cell);
+      });
+      pop.appendChild(grid);
+    });
+  }
+
+  /* ② 文字热区：批注行内输入（输入框挂 __text 下、热区按钮外，避免 button 套 input） */
+  function openNoteZone(st, tx, host) {
+    var IE = inlineEditApi();
+    if (!IE || host.classList.contains('is-editing')) { return; }
+    host.classList.add('is-editing');
+    var before = IE.normalizeNote(tx.note);
+    var handle = null;
+    function cleanup() {
+      if (handle) { handle.destroy(); handle = null; }
+      host.classList.remove('is-editing');
+    }
+    handle = IE.mountNoteInput(host, tx.note, {
+      onCommit: function (text) {
+        var note = IE.normalizeNote(text);
+        cleanup();
+        if (note !== before) {
+          commitInlinePatch(st, tx, { note: note }, note ? '批注已更新' : '批注已清空');
+        }
+      },
+      onCancel: cleanup
+    });
+    if (!handle) { host.classList.remove('is-editing'); }
+  }
+
+  /* ③ 金额热区：行内输入，符号按收支/转账给；解析失败提示并还原 */
+  function openAmountZone(st, tx, trail, amountNode, timeNode) {
+    var IE = inlineEditApi();
+    if (!IE || amountNode.hidden) { return; }
+    amountNode.hidden = true;
+    var sign = tx.type === 'transfer' ? '¥' : (tx.type === 'income' ? '+¥' : '-¥');
+    var before = Math.abs(Number(tx.amountCents) || 0);
+    var handle = null;
+    function cleanup() {
+      if (handle) { handle.destroy(); handle = null; }
+      amountNode.hidden = false;
+    }
+    handle = IE.mountAmountInput(trail, before, sign, {
+      onCommit: function (cents) {
+        cleanup();
+        if (cents !== before) { commitInlinePatch(st, tx, { amountCents: cents }, '金额已更新'); }
+      },
+      onCancel: cleanup,
+      onInvalid: function () { cleanup(); toast('金额无效', { type: 'warning' }); }
+    }, timeNode);
+    if (!handle) { amountNode.hidden = false; }
+  }
+
+  /* ④ 时间热区：日期 + 时间浮层（今天/昨天/前天快捷），跨日靠 rerender 自然重分组 */
+  function openTimeZone(st, tx, anchor) {
+    var IE = inlineEditApi();
+    if (!IE) { return; }
+    IE.openPopover(anchor, 252, function (pop) {
+      var head = el('p', { className: 's-ledger-pop__title' });
+      head.appendChild(el('span', { text: '修改日期时间' }));
+      var closeBtn = el('button', { type: 'button', className: 's-ledger-pop__close', text: '关闭' });
+      closeBtn.addEventListener('click', function () { IE.closePopover(); });
+      head.appendChild(closeBtn);
+      pop.appendChild(head);
+      var dField = el('div', { className: 's-ledger-pop__field' });
+      dField.appendChild(el('label', { text: '日期' }));
+      var dInput = el('input', { type: 'date', value: String(tx.date || '') });
+      dField.appendChild(dInput);
+      pop.appendChild(dField);
+      var quick = el('div', { className: 's-ledger-pop__quick' });
+      [['今天', 0], ['昨天', -1], ['前天', -2]].forEach(function (pair) {
+        var b = el('button', { type: 'button', text: pair[0] });
+        b.addEventListener('click', function () { dInput.value = shiftDayStr(today(), pair[1]); });
+        quick.appendChild(b);
+      });
+      pop.appendChild(quick);
+      var tField = el('div', { className: 's-ledger-pop__field' });
+      tField.appendChild(el('label', { text: '时间' }));
+      var tInput = el('input', { type: 'time', value: String(tx.time || '00:00') });
+      tField.appendChild(tInput);
+      pop.appendChild(tField);
+      var save = el('button', { type: 'button', className: 's-ledger-pop__save', text: '保存' });
+      save.addEventListener('click', function () {
+        var d = String(dInput.value || '');
+        var t = String(tInput.value || '');
+        if (!IE.isValidDateStr(d) || !IE.isValidTimeStr(t)) {
+          toast('日期或时间无效', { type: 'warning' });
+          return;
+        }
+        IE.closePopover();
+        if (d !== String(tx.date || '') || t !== String(tx.time || '')) {
+          commitInlinePatch(st, tx, { date: d, time: t }, '日期时间已更新');
+        }
+      });
+      pop.appendChild(save);
+    });
+  }
+
   function buildItem(st, tx) {
     var maps = st.maps;
     var isTransfer = tx.type === 'transfer';
@@ -1696,31 +1886,53 @@
         ? kit.photoAriaLabel(mainLabel, photoIds.length)
         : mainLabel + '，含 ' + photoIds.length + ' 张照片';
     }
-    /* 词表唯一：行容器与部件一律 s-ledger-item*（ledger.css 已有整套规则）。外层 wrap 已是 s-ledger-item，这里不再重复挂；s-ledger-row 已作废。 */
-    var main = el('a', {
+    /* 词表唯一：行容器与部件一律 s-ledger-item*（ledger.css 已有整套规则）。外层 wrap 已是 s-ledger-item，这里不再重复挂；s-ledger-row 已作废。
+       2.42.0：main 由 <a> 改 <div role=group>（热区 button 不能嵌在 a 内）；行空白处单击仍开详情，
+       ?detail= 深链消费路径不变（consumeDetailParam），键盘 Enter/Space 在 main 本体上开详情。 */
+    var IE = inlineEditApi();
+    var main = el('div', {
       className: 's-ledger-item__main',
-      href: '#/ledger?detail=' + encodeURIComponent(String(tx.id || '')),
-      'aria-label': mainLabel
+      role: 'group',
+      tabindex: '0',
+      'aria-label': mainLabel + '，回车查看详情'
     });
-    /* 链接原生支持 Enter；Space 在部分浏览器不触发 click，这里补齐 （与首页 a.s-home-row 的无障碍口径一致，见 home.js 的同一段注释） */
     main.addEventListener('keydown', function (event) {
-      if (event.key !== ' ' && event.key !== 'Spacebar') { return; }
+      if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') { return; }
+      if (event.target !== main) { return; }   /* 热区按钮/输入框内的按键不劫持 */
       event.preventDefault();
-      if (typeof main.click === 'function') { main.click(); }
+      openDetailSheet(st, tx);
     });
 
-    /* 第一列：64px 媒体区。无照片 = 分类图标；有照片 = 骨架 → 缩略图 / 占位（一行只放一张） */
-    var media = el('span', {
-      className: 's-ledger-item__media c-row__media',
+    /* 第一列：64px 媒体区。无照片 = 分类图标；有照片 = 骨架 → 缩略图 / 占位（一行只放一张）。
+       2.42.0：无照片且非转账行升级为「更换种类」热区按钮；有照片行保留原语义不加热区。 */
+    var catZoneOn = !!IE && !isTransfer && !photoIds.length;
+    var media = el(catZoneOn ? 'button' : 'span', {
+      className: 's-ledger-item__media c-row__media' + (catZoneOn ? ' s-ledger-item__zone s-ledger-item__zone--media' : ''),
+      type: catZoneOn ? 'button' : undefined,
+      'aria-label': catZoneOn ? '更换种类：' + title : undefined,
       dataset: { id: String(tx.id || '') }
     });
     if (photoIds.length) { renderSkeletonMedia(media); }
     else { renderIconMedia(media, iconName, slot); }
+    if (catZoneOn) {
+      media.addEventListener('click', function (event) {
+        event.stopPropagation();
+        openCatZone(st, tx, media);
+      });
+    }
     main.appendChild(media);
 
-    /* 第二列：文字区；min-width:0 + 省略全部交给 CSS 类，不写内联样式 */
+    /* 第二列：文字区；min-width:0 + 省略全部交给 CSS 类，不写内联样式。
+       2.42.0：非转账行的标题/副标题包进「修改批注」热区按钮；编辑态输入框挂 __text 下（按钮外）。 */
     var mainText = el('span', { className: 's-ledger-item__text c-row__main' });
-    mainText.appendChild(el('span', {
+    var textZoneOn = !!IE && !isTransfer;
+    var textZone = textZoneOn ? el('button', {
+      type: 'button',
+      className: 's-ledger-item__zone s-ledger-item__zone--text',
+      'aria-label': '修改批注：' + title
+    }) : null;
+    var textHost = textZone || mainText;
+    textHost.appendChild(el('span', {
       className: 's-ledger-item__title c-row__title u-ellipsis',
       text: title
     }));
@@ -1739,19 +1951,49 @@
     if (!noteText) { sub2Node.hidden = true; }
     /* 原 __sub 节点保留：仍是完整「账户 · 备注」串，但视觉高度为 0（R9 / A9）。里面放纯文本，不加 role 以免与行级 aria-label 重复播报。 */
     subLine.appendChild(document.createTextNode(sub));
-    mainText.appendChild(sub1Node);
-    mainText.appendChild(sub2Node);
-    mainText.appendChild(subLine);
+    textHost.appendChild(sub1Node);
+    textHost.appendChild(sub2Node);
+    textHost.appendChild(subLine);
+    if (textZone) {
+      mainText.appendChild(textZone);
+      textZone.addEventListener('click', function (event) {
+        event.stopPropagation();
+        openNoteZone(st, tx, mainText);
+      });
+    }
     main.appendChild(mainText);
 
-    /* 第三列：金额区。正负号承担收支语义，文字恒深色（不再用红绿） */
+    /* 第三列：金额区。正负号承担收支语义，文字恒深色（不再用红绿）。
+       2.42.0：金额/时间升级为热区按钮（三种类型都可改）；时间热区用负 margin 补触控高度。 */
     var trail = el('span', { className: 's-ledger-item__trail s-ledger-item__value c-row__value' });
-    trail.appendChild(el('span', {
-      className: 's-ledger-item__amount u-tabular',
+    var amountNode = el(IE ? 'button' : 'span', {
+      className: 's-ledger-item__amount u-tabular' + (IE ? ' s-ledger-item__zone s-ledger-item__zone--amount' : ''),
+      type: IE ? 'button' : undefined,
+      'aria-label': IE ? '修改金额' : undefined,
       text: amountText
-    }));
+    });
+    trail.appendChild(amountNode);
+    var timeNode = null;
     if (tx.time) {
-      trail.appendChild(el('span', { className: 's-ledger-item__time u-tabular', text: String(tx.time) }));
+      timeNode = el(IE ? 'button' : 'span', {
+        className: 's-ledger-item__time u-tabular' + (IE ? ' s-ledger-item__zone s-ledger-item__zone--time' : ''),
+        type: IE ? 'button' : undefined,
+        'aria-label': IE ? '修改日期时间' : undefined,
+        text: String(tx.time)
+      });
+      trail.appendChild(timeNode);
+    }
+    if (IE) {
+      amountNode.addEventListener('click', function (event) {
+        event.stopPropagation();
+        openAmountZone(st, tx, trail, amountNode, timeNode);
+      });
+      if (timeNode) {
+        timeNode.addEventListener('click', function (event) {
+          event.stopPropagation();
+          openTimeZone(st, tx, timeNode);
+        });
+      }
     }
     main.appendChild(trail);
     surface.appendChild(main);

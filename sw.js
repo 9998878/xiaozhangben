@@ -1,6 +1,6 @@
 /* ============================================================
-   小账本 2.41.4 · Service Worker（缓存键保留版本 query·导航超时放宽，慢网不再喂旧码）
-   缓存名：小账本2-v2.41.4（英文缓存键 xzb2-v2.41.4）
+   小账本 2.42.0 · Service Worker（缓存键保留版本 query·导航超时放宽，慢网不再喂旧码）
+   缓存名：小账本2-v2.42.0（英文缓存键 xzb2-v2.42.0）
    策略：导航请求网络优先（3 秒超时）→ 缓存；其余静态资源缓存优先。
    约束：只处理 GET；只处理 http(s) 同源请求；不缓存 chrome-extension 等协议。
    ============================================================ */
@@ -8,9 +8,9 @@
   'use strict';
 
   /* 人类可读的缓存版本标签，仅用于日志与排查 */
-  var CACHE_LABEL = '小账本2-v2.41.4';
+  var CACHE_LABEL = '小账本2-v2.42.0';
   /* 真正的 Cache Storage 键：换版本号即触发本应用旧缓存清除（activate 时 cleanupCaches） */
-  var CACHE_NAME = 'xzb2-v2.41.4';
+  var CACHE_NAME = 'xzb2-v2.42.0';
   /* 预取失败清单的旁路缓存：名字同样带 xzb2- 前缀，清理时必须显式保留（见 cleanupCaches） */
   var META_CACHE = 'xzb2-meta';
   /* 预取失败清单在旁路缓存里的键；内容形如 { v: CACHE_NAME, list: [url, ...] } */
@@ -52,7 +52,8 @@
     './js/modules/ai-insights.js',
     './js/modules/habit.js',
     './js/modules/bill-import.js',
-    './js/modules/audit.js'
+    './js/modules/audit.js',
+    './js/modules/inline-edit.js'
   ];
 
   /* 判断是否为可接管的 http(s) 地址：chrome-extension:/file:/data: 一律放行给浏览器 */

@@ -11,7 +11,7 @@
  *      有今日记录→查看报告（快照变动提示）、无记录→生成/重试/本地兜底/去设置、存档入口恒在。
  *   4. 路由 parseHash：#/insights 历史别名归一到 stats，m/r/regen 参数保留。
  *   5. add.js 日期预填：严格 YYYY-MM-DD＋isValidDateStr，仅新建生效（源码锁）。
- *   6. 合并接线：insights.js 已删、三屏注册、manifest 20 项、sw 预缓存 34 项、
+ *   6. 合并接线：insights.js 已删、三屏注册、manifest 21 项、sw 预缓存 35 项、
  *      tabbar 首页/日历/＋/统计/我的、core-assistant 深链改 #/stats。
  *
  * 运行：node tests/calendar-report.test.js（scripts/test.js 自动收集）。只读业务代码。
@@ -530,27 +530,27 @@ await test('6.1 insights.js 已删除；stats/calendar/report 各自注册唯一
   lock(REPORT_JS.indexOf("XZB.screens.register('report'") >= 0, 'report 注册');
 });
 
-await test('6.2 chunk-manifest：20 项、无 insights、stats 依赖含 ai-insights/audit', function () {
+await test('6.2 chunk-manifest：21 项、无 insights、stats 依赖含 ai-insights/audit', function () {
   check(INDEX_HTML.indexOf('data-xzb-chunk="insights"') < 0, '无 insights 声明标签');
   lock(/data-xzb-chunk="calendar" src="js\/screens\/calendar\.js"/.test(INDEX_HTML), 'calendar 声明标签');
   lock(/data-xzb-chunk="report" src="js\/screens\/report\.js"/.test(INDEX_HTML), 'report 声明标签');
   const rows = slice(INDEX_HTML, '  var ROWS = [', '  ];', 'ROWS');
   const count = (rows.match(/\['/g) || []).length;
-  checkEq(count, 20, 'ROWS 20 项');
+  checkEq(count, 21, 'ROWS 21 项');
   check(rows.indexOf("'insights'") < 0, 'ROWS 无 insights');
   lock(INDEX_HTML.indexOf("stats: ['charts', 'ai-insights', 'audit']") >= 0, 'stats DEPS');
   lock(INDEX_HTML.indexOf("calendar: ['charts']") >= 0, 'calendar DEPS');
   lock(INDEX_HTML.indexOf("report: ['charts']") >= 0, 'report DEPS');
 });
 
-await test('6.3 sw.js：预缓存 34 项，含 calendar/report，无 insights，版本 2.41.4', function () {
+await test('6.3 sw.js：预缓存 35 项，含 calendar/report，无 insights，版本 2.42.0', function () {
   const pre = slice(SW_JS, 'var PRECACHE = [', '];', 'PRECACHE');
   const count = (pre.match(/'\.\//g) || []).length;
-  checkEq(count, 34, 'PRECACHE 34 项');
+  checkEq(count, 35, 'PRECACHE 35 项');
   lock(pre.indexOf("'./js/screens/calendar.js'") >= 0, '含 calendar.js');
   lock(pre.indexOf("'./js/screens/report.js'") >= 0, '含 report.js');
   check(pre.indexOf("'./js/screens/insights.js'") < 0, '无 insights.js');
-  lock(/CACHE_NAME\s*=\s*'xzb2-v2\.41\.4'/.test(SW_JS), '缓存版本 2.41.4');
+  lock(/CACHE_NAME\s*=\s*'xzb2-v2\.42\.0'/.test(SW_JS), '缓存版本 2.42.0');
 });
 
 await test('6.4 底栏与路由：首页/日历/＋/统计/我的', function () {

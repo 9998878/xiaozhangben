@@ -623,17 +623,17 @@ test('6.5 index.html SYSTEM_CATEGORY_KEYS 字面量含 9 个新增 icon key', fu
 
 /* ============================== 用例 7：版本一致性 ============================== */
 
-section('用例 7：版本号 2.41.4 三处一致，无旧版本残留');
+section('用例 7：版本号 2.42.0 三处一致，无旧版本残留');
 
-test('7.1 index.html 含 XZB.version = \'2.41.4\'', function () {
-  check(/XZB\.version\s*=\s*'2\.41\.4'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.41.4\'');
+test('7.1 index.html 含 XZB.version = \'2.42.0\'', function () {
+  check(/XZB\.version\s*=\s*'2\.42\.0'/.test(INDEX_HTML), 'index.html 未找到 XZB.version = \'2.42.0\'');
 });
 
-test('7.2 sw.js CACHE_NAME=\'xzb2-v2.41.4\' 且 CACHE_LABEL 含 2.41.4', function () {
-  check(/CACHE_NAME\s*=\s*'xzb2-v2\.41\.4'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.41.4');
+test('7.2 sw.js CACHE_NAME=\'xzb2-v2.42.0\' 且 CACHE_LABEL 含 2.42.0', function () {
+  check(/CACHE_NAME\s*=\s*'xzb2-v2\.42\.0'/.test(SW_JS), 'sw.js CACHE_NAME 不是 xzb2-v2.42.0');
   const m = /CACHE_LABEL\s*=\s*'([^']*)'/.exec(SW_JS);
   check(m, 'sw.js 找不到 CACHE_LABEL');
-  check(m[1].indexOf('2.41.4') >= 0, 'CACHE_LABEL 不含 2.41.4：' + m[1]);
+  check(m[1].indexOf('2.42.0') >= 0, 'CACHE_LABEL 不含 2.42.0：' + m[1]);
 });
 
 test('7.3 版本载体里无上一版 2.41.3 残留', function () {
