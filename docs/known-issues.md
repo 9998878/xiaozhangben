@@ -103,7 +103,7 @@
 - 解读口径：buffer 分子（跨账本全历史余额）与分母（单账本月必要支出）口径混合，需产品定口径。
 - UI：`home.js` 情境入口开关只有读取、没有 UI（注释自称「我的里可关」未兑现）——补开关或删死码，需产品定。
 - 解析边界：多笔无分隔已于 2.38.0 保守拆分（每段都落已知分类才拆）；剩余歧义——物品名+数字（如 `ChatGPT25`）按 ASCII 边界语义不拆（与 nl 同口径），单段多候选金额仍取「最后一个候选」口径。
-- 测试基建：580+ 处源码字符串断言易误红（2.44.1 起新增回归优先行为级：sw-cache / csv-export / bill-dupe）；harness 无共享 helper；CI 已补 GitHub Actions（跑 `scripts/test.js` + `scripts/check.js`）。
+- 测试基建：580+ 处源码字符串断言易误红（2.44.1 起新增回归优先行为级：sw-cache / csv-export / bill-dupe；2.44.1 后补 books / recurring-engine / migrate-upgrade / goals 四组盲区行为测试，验收报告 P2-5 的 books/定期/migrate/goals 零覆盖已闭合，e2e-harness 仍孤立）；harness 无共享 helper；CI 已补 GitHub Actions（跑 `scripts/test.js` + `scripts/check.js`）。
 - CSV 回导边界（2.44.1）：自身导出 CSV 已可回导，但「已删除=是」的行会被重新导入为有效账——导入侧不认「已删除」列，待后续扩展。
 - **iconOk 白名单**（2.28.3 已回退 2.28.2 的启用）：重新启用前必须先做「未知图标 → 默认图标」的**加载期兼容迁移**——老库图标键可能来自已下线的注册表条目，加载期严格校验会 `E_STORAGE_CORRUPT` 把用户挡在数据门外（数据与快照仍在，但打不开）。教训：加载路径上的校验收紧，必须有迁移或降级方案。
 
