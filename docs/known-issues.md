@@ -103,7 +103,8 @@
 - 解读口径：buffer 分子（跨账本全历史余额）与分母（单账本月必要支出）口径混合，需产品定口径。
 - UI：`home.js` 情境入口开关只有读取、没有 UI（注释自称「我的里可关」未兑现）——补开关或删死码，需产品定。
 - 解析边界：多笔无分隔已于 2.38.0 保守拆分（每段都落已知分类才拆）；剩余歧义——物品名+数字（如 `ChatGPT25`）按 ASCII 边界语义不拆（与 nl 同口径），单段多候选金额仍取「最后一个候选」口径。
-- 测试基建：580+ 处源码字符串断言易误红（2.44.1 起新增回归优先行为级：sw-cache / csv-export / bill-dupe；2.44.1 后补 books / recurring-engine / migrate-upgrade / goals 四组盲区行为测试，验收报告 P2-5 的 books/定期/migrate/goals 零覆盖已闭合；2.44.2 再补 bill-csv-edge / store-upgrade 两组，store.load 的 IndexedDB 升级接线仍待浏览器/桩覆盖，e2e-harness 仍孤立）；harness 无共享 helper；CI 已补 GitHub Actions（跑 `scripts/test.js` + `scripts/check.js`）。
+- 测试基建：580+ 处源码字符串断言易误红（2.44.1 起新增回归优先行为级：sw-cache / csv-export / bill-dupe；2.44.1 后补 books / recurring-engine / migrate-upgrade / goals 四组盲区行为测试；2.44.2 补 bill-csv-edge / store-upgrade；2.44.2 后再补 books-dom（render/表单/管理浮层 DOM 桩）与 store-load-wiring（load 升级接线，假 indexedDB 真跑），验收报告⑦-1/2 已闭合；e2e-harness 已在 docs/release.md 挂指针，仍无 CI 浏览器冒烟）；harness 无共享 helper；CI 已补 GitHub Actions（跑 `scripts/test.js` + `scripts/check.js`）。
+- 首屏体积（遗留 P2）：index.html 约 1.28 MB 单文件未拆分（架构取舍见 architecture）；2.44.2 后已加棘轮体积预算（frontend-perf 用例 5：入口 ≤1.35 MB、单 chunk ≤240 KB、合计 ≤1.6 MB），只防继续膨胀，拆分与线上压缩确认仍待办。
 - CSV 回导边界（2.44.1）：自身导出 CSV 已可回导，但「已删除=是」的行会被重新导入为有效账——导入侧不认「已删除」列，待后续扩展。引号内换行字段已于 2.44.2 支持（多行批注/微信多行商品不再丢账，回归 `tests/bill-csv-edge.test.js`）；末尾引号未闭合的畸形文件宽容解析并给警告，可能吞并后续行，属已知取舍。
 - **iconOk 白名单**（2.28.3 已回退 2.28.2 的启用）：重新启用前必须先做「未知图标 → 默认图标」的**加载期兼容迁移**——老库图标键可能来自已下线的注册表条目，加载期严格校验会 `E_STORAGE_CORRUPT` 把用户挡在数据门外（数据与快照仍在，但打不开）。教训：加载路径上的校验收紧，必须有迁移或降级方案。
 

@@ -39,6 +39,8 @@ Pages 约 1 分钟后更新。
 
 ## 6. 真机抽查（iPhone Safari）
 
+浏览器端小助手探针用法见 `tests/e2e-harness.js`（`window.__xzbTest` / `__xzbEvents` 回合流钩子；它是说明文件不是测试，`scripts/test.js` 不执行，勿当死码删除）。
+
 - 冷启动一次、飞行模式打开一次
 - 记一笔 → 改 → 删
 - 小助手说一句；设置里「测试连接」一次

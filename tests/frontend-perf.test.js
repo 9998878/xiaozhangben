@@ -284,6 +284,50 @@ test('4.2 列表缩略图与详情照片两条路径都设 decoding=async', func
   check(LEDGER_JS.indexOf("img.decoding = 'async';", detailAt) > detailAt, '详情路径在 buildDetailPhoto 内');
 });
 
+/* ============================== 用例 5：体积预算（2.44.2 后测试批次） ============================== */
+
+/* 验收报告遗留 P2「首屏 1.28 MB 无体积预算」的棘轮守卫：不解决拆分（那是架构取舍），
+   只锁住「不许继续膨胀」。上限 = 2026-11-26 实测基线 + 约 3% 余量；
+   确需上调时必须在本文件显式改数字并说明理由，不允许静默漂移。 */
+
+section('用例 5：入口 / 分块体积预算（棘轮上限）');
+
+const ENTRY_BUDGET_BYTES = 1350000;   /* 基线 1,306,814 B（2.44.2） */
+const CHUNK_BUDGET_BYTES = 240000;    /* 基线最大 core-assistant.js 223,988 B */
+const CHUNKS_TOTAL_BUDGET_BYTES = 1600000; /* 基线合计 1,543,792 B */
+
+function jsChunkFiles() {
+  const out = [];
+  for (const dir of ['js/screens', 'js/modules']) {
+    const abs = path.join(ROOT, dir);
+    for (const f of fs.readdirSync(abs).filter((x) => x.endsWith('.js')).sort()) {
+      out.push({ rel: dir + '/' + f, bytes: fs.statSync(path.join(abs, f)).size });
+    }
+  }
+  return out;
+}
+
+test('5.1 入口 index.html 不超体积预算', function () {
+  const bytes = fs.statSync(path.join(ROOT, 'index.html')).size;
+  check(bytes <= ENTRY_BUDGET_BYTES,
+    'index.html ' + bytes + ' B 超预算 ' + ENTRY_BUDGET_BYTES + ' B；新增内联代码请移入 js/modules/ 或显式上调预算');
+});
+
+test('5.2 单个页面/模块 chunk 不超体积预算', function () {
+  const chunks = jsChunkFiles();
+  check(chunks.length > 0, 'chunk 清单非空');
+  for (const c of chunks) {
+    check(c.bytes <= CHUNK_BUDGET_BYTES,
+      c.rel + ' ' + c.bytes + ' B 超单 chunk 预算 ' + CHUNK_BUDGET_BYTES + ' B；请拆分或显式上调预算');
+  }
+});
+
+test('5.3 全部 chunk 合计不超体积预算', function () {
+  const total = jsChunkFiles().reduce((sum, c) => sum + c.bytes, 0);
+  check(total <= CHUNKS_TOTAL_BUDGET_BYTES,
+    'chunk 合计 ' + total + ' B 超预算 ' + CHUNKS_TOTAL_BUDGET_BYTES + ' B');
+});
+
 /* ============================== 汇总 ============================== */
 
 console.log('\n===== 汇总 =====');
