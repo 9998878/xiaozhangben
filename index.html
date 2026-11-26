@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.44.1';
+  XZB.version = '2.44.2';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -17313,7 +17313,9 @@ textarea::selection {
             photos.createIndex('by_tx', 'txId', { unique: false });
           }
         } catch (error) {
-          /* 升级回调里抛错会让事务回滚，交给 onerror 处理 */
+          /* 2.44.2（P3-2）：吞错会让升级事务带着半套 schema 提交（后续读写 NotFoundError）。
+             显式中止升级事务，让 onerror 走内存降级，而不是 resolve 一个缺 store 的库。 */
+          try { req.transaction.abort(); } catch (abortError) { /* 事务已结束，忽略 */ }
         }
       };
       req.onblocked = function () {

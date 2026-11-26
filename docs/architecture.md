@@ -70,6 +70,14 @@
 - 行内批注上限统一 80（与 schema txNote 一致），修长批注静默截断；账单去重无单号时收紧为「同日+同额+同方向+(同非空备注或同分类)」，双时间非空且不同不判重，删 ±3 天宽窗口。回归 `tests/inline-edit.test.js` 2.4/2.5、`tests/bill-dupe.test.js`。
 - 隐私口径：README 改真实口径（内置 AI 默认开启、首启视为同意、密钥公开、第三方端点、可关闭）；行为不变，仍是所有者有意选择（见 known-issues）。
 
+## 验收修复（2.44.2）
+
+- CSV 引号感知断行（修 2.44.1 验收 新 P2-1）：`bill-import.splitLogicalLines` 跨物理行追踪 inQuote，引号内换行并入当前逻辑行（`""` 转义与 `splitCsvLine` 同口径），返回逻辑行 + 起始物理行号，skipped/rows/headerLine 仍指真实行。末尾引号未闭合：残段整体保留、宽容解析并给警告（可能吞并后续行，已知取舍见 known-issues）。回归 `tests/bill-csv-edge.test.js` 1.x（多行批注 self-round-trip、微信多行商品 fixture）。
+- 金额白名单（新 P3-1）：`cleanAmount` 剥 ¥/千分位后只认 `/^-?\d+(\.\d{1,2})?$/`，科学计数法/十六进制/超两位小数拒绝；负数/零仍走下游 `<=0` 跳过口径不变。回归同文件 2.x。
+- 斜杠日期（新 P3-4）：`parseDateTime` 兼容 `[-/]` 分隔与单位数月/日/时，补零归一；月 1–12、日 1–31 越界拒绝（原横杠路径不校验月日，此处顺带收紧）。回归同文件 3.x。
+- IndexedDB 升级失败闭合（新 P3-2）：`openRawDatabase` 的 `onupgradeneeded` catch 内显式 `req.transaction.abort()`，升级事务不得带半套 schema 提交；失败走 onerror → 内存降级。回归 `tests/store-upgrade.test.js`（沙箱注入假 indexedDB，浏览器升级语义，真跑 store.open）。
+- inline-edit 头注释 30 字 → 80（2.44.1 改值漏改注释，新 P3-3）。
+
 ## 发布与不变量
 
 - 版本三处：`index.html` 的 `XZB.version`（2.35.0 起唯一字面量在 `<head>` 的 `js/ui/preload-home.js` 块，app 块不再赋值）、`sw.js` 的 `CACHE_NAME`/`CACHE_LABEL`、`tests/category-expansion.test.js` 7.1/7.2 的转义正则。

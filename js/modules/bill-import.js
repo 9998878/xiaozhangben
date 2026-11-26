@@ -74,21 +74,34 @@
     return trimCell(v).replace(/（/g, '(').replace(/）/g, ')');
   }
 
-  /* ¥1,234.56 → 123456（整数分）；非法/零以下返回 NaN */
+  /* ¥1,234.56 → 123456（整数分）；非法/零以下返回 NaN。
+     2.44.2（P3-1）：剥符号后只认「可选负号 + 数字 + 至多两位小数」，
+     科学计数法（1e3）/十六进制（0x10）/超两位小数（1.005）一律拒绝，
+     防畸形单元格被 Number() 静默收成错误金额。 */
   function cleanAmount(raw) {
     var s = trimCell(raw).replace(/[¥￥\s,]/g, '');
     if (!s || s === '/') { return NaN; }
+    if (!/^-?\d+(\.\d{1,2})?$/.test(s)) { return NaN; }
     var v = Number(s);
     if (!isFinite(v)) { return NaN; }
     return Math.round(v * 100);
   }
 
-  /* '2023-01-01 12:00:36' → {date, time:'HH:MM'}；不合法返回 null */
+  /* '2023-01-01 12:00:36' / '2023/1/1 9:00' → {date:'YYYY-MM-DD', time:'HH:MM'}；不合法返回 null。
+     2.44.2（P3-4）：兼容斜杠分隔与单位数月/日/时（第三方记账应用常见导出格式），
+     统一补零归一；月/日超出真实范围（13 月、32 日）拒绝。 */
   function parseDateTime(raw) {
     var s = trimCell(raw);
-    var m = /^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}):(\d{2})(?::\d{2})?)?$/.exec(s);
+    var m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::\d{2})?)?$/.exec(s);
     if (!m) { return null; }
-    return { date: m[1], time: m[2] ? m[2] + ':' + m[3] : '' };
+    var mo = Number(m[2]);
+    var da = Number(m[3]);
+    if (mo < 1 || mo > 12 || da < 1 || da > 31) { return null; }
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    return {
+      date: m[1] + '-' + pad(mo) + '-' + pad(da),
+      time: m[4] !== undefined ? pad(Number(m[4])) + ':' + m[5] : ''
+    };
   }
 
   function uniqParts(parts) {
@@ -104,8 +117,35 @@
 
   /* ---------------- 来源识别 ---------------- */
 
+  /* 2.44.2（P2-1）：引号感知断行——引号内换行是字段内容（多行批注/商品说明），
+     并入当前逻辑行；"" 转义与 splitCsvLine 同口径。返回逻辑行 + 每行起始物理行号，
+     跳过/行号提示仍指向文件里的真实行。末尾引号未闭合时把残段整体保留并打标，
+     不再让残行冒充下一笔账单。 */
+  function splitLogicalLines(text) {
+    var raw = stripBom(text).replace(/\r\n?/g, '\n').split('\n');
+    var lines = [];
+    var lineNos = [];
+    var cur = null;
+    var startNo = 1;
+    var inQuote = false;
+    for (var i = 0; i < raw.length; i++) {
+      var seg = raw[i];
+      if (cur === null) { cur = seg; startNo = i + 1; }
+      else { cur += '\n' + seg; }
+      for (var j = 0; j < seg.length; j++) {
+        if (seg.charAt(j) !== '"') { continue; }
+        if (inQuote && seg.charAt(j + 1) === '"') { j++; }
+        else { inQuote = !inQuote; }
+      }
+      if (!inQuote) { lines.push(cur); lineNos.push(startNo); cur = null; }
+    }
+    var unclosed = cur !== null;
+    if (unclosed) { lines.push(cur); lineNos.push(startNo); }
+    return { lines: lines, lineNos: lineNos, unclosed: unclosed };
+  }
+
   function splitLines(text) {
-    return stripBom(text).replace(/\r\n?/g, '\n').split('\n');
+    return splitLogicalLines(text).lines;
   }
 
   function detectSource(text) {
@@ -257,7 +297,9 @@
 
   function parse(text, opts) {
     try {
-      var lines = splitLines(text);
+      var logical = splitLogicalLines(text);
+      var lines = logical.lines;
+      var lineNos = logical.lineNos;
       var src = detectSource(text);
       if (!src) { return { ok: false, code: 'E_BILL_SOURCE' }; }
       if (opts && opts.source && opts.source !== src) { src = String(opts.source); }
@@ -274,7 +316,7 @@
       var truncated = false;
 
       for (var i = headerIdx + 1; i < lines.length; i++) {
-        var lineNo = i + 1;
+        var lineNo = lineNos[i];
         var line = lines[i];
         if (!trimCell(line)) { continue; }
         if (rows.length >= MAX_ROWS) { truncated = true; break; }
@@ -326,6 +368,9 @@
         });
       }
 
+      if (logical.unclosed) {
+        warnings.push('账单末尾有引号未闭合，末行可能解析不完整；请检查账单原文');
+      }
       if (truncated) {
         warnings.push('账单行数超过 ' + MAX_ROWS + ' 行，已截断；请分段时间导出后再导入');
       }
@@ -341,7 +386,7 @@
         rows: rows,
         skipped: skipped,
         warnings: warnings,
-        headerLine: headerIdx + 1
+        headerLine: lineNos[headerIdx]
       };
     } catch (error) {
       return { ok: false, code: 'E_BILL_PARSE' };

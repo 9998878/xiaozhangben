@@ -8,7 +8,7 @@
  *   纯函数：
  *     parseAmountText(text) -> { ok:true, cents } | { ok:false, code:'E_AMOUNT_INVALID' }
  *     isValidDateStr(s) / isValidTimeStr(s) -> boolean
- *     normalizeNote(raw) -> trim 后截断 30 字的字符串
+ *     normalizeNote(raw) -> trim 后截断 80 字的字符串
  *     validatePatch(input) -> { ok:true, patch } | { ok:false, code }
  *     buildTxPatchMutator(txId, patch, nowIso, normalize) -> commit mutator
  *     categoriesForKind(list, kind) -> 同收支 kind 的未删分类数组
