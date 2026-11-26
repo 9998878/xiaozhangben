@@ -1,10 +1,11 @@
-/* 小账本 2.43.0 · js/screens/calendar.js
+/* 小账本 2.44.0 · js/screens/calendar.js
  * 日历记账页：每日净额＝收入−支出（赚钱 + 标红、亏钱 − 标绿，股市惯例，仅本页如此）；
  * 红绿深浅按「月预算 ÷ 当月天数」的日基准分四档；未设预算退回固定档 ¥50/100/200。
  * 点日期展开当日流水（与明细页同一条打开单笔的路径），并可按所选日期补记一笔。
  * 2.43.0 交互打磨：进当前月默认选中今天；选日期局部重绘并滚动到流水卡；
  * 横滑切月、点邻月灰格跳月；净额 <¥10 带一位小数、≥1万 紧凑「万」写法；
  * 空月份保留中性网格可补记；当日流水 meta 带时间。
+ * 2.44.0：点月份标题直接弹「年份 + 12 月宫格」选择器，不用箭头逐月点。
  * 契约：XZB.screens.register('calendar', { title, subtitle, render, destroy })
  * 依赖：XZB.core.{dates,money,stats}、XZB.ui.{icons,sheet}、XZB.app
  * 硬规则：不碰 IndexedDB / localStorage；只读 ctx.db；金额一律整数分；
@@ -195,6 +196,12 @@
     var target = addMonth(month, dx < 0 ? 1 : -1);
     if (!target || target < MONTH_MIN || target > currentMonth()) { return ''; }
     return target;
+  }
+
+  /* 2.44.0 月份选择器格子状态（纯函数，Node 可测）：越界禁用、当前查看月高亮。 */
+  function monthCellState(value, selected, current) {
+    if (value < MONTH_MIN || value > current) { return 'disabled'; }
+    return value === selected ? 'active' : '';
   }
 
   function monthData(db, month) {
@@ -534,6 +541,60 @@
     }
   }
 
+  /* 2.44.0：点标题直接选月份——年份切换 + 12 个月宫格，与明细页月份选择器同一套交互语言；
+     未来月与 2000-01 之前禁用、当前查看月高亮，点选即切月关闭（回到本月自动选中今天）。 */
+  function openMonthPicker() {
+    var sheet = sheetApi();
+    if (!sheet || typeof sheet.open !== 'function') { return; }
+    var viewYear = Number(S.month.slice(0, 4));
+    var minYear = Number(MONTH_MIN.slice(0, 4));
+    var thisYear = Number(currentMonth().slice(0, 4));
+    var content = el('div', { className: 's-cal-monthpick' });
+    var head = el('div', { className: 's-cal-monthpick__head' });
+    var prevY = el('button', { className: 's-cal-monthpick__arrow', type: 'button', 'aria-label': '上一年' }, [iconNode('chevron-left', 16)]);
+    var nextY = el('button', { className: 's-cal-monthpick__arrow', type: 'button', 'aria-label': '下一年' }, [iconNode('chevron-right', 16)]);
+    var yearLabel = el('span', { className: 's-cal-monthpick__year u-tabular' });
+    head.appendChild(prevY);
+    head.appendChild(yearLabel);
+    head.appendChild(nextY);
+    content.appendChild(head);
+    var grid = el('div', { className: 's-cal-monthpick__grid' });
+    content.appendChild(grid);
+    var handle = sheet.open({
+      title: '选择月份',
+      content: content,
+      actions: [{ label: '取消', kind: 'text' }]
+    });
+    function draw() {
+      yearLabel.textContent = viewYear + '年';
+      prevY.disabled = viewYear <= minYear;
+      nextY.disabled = viewYear >= thisYear;
+      clearNode(grid);
+      for (var m = 1; m <= 12; m += 1) {
+        var value = viewYear + '-' + (m < 10 ? '0' : '') + m;
+        var state = monthCellState(value, S.month, currentMonth());
+        var cell = el('button', {
+          className: 's-cal-monthpick__cell' + (state === 'active' ? ' is-active' : ''),
+          type: 'button',
+          disabled: state === 'disabled' ? 'disabled' : null,
+          'aria-pressed': state === 'active' ? 'true' : 'false',
+          dataset: { month: value },
+          text: m + '月'
+        });
+        (function (target) {
+          cell.addEventListener('click', function () {
+            if (handle && typeof handle.close === 'function') { handle.close('picked'); }
+            if (target !== S.month) { setMonth(target); }
+          });
+        })(value);
+        grid.appendChild(cell);
+      }
+    }
+    prevY.addEventListener('click', function () { viewYear -= 1; draw(); });
+    nextY.addEventListener('click', function () { viewYear += 1; draw(); });
+    draw();
+  }
+
   function paint() {
     if (S.dead || !S.root) { return; }
     var db = (S.ctx && S.ctx.db) || (XZB.app && XZB.app.db && XZB.app.db()) || {};
@@ -547,7 +608,17 @@
     prev.disabled = addMonth(S.month, -1) < MONTH_MIN;
     prev.addEventListener('click', function () { setMonth(addMonth(S.month, -1)); });
     head.appendChild(prev);
-    head.appendChild(el('p', { className: 's-cal-title', text: monthLabel(S.month) }));
+    /* 2.44.0：标题可点，直接弹月份选择器，不用箭头一下一下点 */
+    var titleBtn = el('button', {
+      className: 's-cal-title s-cal-title--pick',
+      type: 'button',
+      'aria-label': '选择月份，当前 ' + monthLabel(S.month)
+    }, [
+      el('span', { text: monthLabel(S.month) }),
+      iconNode('chevron-down', 14)
+    ]);
+    titleBtn.addEventListener('click', openMonthPicker);
+    head.appendChild(titleBtn);
     var next = el('button', { className: 's-cal-nav', type: 'button', 'aria-label': '下一个月' }, [iconNode('chevron-right', 18)]);
     next.disabled = S.month >= currentMonth();
     next.addEventListener('click', function () { setMonth(addMonth(S.month, 1)); });

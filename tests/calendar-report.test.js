@@ -211,6 +211,15 @@ await test('1.7 swipeMonth 落点：|dx|≥48 才翻月，左滑下月右滑上�
   checkEq(cal.swipeMonth(-48, '2026-10'), '2026-11', '48px 边界含等号');
 });
 
+await test('1.8 monthCellState：越界禁用、当前查看月高亮（2.44.0）', function () {
+  const cal = buildCal({});   /* 桩今天 2026-11-24 → 本月 2026-11 */
+  checkEq(cal.monthCellState('2026-11', '2026-11', '2026-11'), 'active', '当前查看月高亮');
+  checkEq(cal.monthCellState('2026-09', '2026-11', '2026-11'), '', '普通月无状态');
+  checkEq(cal.monthCellState('2026-12', '2026-11', '2026-11'), 'disabled', '未来月禁用');
+  checkEq(cal.monthCellState('1999-12', '2026-11', '2026-11'), 'disabled', '2000-01 之前禁用');
+  checkEq(cal.monthCellState('2000-01', '2026-11', '2026-11'), '', '2000-01 合法');
+});
+
 /* ============================== 用例 2：报告存档 store（内存模式） ============================== */
 
 section('用例 2：报告存档 store —— 校验 / 覆盖 / 倒序 / 上限 / 删除');
@@ -570,14 +579,14 @@ await test('6.2 chunk-manifest：21 项、无 insights、stats 依赖含 ai-insi
   lock(INDEX_HTML.indexOf("report: ['charts']") >= 0, 'report DEPS');
 });
 
-await test('6.3 sw.js：预缓存 35 项，含 calendar/report，无 insights，版本 2.43.0', function () {
+await test('6.3 sw.js：预缓存 35 项，含 calendar/report，无 insights，版本 2.44.0', function () {
   const pre = slice(SW_JS, 'var PRECACHE = [', '];', 'PRECACHE');
   const count = (pre.match(/'\.\//g) || []).length;
   checkEq(count, 35, 'PRECACHE 35 项');
   lock(pre.indexOf("'./js/screens/calendar.js'") >= 0, '含 calendar.js');
   lock(pre.indexOf("'./js/screens/report.js'") >= 0, '含 report.js');
   check(pre.indexOf("'./js/screens/insights.js'") < 0, '无 insights.js');
-  lock(/CACHE_NAME\s*=\s*'xzb2-v2\.43\.0'/.test(SW_JS), '缓存版本 2.43.0');
+  lock(/CACHE_NAME\s*=\s*'xzb2-v2\.44\.0'/.test(SW_JS), '缓存版本 2.44.0');
 });
 
 await test('6.4 底栏与路由：首页/日历/＋/统计/我的', function () {
@@ -623,6 +632,19 @@ await test('6.7 统计页控制区吸顶：sticky 接在导航栏下、z 低于�
   lock(block.indexOf('top: calc(var(--h-nav) + var(--safe-top))') >= 0, 'top 接导航栏下');
   lock(block.indexOf('z-index: 40') >= 0, 'z=40 低于导航 50');
   lock(block.indexOf('background: var(--c-bg)') >= 0, '吸顶有底色');
+});
+
+await test('6.8 日历月份直选：标题可点弹年份+12月宫格，越界禁用（2.44.0）', function () {
+  lock(CAL_JS.indexOf('s-cal-title--pick') >= 0, '标题带选择入口修饰类');
+  lock(CAL_JS.indexOf("titleBtn.addEventListener('click', openMonthPicker)") >= 0, '标题接 openMonthPicker');
+  lock(CAL_JS.indexOf('function openMonthPicker()') >= 0, '有 openMonthPicker');
+  lock(CAL_JS.indexOf("title: '选择月份'") >= 0, '弹层标题「选择月份」');
+  lock(CAL_JS.indexOf('monthCellState(value, S.month, currentMonth())') >= 0, '格子状态走 monthCellState');
+  lock(CAL_JS.indexOf('if (target !== S.month) { setMonth(target); }') >= 0, '点选关弹层并切月');
+  lock(CAL_JS.indexOf('prevY.disabled = viewYear <= minYear') >= 0, '上一年到 2000 禁用');
+  lock(CAL_JS.indexOf('nextY.disabled = viewYear >= thisYear') >= 0, '下一年到今年禁用');
+  lock(INDEX_HTML.indexOf('.s-cal-monthpick__cell.is-active') >= 0, '宫格高亮 CSS');
+  lock(INDEX_HTML.indexOf('.s-cal-monthpick__cell:disabled') >= 0, '宫格禁用 CSS');
 });
 
 /* ============================== 汇总 ============================== */
