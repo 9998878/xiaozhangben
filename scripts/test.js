@@ -30,6 +30,9 @@ const results = files.map((file) => {
     windowsHide: true,
   });
   const output = `${run.stdout || ''}${run.stderr || ''}`;
+  /* 汇总协议：只认「通过 N / 失败 M（/ 观察项 K）」行。没有该行的文件仍按
+     进程退出码判红绿，但 pass=null 不计入合计——合计是「已报告断言数」，
+     不是全断言计数（2.44.3 P3-2 口径明示，避免误读）。 */
   const m = output.match(/通过\s*(\d+)\s*\/\s*失败\s*(\d+)(?:\s*\/\s*观察项\s*(\d+))?/);
   return {
     file,
@@ -73,7 +76,9 @@ for (const r of results) {
   }
 }
 
+const unreported = results.filter((r) => r.pass == null).length;
 console.log(
-  `\n合计：${total.pass} 通过，${total.fail} 失败${total.note ? `，${total.note} 观察` : ''}，${files.length} 个文件`
+  `\n合计（已报告断言数）：${total.pass} 通过，${total.fail} 失败${total.note ? `，${total.note} 观察` : ''}，${files.length} 个文件` +
+    (unreported ? `（其中 ${unreported} 个未报告断言数，按退出码判绿）` : '')
 );
 process.exit(failed.length ? 1 : 0);

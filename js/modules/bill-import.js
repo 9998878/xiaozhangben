@@ -87,20 +87,40 @@
     return Math.round(v * 100);
   }
 
+  /* 2.44.3（P2-1）：与 core/dates 的 daysInMonth 同口径——2 月分闰年
+     （4 整除且 100 不整除，或 400 整除），4/6/9/11 月 30 天，其余 31 天。 */
+  function daysInMonth(year, month) {
+    if (month === 2) {
+      return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
+    }
+    if (month === 4 || month === 6 || month === 9 || month === 11) { return 30; }
+    return 31;
+  }
+
   /* '2023-01-01 12:00:36' / '2023/1/1 9:00' → {date:'YYYY-MM-DD', time:'HH:MM'}；不合法返回 null。
      2.44.2（P3-4）：兼容斜杠分隔与单位数月/日/时（第三方记账应用常见导出格式），
-     统一补零归一；月/日超出真实范围（13 月、32 日）拒绝。 */
+     统一补零归一；月/日超出真实范围（13 月、32 日）拒绝。
+     2.44.3（P2-1）：按真实月历（2 月 30/31、非闰年 2 月 29、小月 31 日）与
+     时间边界（时 0–23、分/秒 0–59）在解析阶段拒收进 skipped——此前这些畸形行
+     会进预览，commit 被 schema 拒绝后整批回滚，用户难以定位坏行。 */
   function parseDateTime(raw) {
     var s = trimCell(raw);
-    var m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::\d{2})?)?$/.exec(s);
+    var m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(s);
     if (!m) { return null; }
+    var ye = Number(m[1]);
     var mo = Number(m[2]);
     var da = Number(m[3]);
-    if (mo < 1 || mo > 12 || da < 1 || da > 31) { return null; }
+    if (ye < 1000 || mo < 1 || mo > 12 || da < 1 || da > daysInMonth(ye, mo)) { return null; }
+    if (m[4] !== undefined) {
+      var hh = Number(m[4]);
+      var mi = Number(m[5]);
+      var ss = m[6] === undefined ? 0 : Number(m[6]);
+      if (hh > 23 || mi > 59 || ss > 59) { return null; }
+    }
     var pad = function (n) { return (n < 10 ? '0' : '') + n; };
     return {
       date: m[1] + '-' + pad(mo) + '-' + pad(da),
-      time: m[4] !== undefined ? pad(Number(m[4])) + ':' + m[5] : ''
+      time: m[4] !== undefined ? pad(hh) + ':' + m[5] : ''
     };
   }
 

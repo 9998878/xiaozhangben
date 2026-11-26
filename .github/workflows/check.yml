@@ -17,3 +17,6 @@ jobs:
         run: node scripts/test.js
       - name: docs
         run: node scripts/check.js
+      - name: browser-smoke
+        run: node scripts/smoke.js
+        timeout-minutes: 5

@@ -3,6 +3,9 @@
  * tests/bill-csv-edge.test.js
  * 2.44.2「CSV 引号内换行 + 金额白名单 + 斜杠日期」行为级回归
  * （2.44.1 验收报告 新 P2-1 / P3-1 / P3-4）。
+ * 2.44.3 追加 §4：真实月历 + 时间边界校验（2.44.2 执行检验报告 P2-1）——
+ * 2 月 30/31、非闰年 2 月 29、24:00、25:99、12:60 必须在解析阶段进 skipped，
+ * 不得带进预览让整批 commit 回滚；同批正常行照常导入且过 schema 校验。
  *
  * 运行：node tests/bill-csv-edge.test.js（scripts/test.js 自动收集）
  *
@@ -262,6 +265,100 @@ test('3.3 越界月日与乱串拒绝：13 月 / 32 日 / 纯文本', function (
   checkEq(parsed.skipped.length, 3, '三行跳过');
   parsed.skipped.forEach(function (s) {
     checkEq(s.reason, '日期无法解析', '跳过原因');
+  });
+});
+
+/* ============================== 4 真实月历与时间边界（2.44.3 P2-1） ============================== */
+
+section('4 parseDateTime 真实月历/时间校验：畸形行解析期拒收，不拖垮整批（P2-1）');
+
+test('4.1 无效日历日期逐行跳过：2 月 30/31、非闰年 2 月 29、小月 31 日', function () {
+  const csv = genericCsv([
+    '2026-02-31,支出,1.00,餐饮',
+    '2026/2/30,支出,1.00,餐饮',
+    '2025-02-29,支出,1.00,餐饮',
+    '1900-02-29,支出,1.00,餐饮',
+    '2026-04-31,支出,1.00,餐饮',
+    '2026-11-31,支出,1.00,餐饮'
+  ]);
+  const parsed = billImport.parse(csv, {});
+  check(parsed.ok, 'parse 应成功：' + JSON.stringify(parsed));
+  checkEq(parsed.rows.length, 0, '无效日历日期一笔都不得进预览');
+  checkEq(parsed.skipped.length, 6, '六行都跳过');
+  parsed.skipped.forEach(function (s, i) {
+    checkEq(s.reason, '日期无法解析', '跳过原因');
+    checkEq(s.line, i + 2, '物理行号');
+  });
+});
+
+test('4.2 无效时间逐行跳过：24:00 / 25:99 / 12:60 / 秒 99', function () {
+  const csv = genericCsv([
+    '2026-11-20 24:00,支出,1.00,餐饮',
+    '2026-11-20 25:99,支出,1.00,餐饮',
+    '2026-11-20 12:60,支出,1.00,餐饮',
+    '2026-11-20 12:00:99,支出,1.00,餐饮'
+  ]);
+  const parsed = billImport.parse(csv, {});
+  check(parsed.ok, 'parse 应成功');
+  checkEq(parsed.rows.length, 0, '畸形时间一笔都不得进预览');
+  checkEq(parsed.skipped.length, 4, '四行都跳过');
+  parsed.skipped.forEach(function (s) {
+    checkEq(s.reason, '日期无法解析', '跳过原因');
+  });
+});
+
+test('4.3 合法边界不回归：闰年 2 月 29、月末、23:59、0:00、秒 59', function () {
+  const csv = genericCsv([
+    '2024-02-29,支出,1.00,餐饮',
+    '2000-02-29,支出,1.00,餐饮',
+    '2026-02-28,支出,1.00,餐饮',
+    '2026-12-31 23:59,支出,1.00,餐饮',
+    '2026/1/1 0:00,收入,1.00,餐饮',
+    '2026-11-20 12:00:59,支出,1.00,餐饮'
+  ]);
+  const parsed = billImport.parse(csv, {});
+  checkEq(parsed.rows.length, 6, '六笔合法边界全收：' + JSON.stringify(parsed.skipped));
+  checkEq(parsed.skipped.length, 0, '无跳过');
+  checkEq(parsed.rows[0].date, '2024-02-29', '闰年 2 月 29');
+  checkEq(parsed.rows[1].date, '2000-02-29', '400 年闰 2 月 29');
+  checkEq(parsed.rows[3].time, '23:59', '一天最后一分钟');
+  checkEq(parsed.rows[4].date, '2026-01-01', '斜杠单位数补零');
+  checkEq(parsed.rows[4].time, '00:00', '零点');
+  checkEq(parsed.rows[5].time, '12:00', '秒 59 截去后仍合法');
+});
+
+test('4.4 同批混合行：坏行逐行跳过、正常行照常导入且过 schema 校验', function () {
+  const csv = genericCsv([
+    '2026-11-20,支出,12.34,餐饮',
+    '2026/2/31,支出,1.00,餐饮',
+    '2026-11-19 23:59,收入,500,餐饮',
+    '2026-11-18 25:99,支出,2.00,餐饮',
+    '2024-02-29,支出,3.00,餐饮',
+    '2026-11-17 12:60,支出,4.00,餐饮'
+  ]);
+  const parsed = billImport.parse(csv, {});
+  check(parsed.ok, 'parse 应成功');
+  checkEq(parsed.rows.length, 3, '三笔正常行不受坏行拖累');
+  checkEq(parsed.skipped.length, 3, '三行坏行跳过');
+  checkEq(parsed.skipped.map(function (s) { return s.line; }).join(','), '3,5,7', '坏行物理行号');
+  parsed.skipped.forEach(function (s) {
+    checkEq(s.reason, '日期无法解析', '跳过原因');
+  });
+  checkEq(parsed.rows[0].amountCents, 1234, '首笔金额');
+  checkEq(parsed.rows[1].type, 'income', '次笔方向');
+  checkEq(parsed.rows[2].date, '2024-02-29', '末笔闰日');
+  /* 解析产物直接喂真 schema：与 settings.runBillImport 的落库口径一致，
+     证明收下的行不会再触发整库校验回滚 */
+  const schema = sandbox.XZB.Core.schema;
+  parsed.rows.forEach(function (row) {
+    const tx = schema.createTransaction({
+      bookId: 'bk_test1', type: row.type, amountCents: row.amountCents,
+      accountId: 'ac_test1', toAccountId: null, categoryId: 'ca_test1',
+      date: row.date, time: row.time || '12:00', note: row.note || '',
+      tags: [], source: 'import', importRef: row.refNo || null
+    });
+    const res = schema.validateTransaction(tx, { today: '2026-11-26' });
+    check(res.ok, '收下的行必须过 schema：' + JSON.stringify(res.errors));
   });
 });
 

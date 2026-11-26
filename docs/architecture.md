@@ -78,6 +78,13 @@
 - IndexedDB 升级失败闭合（新 P3-2）：`openRawDatabase` 的 `onupgradeneeded` catch 内显式 `req.transaction.abort()`，升级事务不得带半套 schema 提交；失败走 onerror → 内存降级。回归 `tests/store-upgrade.test.js`（沙箱注入假 indexedDB，浏览器升级语义，真跑 store.open）。
 - inline-edit 头注释 30 字 → 80（2.44.1 改值漏改注释，新 P3-3）。
 
+## 验收修复（2.44.3）
+
+- CSV 日期时间解析闭合（执行检验报告 P2-1）：`bill-import.parseDateTime` 原只限月 1–12、日 1–31，`2026/2/31`、`25:99`、`12:60` 能进预览，commit 被 schema 拒绝后整批回滚且坏行不可定位。现按真实月历（`daysInMonth` 与 core/dates 同口径，含闰年规则）+ 时间边界（时 0–23、分/秒 0–59、年 ≥1000）在解析阶段拒收进 skipped（「日期无法解析」+ 物理行号），同批正常行照常导入。回归 `tests/bill-csv-edge.test.js` §4（含同批混合行 + 真 schema.validateTransaction 探针）。schema 的 2000-01-01 下界/今天+366 上界属业务界限，不在解析期处理（见 known-issues）。
+- CI 浏览器离线冒烟（P2-2）：新增 `scripts/smoke.js`（零运行时依赖，Node ≥22 内置 fetch/WebSocket + 本机 Chrome/Edge headless CDP；候选浏览器逐个探测 DevTools，端口被安全软件拦截时自动换下一个），流程＝静态服务→在线真实键盘记一笔→读 IndexedDB→断网 reload→离线再记→恢复 reload，断言版本/缓存名/两笔数据/控制台错误，另冒烟 9 条主路由。`.github/workflows/check.yml` 在 tests/docs 后增加 browser-smoke step（5 分钟上限）。点击走 Input.dispatchMouseEvent 真实输入管线（带用户手势，避免 vibrate 拦截类干预）。
+- 发布指引纠偏（P3-1）：`docs/release.md` 版本步骤改指 head 预载块唯一 `XZB.version` 字面量，明示各 core 的 `||` 兜底不是发布真源。
+- 测试统计口径（P3-2）：`scripts/test.js` 合计明示为「已报告断言数」，并标注未报告断言数的文件个数；红绿仍按进程退出码，--json 协议不变。
+
 ## 首屏体积与压缩核验（2.44.2 后）
 
 - 实测构成（字符数）：index.html 约 1.20M，其中 CSS 约 355K、内联 JS 约 838K（store 118K / icons 83K / schema 82K / backup 58K / stats 57K / photo-viewer 49K / migrate 34K / recurrence 33K 等）。磁盘 UTF-8 约 1.28 MB。

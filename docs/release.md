@@ -4,7 +4,7 @@
 
 ## 1. 三处版本号
 
-- `index.html` 搜 `XZB.version =`，改最后一条赋值为 `x.y.z`
+- `index.html` 搜 `XZB.version =`，改 **head 里 `js/ui/preload-home.js` 预载块中的唯一字面量**为 `x.y.z`（全文件恰一处，`tests/frontend-perf.test.js` 用例 2 守着）；各 core 末尾的 `XZB.version || '…'` 是兜底，不是发布真源，不要改
 - `sw.js` 改 `CACHE_LABEL` 与 `CACHE_NAME`，版本必须进名字（如 `xzb2-vx.y.z`），否则旧缓存清不掉
 - `tests/category-expansion.test.js` 用例 7.1/7.2 是**转义正则**（`2\.x\.y`），纯字符串替换会漏
 

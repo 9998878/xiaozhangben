@@ -7,6 +7,7 @@
 - `node scripts/status.js` — 接手先跑：版本、分支、脏文件、测试、最近提交（没装 git 也能跑，只跳过分支相关）
 - `node scripts/test.js` — 跑 `tests/*.test.js`，必须全绿
 - `node scripts/check.js` — 提交前自检：版本三处、AGENTS 长度、文档指针、旧文档残留
+- `node scripts/smoke.js` — 浏览器离线冒烟（需本机 Chrome/Edge；CI 同款，Node 测试测不到的入口闭环）
 - 发布：push `main` 后 Pages 自动更新（约 1 分钟），清单见 `docs/release.md`
 
 ## 地图

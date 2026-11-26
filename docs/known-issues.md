@@ -103,9 +103,9 @@
 - 解读口径：buffer 分子（跨账本全历史余额）与分母（单账本月必要支出）口径混合，需产品定口径。
 - UI：`home.js` 情境入口开关只有读取、没有 UI（注释自称「我的里可关」未兑现）——补开关或删死码，需产品定。
 - 解析边界：多笔无分隔已于 2.38.0 保守拆分（每段都落已知分类才拆）；剩余歧义——物品名+数字（如 `ChatGPT25`）按 ASCII 边界语义不拆（与 nl 同口径），单段多候选金额仍取「最后一个候选」口径。
-- 测试基建：580+ 处源码字符串断言易误红（2.44.1 起新增回归优先行为级：sw-cache / csv-export / bill-dupe；2.44.1 后补 books / recurring-engine / migrate-upgrade / goals 四组盲区行为测试；2.44.2 补 bill-csv-edge / store-upgrade；2.44.2 后再补 books-dom（render/表单/管理浮层 DOM 桩）与 store-load-wiring（load 升级接线，假 indexedDB 真跑），验收报告⑦-1/2 已闭合；e2e-harness 已在 docs/release.md 挂指针，仍无 CI 浏览器冒烟）；harness 无共享 helper；CI 已补 GitHub Actions（跑 `scripts/test.js` + `scripts/check.js`）。
+- 测试基建：580+ 处源码字符串断言易误红（2.44.1 起新增回归优先行为级：sw-cache / csv-export / bill-dupe；2.44.1 后补 books / recurring-engine / migrate-upgrade / goals 四组盲区行为测试；2.44.2 补 bill-csv-edge / store-upgrade；2.44.2 后再补 books-dom（render/表单/管理浮层 DOM 桩）与 store-load-wiring（load 升级接线，假 indexedDB 真跑），验收报告⑦-1/2 已闭合；e2e-harness 已在 docs/release.md 挂指针；2.44.3 补 CI 浏览器离线冒烟 `scripts/smoke.js`——真实 Chrome/Edge headless CDP：在线记一笔→断网 reload→离线再记→恢复 reload，断言版本/缓存名/两笔数据/控制台错误 + 9 条主路由，执行检验报告 P2-2 闭合）；harness 无共享 helper；CI 已补 GitHub Actions（跑 `scripts/test.js` + `scripts/check.js` + `scripts/smoke.js`）。
 - 首屏体积（遗留 P2，2.44.2 后核验）：index.html 约 1.28 MB 单文件（CSS 约 355K 字符 + 内联 JS 约 838K 字符）。**线上压缩已确认生效**：Pages 回 gzip（brotli 未启用），入口实际传输约 321 KB（curl 实测 329,023 B），网络层不再是 1.28 MB。拆分评估结论：为传输而拆收益已消失；剩余成本是低端机解析约 840KB 内联 JS，但核心块内联是零构建/离线首启的有意取舍，且 40+ 测试文件靠内联块 marker 加载，外置会破坏测试基建——暂不拆，维持单文件 + 体积预算棘轮（frontend-perf 用例 5）。若低端机解析成为实测瓶颈，再立独立架构批次做构建期压缩 + 核心外置 + 加载器重写。
-- CSV 回导边界（2.44.1）：自身导出 CSV 已可回导，但「已删除=是」的行会被重新导入为有效账——导入侧不认「已删除」列，待后续扩展。引号内换行字段已于 2.44.2 支持（多行批注/微信多行商品不再丢账，回归 `tests/bill-csv-edge.test.js`）；末尾引号未闭合的畸形文件宽容解析并给警告，可能吞并后续行，属已知取舍。
+- CSV 回导边界（2.44.1）：自身导出 CSV 已可回导，但「已删除=是」的行会被重新导入为有效账——导入侧不认「已删除」列，待后续扩展。引号内换行字段已于 2.44.2 支持（多行批注/微信多行商品不再丢账，回归 `tests/bill-csv-edge.test.js`）；末尾引号未闭合的畸形文件宽容解析并给警告，可能吞并后续行，属已知取舍。无效日历日期/时间（2 月 30/31、非闰年 2 月 29、24:00、25:99、12:60）已于 2.44.3 在解析阶段逐行拒收（同文件 §4，含真 schema 探针）。剩余边界：早于 2000-01-01 或晚于今天+366 的日期是 schema 业务界限而非日历错误，解析仍收下、commit 时整批拒绝，待导入侧按行处理。
 - **iconOk 白名单**（2.28.3 已回退 2.28.2 的启用）：重新启用前必须先做「未知图标 → 默认图标」的**加载期兼容迁移**——老库图标键可能来自已下线的注册表条目，加载期严格校验会 `E_STORAGE_CORRUPT` 把用户挡在数据门外（数据与快照仍在，但打不开）。教训：加载路径上的校验收紧，必须有迁移或降级方案。
 
 ## 已修（2.38.0 存档）
