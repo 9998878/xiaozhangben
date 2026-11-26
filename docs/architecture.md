@@ -85,6 +85,13 @@
 - 发布指引纠偏（P3-1）：`docs/release.md` 版本步骤改指 head 预载块唯一 `XZB.version` 字面量，明示各 core 的 `||` 兜底不是发布真源。
 - 测试统计口径（P3-2）：`scripts/test.js` 合计明示为「已报告断言数」，并标注未报告断言数的文件个数；红绿仍按进程退出码，--json 协议不变。
 
+## 切页性能修复（2.44.4）
+
+- 用户反馈「页面切换有卡顿感」。CDP 探针 + Performance 指标分解（800 笔数据、CPU 节流 x4/x6）定位：切页耗时＝同步渲染脚本＋大 CSS 样式重算＋View Transition 整页快照捕获与帧对齐；桌面 x1 换屏 20–46ms 不卡，x6 时 187–563ms（最慢 settings→home），再叠加 180–260ms 转场动画，体感近 0.8s。CPU 采样显示 JS 热函数本身不大（stats __paint 17ms、audit.run 6ms），瓶颈在渲染管线与快照，不在某个可缓存的计算。
+- 三处改动：① Tab 根横切排除 VT（renderRoute 闸门 `nav !== 'tab'`），走既有 `.app-screen--enter[data-nav="tab"]` 短淡入——快照捕获+帧对齐从最高频操作中移除；二级页进入/返回保留 VT 方向化推入。② 转场专用时长令牌 `--dur-nav-push: 180ms` / `--dur-nav-tab: 120ms`（不动全局 `--dur-base/--dur-2`，reduce 块同步归零）。③ 首页嵌入明细（最重 DOM）延后到换屏后下一个宏任务挂载，过期守卫（dead/destroyed/宿主脱离文档），挂载后按 `ctx.scrollTop`（renderRoute 新增传递）恢复路由目标滚动位。
+- 复测（同探针同数据）：x6 全部 Tab 切换 37–100ms（settings→home 563→37ms），x4 23–35ms，x1 4–28ms。统计页 JS 本就轻，未拆其渲染（延后图表只会把成本挪到首帧后并引入布局跳动，收益为负）。
+- 回归：`tests/nav-transition.test.js`（源码契约，路由渲染器深耦合启动无法 Node 真跑）+ `scripts/smoke.js` §6b 真实行为断言（`XZB.router.go` 入口：Tab 横切 0 次 VT 调用、二级页 ≥1 次、首页 `data-ledger-embed` 延后落位）。手改 location.hash 走 animate:false 外部地址路径，测不到转场决策，冒烟必须走 go()。
+
 ## 首屏体积与压缩核验（2.44.2 后）
 
 - 实测构成（字符数）：index.html 约 1.20M，其中 CSS 约 355K、内联 JS 约 838K（store 118K / icons 83K / schema 82K / backup 58K / stats 57K / photo-viewer 49K / migrate 34K / recurrence 33K 等）。磁盘 UTF-8 约 1.28 MB。

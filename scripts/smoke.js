@@ -349,6 +349,34 @@ async function main() {
     }
     console.log('✓ 主路由冒烟：' + routes.length + ' 条路由均有内容');
 
+    /* ---- 6b 切换行为（2.44.4）：Tab 根不走整页快照、二级页走；首页明细延后挂载落位 ----
+       用 XZB.router.go（应用内链接点击的同款入口，onDocumentClick → go）；
+       手改 location.hash 走 animate:false 的外部地址路径，测不到转场决策。 */
+    await evaluate(`(function(){
+      window.__vtCalls = 0;
+      if (document.startViewTransition) {
+        var orig = document.startViewTransition.bind(document);
+        document.startViewTransition = function(cb){ window.__vtCalls += 1; return orig(cb); };
+      }
+      return true;
+    })()`);
+    await evaluate("XZB.router.go('#/home')");
+    await waitFor("!!document.querySelector('#view-root .app-screen[data-view=\"home\"]')", 8000, '回到首页');
+    await evaluate("XZB.router.go('#/stats')");
+    await waitFor("!!document.querySelector('#view-root .app-screen[data-view=\"stats\"]')", 8000, '横切到统计');
+    const vtAfterTab = await evaluate('window.__vtCalls');
+    if (vtAfterTab !== 0) { fail('Tab 根横切不应走 View Transition 整页快照，实际调用 ' + vtAfterTab + ' 次'); }
+    await evaluate("XZB.router.go('#/books')");
+    await waitFor("!!document.querySelector('#view-root .app-screen[data-view=\"books\"]')", 8000, '进入账本子页');
+    const vtAfterPush = await evaluate('window.__vtCalls');
+    if (vtAfterPush < 1) { fail('二级页进入应走 View Transition 方向化推入，实际调用 ' + vtAfterPush + ' 次'); }
+    await evaluate("XZB.router.go('#/home')");
+    await waitFor("!!document.querySelector('#view-root .app-screen[data-view=\"home\"]')", 8000, '回到首页（明细延后挂载）');
+    await waitFor("!!document.querySelector('[data-ledger-embed=\"1\"]')", 8000, '首页嵌入明细延后挂载落位');
+    const vtAfterBackTab = await evaluate('window.__vtCalls');
+    if (vtAfterBackTab !== vtAfterPush) { fail('子页回 Tab 根也不应新增整页快照，实际 ' + vtAfterBackTab + ' 次'); }
+    console.log('✓ 切换行为：Tab 根无整页快照 · 二级页有推入 · 首页明细延后挂载落位');
+
     /* ---- 7 控制台错误 ---- */
     if (consoleErrors.length) { fail('控制台有错误：\n  ' + consoleErrors.join('\n  ')); }
     console.log('✓ 控制台错误：0');

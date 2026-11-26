@@ -1086,7 +1086,22 @@
       function () { return view.dead; }
     );
 
-    view.controller = mountLedger(ledgerHost, ctx, view);
+    /* 2.44.4（切页卡顿）：嵌入明细是首页最重的 DOM，延后到换屏之后的下一个
+       宏任务挂载——点击先拿到轻量内容（头部/月汇总/预算卡），列表随后补建，
+       消除低端机「点完数百毫秒无响应」的同步阻塞（剖面：渲染脚本+样式重算
+       是切页耗时主因）。过期守卫：destroy/dead 或宿主已脱离文档则不挂载；
+       挂载后按路由目标滚动位恢复（swapDom 时列表还不够高会被夹回 0）。 */
+    var targetScroll = Number(ctx && ctx.scrollTop) || 0;
+    global.setTimeout(function () {
+      if (view.dead || view.destroyed || ledgerHost.isConnected === false) { return; }
+      view.controller = mountLedger(ledgerHost, ctx, view);
+      if (targetScroll > 0) {
+        var screenEl = ledgerHost.closest ? ledgerHost.closest('.app-screen') : null;
+        if (screenEl) {
+          try { screenEl.scrollTop = targetScroll; } catch (error) { /* 忽略 */ }
+        }
+      }
+    }, 0);
 
     /* 从解读页「调整预算」返回：#/home?focus=budget 把预算卡滚到视野并聚焦。
        延后一帧：router 在 render 返回后才把 root 挂进 .app-screen。 */

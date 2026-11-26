@@ -1,6 +1,6 @@
 /* ============================================================
-   小账本 2.44.3 · Service Worker（离线缓存键修复）
-   缓存名：小账本2-v2.44.3（英文缓存键 xzb2-v2.44.3）
+   小账本 2.44.4 · Service Worker（离线缓存键修复）
+   缓存名：小账本2-v2.44.4（英文缓存键 xzb2-v2.44.4）
    策略：导航请求网络优先（8 秒超时）→ 缓存；其余静态资源缓存优先。
    约束：只处理 GET；只处理 http(s) 同源请求；不缓存 chrome-extension 等协议。
    ============================================================ */
@@ -8,9 +8,9 @@
   'use strict';
 
   /* 人类可读的缓存版本标签，仅用于日志与排查 */
-  var CACHE_LABEL = '小账本2-v2.44.3';
+  var CACHE_LABEL = '小账本2-v2.44.4';
   /* 真正的 Cache Storage 键：换版本号即触发本应用旧缓存清除（activate 时 cleanupCaches） */
-  var CACHE_NAME = 'xzb2-v2.44.3';
+  var CACHE_NAME = 'xzb2-v2.44.4';
   /* 预缓存版本 query：由 CACHE_NAME 派生，绝不与缓存版本漂移。
      加载器请求恒带 ?v=<XZB.version>，预缓存按同一键写入才能命中（2.44.1 修 P1-1）。 */
   var VERSION = CACHE_NAME.slice('xzb2-v'.length);

@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.44.3';
+  XZB.version = '2.44.4';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -355,6 +355,10 @@
   --dur-count: 600ms;
   --dur-ring: 700ms;
   --dur-undo: 5000ms;
+  /* 屏幕转场专用（2.44.4 切页卡顿修复）：比通用动效短，Tab 根更短；
+     reduce 块一并归零。独立于 --dur-base/--dur-2，避免牵动其他组件。 */
+  --dur-nav-push: 180ms;
+  --dur-nav-tab: 120ms;
   --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
@@ -701,6 +705,8 @@
   /* M1：语义动效令牌同步归零（否则新规则在 reduce 下仍会过渡） */
   --dur-fast: 0.01ms;
   --dur-base: 0.01ms;
+  --dur-nav-push: 0.01ms;
+  --dur-nav-tab: 0.01ms;
   }
 }
 
@@ -14245,7 +14251,7 @@ textarea::selection {
     }
 
     .app-screen--enter {
-      animation: app-screen-enter var(--dur-2) var(--ease-ios) both;
+      animation: app-screen-enter var(--dur-nav-push) var(--ease-ios) both;
     }
 
     .app-screen--enter[data-nav="back"] {
@@ -14254,7 +14260,7 @@ textarea::selection {
 
     .app-screen--enter[data-nav="tab"] {
       animation-name: app-screen-enter-tab;
-      animation-duration: var(--dur-base);
+      animation-duration: var(--dur-nav-tab);
     }
 
     /* 原生 root 快照整页含底栏：关掉它，避免整页一起淡 */
@@ -14267,30 +14273,30 @@ textarea::selection {
     ::view-transition-group(app-tabbar),
     ::view-transition-old(app-tabbar),
     ::view-transition-new(app-tabbar) {
-      animation-duration: var(--dur-base);
+      animation-duration: var(--dur-nav-push);
       animation-timing-function: var(--ease-ios);
     }
 
     /* 内容区方向化：进入新页从右侧推入，返回从左侧推入，Tab 根只做短淡入 */
     html[data-nav="forward"]::view-transition-old(app-view) {
-      animation: vt-out-left var(--dur-base) var(--ease-ios) both;
+      animation: vt-out-left var(--dur-nav-push) var(--ease-ios) both;
     }
 
     html[data-nav="forward"]::view-transition-new(app-view) {
-      animation: vt-in-right var(--dur-2) var(--ease-ios) both;
+      animation: vt-in-right var(--dur-nav-push) var(--ease-ios) both;
     }
 
     html[data-nav="back"]::view-transition-old(app-view) {
-      animation: vt-out-right var(--dur-base) var(--ease-ios) both;
+      animation: vt-out-right var(--dur-nav-push) var(--ease-ios) both;
     }
 
     html[data-nav="back"]::view-transition-new(app-view) {
-      animation: vt-in-left var(--dur-2) var(--ease-ios) both;
+      animation: vt-in-left var(--dur-nav-push) var(--ease-ios) both;
     }
 
     html[data-nav="tab"]::view-transition-old(app-view),
     html[data-nav="tab"]::view-transition-new(app-view) {
-      animation-duration: var(--dur-base);
+      animation-duration: var(--dur-nav-tab);
       animation-timing-function: var(--ease-ios);
     }
 
@@ -33684,7 +33690,11 @@ textarea::selection {
     if (isMissing) {
       body.appendChild(buildPlaceholder(route.view, true));
     } else {
-      callScreen(meta, body, buildContext(route));
+      var screenCtx = buildContext(route);
+      /* 2.44.4：把路由目标滚动位交给屏幕——重块延后挂载时 swapDom 会因列表
+         还不够高把 scrollTop 夹回 0，屏幕补建完成后按此值恢复（见 home.js）。 */
+      screenCtx.scrollTop = Number(scrollTop) || 0;
+      callScreen(meta, body, screenCtx);
     }
 
     var usedVT = false;
@@ -33708,7 +33718,11 @@ textarea::selection {
       if (typeof opts.after === 'function') opts.after();
     }
 
-    if (document.startViewTransition && opts.animate !== false && !reducedMotion()) {
+    /* 2.44.4（切页卡顿）：Tab 根横切不再走 View Transition——整页快照捕获 +
+       帧对齐在低端机上把「点击→换屏」拉长数百毫秒，而 Tab 切换视觉诉求只是
+       短淡入，降级路径 .app-screen--enter[data-nav="tab"] 完全够用。
+       二级页进入/返回保留 VT 方向化推入（时长已缩到 --dur-nav-push）。 */
+    if (document.startViewTransition && opts.animate !== false && !reducedMotion() && nav !== 'tab') {
       /* 伪元素选择器挂在 html 上：方向必须在快照开始前就位 */
       var docEl = document.documentElement;
       if (docEl) docEl.setAttribute('data-nav', nav);
