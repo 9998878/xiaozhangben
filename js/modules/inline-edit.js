@@ -1,4 +1,4 @@
-/* 小账本 2.42.0 · js/modules/inline-edit.js · 首页/明细行内编辑（2.42.0 新增）
+/* 小账本 2.43.0 · js/modules/inline-edit.js · 首页/明细行内编辑（2.42.0 新增）
  * ------------------------------------------------------------------
  * 流水行四个热区（图标→种类 / 文字→批注 / 金额→金额 / 时间→日期时间）的
  * 共享底座：校验与 commit mutator 是纯函数（Node 可测），浮层与行内输入是
@@ -13,10 +13,12 @@
  *     buildTxPatchMutator(txId, patch, nowIso, normalize) -> commit mutator
  *     categoriesForKind(list, kind) -> 同收支 kind 的未删分类数组
  *   DOM 件（无 document 时恒返回 null，Node 沙箱安全）：
- *     openPopover(anchor, width, build) -> { element, close }；全局单实例，点外部/Esc 关闭
+ *     openPopover(anchor, width, build) -> { element, close }；全局单实例，点外部/Esc/滚动/resize 关闭
  *     closePopover()
  *     mountNoteInput(host, value, { onCommit, onCancel }) -> { destroy }
  *     mountAmountInput(host, cents, sign, { onCommit, onCancel, onInvalid }, beforeNode) -> { destroy }
+ *       2.43.0：回车提交且金额无效 → 编辑器保留（红下划线+轻晃+行内提示）并重新全选；
+ *       失焦提交且无效 → 关闭并回调 onInvalid({ via:'blur' })。onInvalid 收到 { via:'enter'|'blur' }。
  *     flashRow(node)
  *
  * 约束：金额只用整数分；日期只用本地字符串；用户数据一律 textContent；
@@ -147,6 +149,17 @@
     return typeof global.document !== 'undefined' ? global.document : null;
   }
 
+  /* 2.43.0：提示语分设备——触屏没有回车/Esc 键，恒显示「点空白处保存」。 */
+  function isCoarsePointer() {
+    try {
+      return !!(global.matchMedia && global.matchMedia('(pointer: coarse)').matches);
+    } catch (error) { return false; }
+  }
+
+  function saveHintText() {
+    return isCoarsePointer() ? '点空白处保存' : '回车保存 · Esc 取消';
+  }
+
   var popHandle = null;
   var globalBound = false;
 
@@ -171,6 +184,19 @@
     d.addEventListener('keydown', function (event) {
       if (event.key === 'Escape' && popHandle) { closePopover(); }
     }, true);
+    /* 2.43.0：浮层 position:fixed 只定位一次，列表一滚就脱离锚点行——滚动/resize 即关。
+       浮层内部自身的滚动（事件目标在浮层内）不算，避免误关。 */
+    d.addEventListener('scroll', function (event) {
+      if (!popHandle) { return; }
+      var t = event.target;
+      if (t && popHandle.element.contains && popHandle.element.contains(t)) { return; }
+      closePopover();
+    }, true);
+    if (typeof global.addEventListener === 'function') {
+      global.addEventListener('resize', function () {
+        if (popHandle) { closePopover(); }
+      });
+    }
   }
 
   /* 锚定浮层：视口内 clamp（下方放不下翻到上方），全局单实例。 */
@@ -215,7 +241,7 @@
     input.value = String(value === undefined || value === null ? '' : value);
     var hint = d.createElement('span');
     hint.className = 's-ledger-item__edit-hint';
-    hint.textContent = '回车保存 · Esc 取消';
+    hint.textContent = saveHintText();
     host.appendChild(input);
     host.appendChild(hint);
     var done = false;
@@ -242,7 +268,9 @@
     };
   }
 
-  /* 行内金额输入：sign 由调用方给（'-¥' / '+¥' / '¥'）；解析失败走 onInvalid（缺省 onCancel）。 */
+  /* 行内金额输入：sign 由调用方给（'-¥' / '+¥' / '¥'）。
+     2.43.0：回车提交且无效 → 不丢输入，红下划线+轻晃+行内提示，重新全选待改；
+     失焦提交且无效 → 关闭并走 onInvalid({ via:'blur' })（调用方还原+提示）。 */
   function mountAmountInput(host, cents, sign, handlers, beforeNode) {
     var d = doc();
     if (!d || !host) { return null; }
@@ -260,28 +288,64 @@
     wrap.appendChild(signNode);
     wrap.appendChild(input);
     host.insertBefore(wrap, beforeNode || null);
+    var errHint = null;
+    function clearInvalid() {
+      wrap.classList.remove('is-invalid');
+      if (errHint && errHint.parentNode) { errHint.parentNode.removeChild(errHint); }
+      errHint = null;
+    }
+    function markInvalid() {
+      /* 重触发晃动动画：先摘类、强制回流、再挂回 */
+      wrap.classList.remove('is-invalid');
+      void wrap.offsetWidth;
+      wrap.classList.add('is-invalid');
+      if (!errHint) {
+        errHint = d.createElement('span');
+        errHint.className = 's-ledger-item__amount-hint';
+        errHint.textContent = '请输入大于 0 的数字';
+        host.insertBefore(errHint, wrap.nextSibling);
+      }
+    }
     var done = false;
-    function finish(commit) {
+    function finish(commit, via) {
       if (done) { return; }
-      done = true;
-      if (!commit) { if (typeof hs.onCancel === 'function') { hs.onCancel(); } return; }
+      if (!commit) {
+        done = true;
+        if (typeof hs.onCancel === 'function') { hs.onCancel(); }
+        return;
+      }
       var parsed = parseAmountText(input.value);
-      if (parsed.ok) { if (typeof hs.onCommit === 'function') { hs.onCommit(parsed.cents); } }
-      else if (typeof hs.onInvalid === 'function') { hs.onInvalid(); }
+      if (parsed.ok) {
+        done = true;
+        if (typeof hs.onCommit === 'function') { hs.onCommit(parsed.cents); }
+        return;
+      }
+      if (via === 'enter') {
+        /* 编辑器保留：标红提示并重新全选，用户刚打的字不丢 */
+        markInvalid();
+        if (typeof hs.onInvalid === 'function') { hs.onInvalid({ via: 'enter', value: input.value }); }
+        input.focus();
+        if (typeof input.select === 'function') { input.select(); }
+        return;
+      }
+      done = true;
+      if (typeof hs.onInvalid === 'function') { hs.onInvalid({ via: 'blur', value: input.value }); }
       else if (typeof hs.onCancel === 'function') { hs.onCancel(); }
     }
+    input.addEventListener('input', clearInvalid);
     input.addEventListener('keydown', function (event) {
       event.stopPropagation();
-      if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+      if (event.key === 'Enter') { event.preventDefault(); finish(true, 'enter'); }
       else if (event.key === 'Escape') { event.preventDefault(); finish(false); }
     });
-    input.addEventListener('blur', function () { finish(true); });
+    input.addEventListener('blur', function () { finish(true, 'blur'); });
     input.addEventListener('click', stop);
     input.focus();
     if (typeof input.select === 'function') { input.select(); }
     return {
       destroy: function () {
         done = true;
+        clearInvalid();
         if (wrap.parentNode) { wrap.parentNode.removeChild(wrap); }
       }
     };

@@ -76,3 +76,7 @@
 - 本地优先：任何要出网的能力都必须先过隐私告知，默认关闭。例外（2.41.0）：内置默认 AI 服务按所有者要求零配置默认开启并默认同意告知，密钥公开内置；用户自定义配置仍守原告知门。
 - 行内编辑图标热区跳页（2.42.1）：种类宫格浮层在手机端有触控/视口缺陷，且浮层与记一笔页是两套种类选择 UI，维护不值；图标热区复用记一笔编辑页（`#/add?id=`），其余三热区留本页。`inline-edit.categoriesForKind` 保留为模块 API 供测试与后续复用。
 - 换种类直选（2.42.2，`#/add?id=…&pick=cat`）：学鲨鱼记账「选分类即完成」——编辑页加 pick 模式，setCategory 里直接 attemptSave 并 goBack，成功文案报新种类名；pick 模式禁开键盘、标题改「更换种类」。普通编辑路径零改动，避免两套保存逻辑。
+- 换种类回本页（2.43.0）：2.42.1 撤的是「锚定宫格浮层」（定位/触控缺陷），不是「本页直选」本身；底部 sheet 无锚定问题且详情/删除确认同款已验证稳定，故图标热区改开 `s-ledger-catpick-sheet` 宫格，点新分类走 `commitInlinePatch({categoryId})`，少两次整页转场、滚动位置不丢。「其他」分类与记一笔宫格同口径不进宫格（当前种类除外）；sheet 缺失退回 pick=cat 跳页，add 页直选逻辑与深链原样保留为兜底。
+- 行内编辑体验打磨（2.43.0）：金额无效区分提交途径——回车保留编辑器（`mountAmountInput` 内建标红/轻晃/提示并重新全选），失焦才还原（不把焦点困在输入框）；提示语按 `(pointer: coarse)` 分设备；日期时间热区触屏/窄屏（<480px）走 `s-ledger-timesheet` 底部弹层、桌面保留浮层且 `openPopover` 全局监听 scroll(capture)/resize 即关（浮层内部滚动除外）；保存后滚动恢复由 `setTimeout(60)` 改 rAF 轮询「不带 `data-pre-edit` 标的新行」（上限 500ms），旧行提交前打标以区分重建前后 DOM；flash 底色改 `--c-flash` 令牌适配深色。
+- 日历交互（2.43.0）：进当前月默认选中今天（render/setMonth 收口）；选日期走 `refreshSelection` 局部重绘（只切格子选中态＋重建 `s-cal-dayhost` 日卡），日卡在视口外才 `scrollIntoView`（reduced-motion 降级 auto）；横滑切月复用明细页方向仲裁口径（`swipeAxisOf`/`swipeMonth` 纯函数，纵向滚动优先、未定方向不拦截），邻月灰格在 2000-01～本月范围内可点跳月并选中该日；`netText` 三档格式（<¥10 一位小数 / 中间整数元 / ≥1万 紧凑「万」）消除「−¥0 却标色」与小格截断；空月份保留中性网格（`calendarHeatmap` 恒返回全月日数组），点日期仍可补记。
+- 统计控制区吸顶（2.43.0）：`.s-insights-head` sticky，top 接 `.app-nav` 高度（`--h-nav + --safe-top`）、z=40 低于导航 50；只动 CSS，卡片渲染逻辑零改动。

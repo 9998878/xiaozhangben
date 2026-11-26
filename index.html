@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.42.2';
+  XZB.version = '2.43.0';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -121,6 +121,8 @@
   --c-danger-soft: #FEECEA;
   --c-success: #22B07D;
   --c-success-soft: #E3F7EE;
+  /* 行内编辑保存成功的行高亮（2.43.0）：深色主题另有柔化值，不再硬编码亮黄 */
+  --c-flash: #FFF6C2;
   --c-overlay: #00000073;
   /* 照片删除键的恒定遮罩：这一层永远压在图片上，不随主题翻转（取值同浅色口径的 --c-overlay，
    * 但刻意不做深色覆盖 —— --c-overlay 深色会变浓，用它会改变照片上的视觉）。 */
@@ -491,6 +493,7 @@
   --c-danger-soft: #FF5A4E26;
   --c-success: #2AC98B;
   --c-success-soft: #2AC98B26;
+  --c-flash: #4A431C;
   --c-overlay: #000000A6;
   --c-pressed: #FFFFFF17;
   --c-toast: #2C2C2E;
@@ -599,6 +602,7 @@
     --c-danger-soft: #FF5A4E26;
     --c-success: #2AC98B;
     --c-success-soft: #2AC98B26;
+    --c-flash: #4A431C;
     --c-overlay: #000000A6;
     --c-pressed: #FFFFFF17;
     --c-toast: #2C2C2E;
@@ -7157,7 +7161,7 @@ textarea::selection {
   margin-top: var(--sp-1);
   padding: var(--sp-1) var(--sp-2);
   border: 0;
-  border-bottom: 2px solid var(--c-brand, #ffd900);
+  border-bottom: 2px solid var(--c-tint);
   border-radius: var(--sp-1) var(--sp-1) 0 0;
   background: var(--c-fill);
   color: var(--c-text);
@@ -7177,7 +7181,7 @@ textarea::selection {
   justify-content: flex-end;
   gap: 1px;
   padding: 1px var(--sp-1);
-  border-bottom: 2px solid var(--c-brand, #ffd900);
+  border-bottom: 2px solid var(--c-tint);
   border-radius: var(--sp-1) var(--sp-1) 0 0;
   background: var(--c-fill);
 }
@@ -7200,16 +7204,112 @@ textarea::selection {
 }
 .s-ledger-item.is-flash { animation: s-ledger-flash 1.1s ease-out; }
 @keyframes s-ledger-flash {
-  0% { background: #fff6c2; }
+  0% { background: var(--c-flash, #fff6c2); }
   100% { background: transparent; }
 }
+
+/* ---------------- 行内编辑体验打磨（2.43.0） ----------------
+   金额无效保留输入：红下划线 + 轻晃 + 行内提示；
+   日期时间手机底部弹层放大触控目标；换种类本页 sheet 宫格。 */
+.s-ledger-item__amount-wrap.is-invalid {
+  border-bottom-color: var(--c-danger, #e5484d);
+  animation: s-ledger-shake 0.3s ease;
+}
+.s-ledger-item__amount-hint {
+  display: block;
+  margin-top: 2px;
+  color: var(--c-danger, #e5484d);
+  font-size: var(--fs-caption-2);
+  line-height: var(--lh-caption-2);
+  text-align: right;
+}
+@keyframes s-ledger-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+.s-ledger-timesheet .s-ledger-pop__field {
+  min-height: var(--tap);
+  font-size: var(--fs-body, var(--fs-subhead));
+}
+.s-ledger-timesheet .s-ledger-pop__field input {
+  flex: 1;
+  min-height: var(--tap);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-subhead);
+}
+.s-ledger-timesheet .s-ledger-pop__quick button {
+  flex: 1;
+  min-height: 36px;
+  font-size: var(--fs-footnote);
+}
+.s-ledger-catpick__hint {
+  margin: 0 0 var(--sp-3);
+  color: var(--c-text-3);
+  font-size: var(--fs-caption-1);
+}
+.s-ledger-catpick__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-3) var(--sp-2);
+}
+.s-ledger-catpick__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 84px;
+  padding: var(--sp-1) 2px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.s-ledger-catpick__cell:active { background: var(--c-pressed); }
+.s-ledger-catpick__cell:focus-visible {
+  outline: var(--focus-width) solid var(--c-focus);
+  outline-offset: calc(var(--focus-offset) * -1);
+}
+.s-ledger-catpick__ico { flex: none; }
+.s-ledger-catpick__ico svg { width: 26px; height: 26px; }
+.s-ledger-catpick__cell.is-current .s-ledger-catpick__ico {
+  box-shadow: 0 0 0 2px var(--c-tint);
+}
+.s-ledger-catpick__cell.is-current .s-ledger-catpick__name { font-weight: var(--fw-semibold); }
+.s-ledger-catpick__name {
+  max-width: 100%;
+  font-size: var(--fs-caption-1);
+  color: var(--c-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.s-ledger-catpick__manage {
+  width: 100%;
+  min-height: var(--tap);
+  margin-top: var(--sp-3);
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--c-fill);
+  color: var(--c-text-2);
+  font-family: inherit;
+  font-size: var(--fs-footnote);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+.s-ledger-catpick__manage:active { background: var(--c-pressed); }
 .s-ledger-pop {
   position: fixed;
   z-index: 60;
   padding: var(--sp-3);
-  border: 1px solid var(--c-line, #ececee);
+  /* 2.43.0：原 --c-card/--c-line 令牌不存在，深色下回落白底白字；改真实令牌 */
+  border: 1px solid var(--c-separator);
   border-radius: 18px;
-  background: var(--c-card, #fff);
+  background: var(--c-bg-elev);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.24);
 }
 .s-ledger-pop__title {
@@ -7238,15 +7338,15 @@ textarea::selection {
 }
 .s-ledger-pop__field input {
   padding: 6px var(--sp-2);
-  border: 1px solid var(--c-line, #e2e2e5);
+  border: 1px solid var(--c-separator);
   border-radius: 9px;
-  background: var(--c-card, #fff);
+  background: var(--c-bg-elev);
   color: var(--c-text);
   font-family: inherit;
   font-size: var(--fs-subhead);
   outline: none;
 }
-.s-ledger-pop__field input:focus { border-color: var(--c-brand, #ffd900); }
+.s-ledger-pop__field input:focus { border-color: var(--c-tint); }
 .s-ledger-pop__quick {
   display: flex;
   gap: 6px;
@@ -7267,8 +7367,8 @@ textarea::selection {
   padding: 9px 0;
   border: 0;
   border-radius: 12px;
-  background: var(--c-brand, #ffd900);
-  color: #1c1c1e;
+  background: var(--c-tint);
+  color: var(--c-on-tint);
   font-family: inherit;
   font-size: var(--fs-subhead);
   font-weight: 700;
@@ -8607,11 +8707,20 @@ textarea::selection {
   padding-bottom: calc(var(--sp-6) + var(--safe-bottom));
 }
 
+/* 2.43.0：控制区吸顶——月份/账期/收支切换常驻导航栏下方，
+   长页面滚到深处换账期不用滚回顶部。top 接在 .app-nav（44px+safe-top）之下，
+   z 低于导航(50)、高于卡片内容。 */
 .s-insights-head {
+  position: sticky;
+  top: calc(var(--h-nav) + var(--safe-top));
+  z-index: 40;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
-  margin: var(--sp-2) var(--page-x) var(--sp-4);
+  gap: var(--sp-2);
+  margin: 0 var(--page-x) var(--sp-3);
+  padding: var(--sp-2) 0;
+  background: var(--c-bg);
+  border-bottom: var(--hairline) solid var(--c-stroke);
 }
 
 .s-insights-head__top {
@@ -9869,6 +9978,9 @@ textarea::selection {
 .s-cal-cell--r3 { background: var(--heat-r3); color: var(--heat-fg-r3); }
 .s-cal-cell--r4 { background: var(--heat-r4); color: var(--heat-fg-r4); }
 .s-cal-cell--out { background: transparent; color: var(--c-text-4); cursor: default; }
+/* 2.43.0：可跳转的邻月灰格——点击直接跳月并选中该日 */
+.s-cal-cell--jump { cursor: pointer; }
+.s-cal-cell--jump:active { background: var(--c-pressed); }
 .s-cal-cell.is-today { box-shadow: inset 0 0 0 2px var(--c-tint); }
 .s-cal-cell.is-selected { box-shadow: inset 0 0 0 2px var(--c-text); }
 .s-cal-hint { margin: var(--sp-3) var(--page-x) 0; text-align: center; color: var(--c-text-3); font-size: var(--fs-caption); }

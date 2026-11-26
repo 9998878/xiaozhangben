@@ -135,12 +135,18 @@ await test('1.1 netTier 四档边界：r≤0.5 / ≤1 / ≤2 / >2，正负对称
   checkEq(cal.netTier(-20001, base), 4, '负净额对称');
 });
 
-await test('1.2 netText：赚钱 +、亏钱 −（U+2212）、整数元、0 不带符号', function () {
+await test('1.2 netText 三档格式：<¥10 一位小数、中间整数元、≥1万 紧凑「万」；赚钱 +、亏钱 −（U+2212）', function () {
   const cal = buildCal({});
   checkEq(cal.netText(0), '¥0', '零');
-  checkEq(cal.netText(12345), '+¥123', '正净额四舍五入到元');
+  checkEq(cal.netText(12345), '+¥123', '中间段四舍五入到元');
   checkEq(cal.netText(-12345), '−¥123', '负净额用 −');
-  checkEq(cal.netText(99), '+¥1', '不足一元按四舍五入');
+  checkEq(cal.netText(99), '+¥1.0', '不足一元不再显示 ¥0');
+  checkEq(cal.netText(40), '+¥0.4', '一位小数');
+  checkEq(cal.netText(-40), '−¥0.4', '负小数');
+  checkEq(cal.netText(-999), '−¥10.0', '<¥10 边界仍走小数档');
+  checkEq(cal.netText(1000), '+¥10', '¥10 起整数档');
+  checkEq(cal.netText(1203900), '+¥1.2万', '万元紧凑一位小数');
+  checkEq(cal.netText(-123456789), '−¥123万', '≥10万 取整万');
 });
 
 await test('1.3 dailyBase：月预算÷当月天数；未设预算退回 ¥100 固定档', function () {
@@ -182,6 +188,27 @@ await test('1.5 月份工具：跨年加减、大小月与闰年天数', functio
   checkEq(cal.daysInMonth('2026-02'), 28, '平年二月');
   checkEq(cal.daysInMonth('2028-02'), 29, '闰年二月');
   checkEq(cal.daysInMonth('2026-11'), 30, '十一月');
+});
+
+await test('1.6 swipeAxisOf 方向仲裁：纵向优先、横向意图明确才接管、已定方向粘滞', function () {
+  const cal = buildCal({});
+  checkEq(cal.swipeAxisOf('', 11, 0), 'x', '纯横滑判 x');
+  checkEq(cal.swipeAxisOf('', 0, 11), 'y', '纯纵滑判 y');
+  checkEq(cal.swipeAxisOf('', 12, 10), '', '斜向未定不拦截');
+  checkEq(cal.swipeAxisOf('', 20, 10), 'x', 'ax>ay*1.5 判 x');
+  checkEq(cal.swipeAxisOf('', 5, 5), '', '阈值内未定');
+  checkEq(cal.swipeAxisOf('y', 30, 0), 'y', '已判纵向粘滞，交还滚动');
+  checkEq(cal.swipeAxisOf('x', 0, 30), 'x', '已判横向粘滞');
+});
+
+await test('1.7 swipeMonth 落点：|dx|≥48 才翻月，左滑下月右滑上月，越界不动', function () {
+  const cal = buildCal({});   /* 桩今天 2026-11-24 → 本月 2026-11 */
+  checkEq(cal.swipeMonth(-60, '2026-10'), '2026-11', '左滑进下月');
+  checkEq(cal.swipeMonth(60, '2026-11'), '2026-10', '右滑回上月');
+  checkEq(cal.swipeMonth(-60, '2026-11'), '', '本月不许滑向未来');
+  checkEq(cal.swipeMonth(60, '2000-01'), '', '2000-01 之前不动');
+  checkEq(cal.swipeMonth(30, '2026-10'), '', '距离不足不翻');
+  checkEq(cal.swipeMonth(-48, '2026-10'), '2026-11', '48px 边界含等号');
 });
 
 /* ============================== 用例 2：报告存档 store（内存模式） ============================== */
@@ -543,14 +570,14 @@ await test('6.2 chunk-manifest：21 项、无 insights、stats 依赖含 ai-insi
   lock(INDEX_HTML.indexOf("report: ['charts']") >= 0, 'report DEPS');
 });
 
-await test('6.3 sw.js：预缓存 35 项，含 calendar/report，无 insights，版本 2.42.2', function () {
+await test('6.3 sw.js：预缓存 35 项，含 calendar/report，无 insights，版本 2.43.0', function () {
   const pre = slice(SW_JS, 'var PRECACHE = [', '];', 'PRECACHE');
   const count = (pre.match(/'\.\//g) || []).length;
   checkEq(count, 35, 'PRECACHE 35 项');
   lock(pre.indexOf("'./js/screens/calendar.js'") >= 0, '含 calendar.js');
   lock(pre.indexOf("'./js/screens/report.js'") >= 0, '含 report.js');
   check(pre.indexOf("'./js/screens/insights.js'") < 0, '无 insights.js');
-  lock(/CACHE_NAME\s*=\s*'xzb2-v2\.42\.2'/.test(SW_JS), '缓存版本 2.42.2');
+  lock(/CACHE_NAME\s*=\s*'xzb2-v2\.43\.0'/.test(SW_JS), '缓存版本 2.43.0');
 });
 
 await test('6.4 底栏与路由：首页/日历/＋/统计/我的', function () {
@@ -574,6 +601,28 @@ await test('6.5 core-assistant 深链改 #/stats；全仓库 js 无 #/insights �
     const src = fs.readFileSync(path.join(screensDir, name), 'utf8');
     check(src.indexOf('#/insights') < 0, name + ' 不应再有 #/insights 深链');
   });
+});
+
+await test('6.6 日历交互打磨接线：默认今天 / 局部重绘 / 邻月跳转 / 空月保留网格 / meta 时间', function () {
+  lock(CAL_JS.indexOf("if (!S.selectedDate && S.month === currentMonth()) { S.selectedDate = todayStr(); }") >= 0, '进当前月默认选中今天');
+  lock(CAL_JS.indexOf("S.selectedDate = month === currentMonth() ? todayStr() : '';") >= 0, '回本月默认今天、过去月清空');
+  lock(CAL_JS.indexOf('function refreshSelection(allowScroll)') >= 0, '选日期局部重绘');
+  lock(CAL_JS.indexOf('function renderDayArea()') >= 0, '日卡区独立渲染');
+  lock(CAL_JS.indexOf("panel.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'nearest' })") >= 0, '日卡滚到可见且尊重 reduced-motion');
+  lock(CAL_JS.indexOf('function bindMonthSwipe(node)') >= 0, '横滑切月接线');
+  lock(CAL_JS.indexOf('{ passive: false }') >= 0, 'touchmove 可拦截');
+  lock(CAL_JS.indexOf('s-cal-cell--jump') >= 0, '邻月灰格可点跳月');
+  lock(CAL_JS.indexOf("text: S.empty ? '这个月还没有记录，点日期可以补记一笔' : '点日期看当日流水'") >= 0, '空月保留网格给补记提示');
+  lock(CAL_JS.indexOf('if (tx.time) { metaParts.push(String(tx.time)); }') >= 0, '当日流水 meta 带时间');
+  lock(INDEX_HTML.indexOf('.s-cal-cell--jump { cursor: pointer; }') >= 0, '灰格跳转 CSS');
+});
+
+await test('6.7 统计页控制区吸顶：sticky 接在导航栏下、z 低于导航', function () {
+  const block = slice(INDEX_HTML, '.s-insights-head {', '}', 's-insights-head CSS');
+  lock(block.indexOf('position: sticky') >= 0, 'sticky');
+  lock(block.indexOf('top: calc(var(--h-nav) + var(--safe-top))') >= 0, 'top 接导航栏下');
+  lock(block.indexOf('z-index: 40') >= 0, 'z=40 低于导航 50');
+  lock(block.indexOf('background: var(--c-bg)') >= 0, '吸顶有底色');
 });
 
 /* ============================== 汇总 ============================== */

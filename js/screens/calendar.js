@@ -1,7 +1,10 @@
-/* 小账本 2.40.0 · js/screens/calendar.js
+/* 小账本 2.43.0 · js/screens/calendar.js
  * 日历记账页：每日净额＝收入−支出（赚钱 + 标红、亏钱 − 标绿，股市惯例，仅本页如此）；
  * 红绿深浅按「月预算 ÷ 当月天数」的日基准分四档；未设预算退回固定档 ¥50/100/200。
  * 点日期展开当日流水（与明细页同一条打开单笔的路径），并可按所选日期补记一笔。
+ * 2.43.0 交互打磨：进当前月默认选中今天；选日期局部重绘并滚动到流水卡；
+ * 横滑切月、点邻月灰格跳月；净额 <¥10 带一位小数、≥1万 紧凑「万」写法；
+ * 空月份保留中性网格可补记；当日流水 meta 带时间。
  * 契约：XZB.screens.register('calendar', { title, subtitle, render, destroy })
  * 依赖：XZB.core.{dates,money,stats}、XZB.ui.{icons,sheet}、XZB.app
  * 硬规则：不碰 IndexedDB / localStorage；只读 ctx.db；金额一律整数分；
@@ -38,7 +41,13 @@
     dead: false,
     month: '',
     selectedDate: '',
-    lastSig: ''
+    lastSig: '',
+    /* 2.43.0 局部重绘：选日期只改格子选中态 + 重建日卡，不整页 clearNode */
+    gridEl: null,
+    dayHost: null,
+    db: null,
+    data: null,
+    empty: false
   };
 
   /* ---------------- 小工具 ---------------- */
@@ -153,11 +162,39 @@
     return 4;
   }
 
-  /* 日历页专用符号：赚钱 +、亏钱 −（与全应用「支出红/收入绿」相反，仅本页） */
+  /* 日历页专用符号：赚钱 +、亏钱 −（与全应用「支出红/收入绿」相反，仅本页）。
+     2.43.0 三档格式：<¥10 保留一位小数（不再出现「−¥0 却标绿」）；
+     ≥1万 紧凑「万」写法（9px 小格不再截断）；中间段维持整数元。 */
   function netText(netCents) {
     if (netCents === 0) { return '¥0'; }
-    var yuan = Math.round(Math.abs(netCents) / 100);
-    return (netCents > 0 ? '+' : '−') + '¥' + yuan;
+    var sign = netCents > 0 ? '+' : '−';
+    var abs = Math.abs(netCents);
+    if (abs >= 1000000) {
+      var wan = abs / 1000000;
+      var text = wan >= 10 ? String(Math.round(wan)) : (Math.round(wan * 10) / 10).toFixed(1);
+      return sign + '¥' + text + '万';
+    }
+    if (abs < 1000) {
+      return sign + '¥' + (Math.round(abs / 10) / 10).toFixed(1);
+    }
+    return sign + '¥' + Math.round(abs / 100);
+  }
+
+  /* 2.43.0 横滑切月仲裁（纯函数，Node 可测）：纵向滚动优先，横向意图明确才接管。
+     与明细页同款口径：ax > ay * 1.5 且 ax > 10 才判横滑；ay > 10 先判纵向即交还。 */
+  function swipeAxisOf(axis, ax, ay) {
+    if (axis) { return axis; }
+    if (ax > 10 && ax > ay * 1.5) { return 'x'; }
+    if (ay > 10) { return 'y'; }
+    return '';
+  }
+
+  /* 横滑落点：|dx| ≥ 48 才翻月；左滑下月、右滑上月，越界（<2000-01 或 >本月）不动。 */
+  function swipeMonth(dx, month) {
+    if (Math.abs(dx) < 48) { return ''; }
+    var target = addMonth(month, dx < 0 ? 1 : -1);
+    if (!target || target < MONTH_MIN || target > currentMonth()) { return ''; }
+    return target;
   }
 
   function monthData(db, month) {
@@ -243,6 +280,7 @@
     card.appendChild(week);
 
     var grid = el('div', { className: 's-cal-grid', role: 'grid', 'aria-label': '每日净额' });
+    S.gridEl = grid;
     var days = data.days;
     if (!days.length) { return card; }
     var first = days[0].date;
@@ -257,14 +295,20 @@
       var net = day ? day.netCents : 0;
       var has = day && day.count > 0;
       var tone = !has || net === 0 ? 'neutral' : (net > 0 ? 'r' : 'g') + netTier(net, base.baseCents);
+      /* 2.43.0：邻月灰格不再一律 disabled——目标月在合法范围内就可点，点了直接跳月并选中该日 */
+      var jumpMonth = inMonth ? '' : date.slice(0, 7);
+      var jumpable = !inMonth && jumpMonth >= MONTH_MIN && jumpMonth <= currentMonth();
       var btn = el('button', {
         type: 'button',
         className: 's-cal-cell s-cal-cell--' + tone +
           (inMonth ? '' : ' s-cal-cell--out') +
+          (jumpable ? ' s-cal-cell--jump' : '') +
           (date === today ? ' is-today' : '') +
           (date === S.selectedDate ? ' is-selected' : ''),
-        disabled: inMonth ? null : 'disabled',
-        'aria-label': inMonth ? dateLabel(date) + '，净额 ' + netText(net) + '，' + (day ? day.count : 0) + ' 笔' : null,
+        disabled: inMonth || jumpable ? null : 'disabled',
+        'aria-label': inMonth
+          ? dateLabel(date) + '，净额 ' + netText(net) + '，' + (day ? day.count : 0) + ' 笔'
+          : (jumpable ? '跳到' + dateLabel(date) : null),
         'aria-pressed': date === S.selectedDate ? 'true' : 'false',
         dataset: { date: date }
       });
@@ -273,6 +317,14 @@
         btn.appendChild(el('span', { className: 's-cal-cell__net u-tabular', text: has ? netText(net) : '' }));
         btn.addEventListener('click', function () {
           S.selectedDate = S.selectedDate === date ? '' : date;
+          refreshSelection(true);
+        });
+      } else if (jumpable) {
+        btn.addEventListener('click', function () {
+          /* 直接落月+选中，避免 setMonth 先画一遍再补选中的双重渲染 */
+          S.month = jumpMonth;
+          S.selectedDate = date;
+          syncHash();
           paint();
         });
       }
@@ -294,7 +346,38 @@
       grid.appendChild(cell(nDate, t, false, null));
     }
     card.appendChild(grid);
+    bindMonthSwipe(card);
     return card;
+  }
+
+  /* 2.43.0：网格区横滑切月。未定方向不拦截（纵向滚动随时可起），
+     判横滑后才 preventDefault；touchmove 需 passive:false 才能拦截。 */
+  function bindMonthSwipe(node) {
+    var sx = 0;
+    var sy = 0;
+    var axis = '';
+    node.addEventListener('touchstart', function (event) {
+      axis = '';
+      if (!event.touches || event.touches.length !== 1) { return; }
+      sx = event.touches[0].clientX;
+      sy = event.touches[0].clientY;
+    }, { passive: true });
+    node.addEventListener('touchmove', function (event) {
+      if (axis === 'y' || !event.touches || event.touches.length !== 1) { return; }
+      var ax = Math.abs(event.touches[0].clientX - sx);
+      var ay = Math.abs(event.touches[0].clientY - sy);
+      axis = swipeAxisOf(axis, ax, ay);
+      if (axis === 'x' && event.cancelable) { event.preventDefault(); }
+    }, { passive: false });
+    node.addEventListener('touchend', function (event) {
+      var wasX = axis === 'x';
+      axis = '';
+      if (!wasX) { return; }
+      var t = event.changedTouches && event.changedTouches[0];
+      if (!t) { return; }
+      var target = swipeMonth(t.clientX - sx, S.month);
+      if (target) { setMonth(target); }
+    });
   }
 
   function dayPanel(db, data) {
@@ -339,9 +422,15 @@
         className: 's-cal-tx__note',
         text: tx.note ? String(tx.note) : (cat ? String(cat.name || '未分类') : '未分类')
       }));
+      /* 2.43.0：meta 带时间（有则显示），同一天的早晚两笔一眼可分 */
+      var metaParts = [];
+      if (cat && cat.name) { metaParts.push(String(cat.name)); }
+      var accName = accountName(db, tx.accountId);
+      if (accName) { metaParts.push(accName); }
+      if (tx.time) { metaParts.push(String(tx.time)); }
       main.appendChild(el('span', {
         className: 's-cal-tx__meta',
-        text: (cat ? String(cat.name || '') : '') + (accountName(db, tx.accountId) ? ' · ' + accountName(db, tx.accountId) : '')
+        text: metaParts.join(' · ')
       }));
       row.appendChild(main);
       row.appendChild(el('span', {
@@ -402,10 +491,55 @@
 
   /* ---------------- 渲染 ---------------- */
 
+  function reducedMotion() {
+    try {
+      return !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (error) { return false; }
+  }
+
+  /* 日卡区：选中日合法 → 当日流水卡；否则给提示（空月份文案引导补记） */
+  function renderDayArea() {
+    if (!S.dayHost) { return; }
+    clearNode(S.dayHost);
+    if (S.selectedDate && DATE_RE.test(S.selectedDate) && S.selectedDate.slice(0, 7) === S.month) {
+      S.dayHost.appendChild(dayPanel(S.db, S.data));
+    } else {
+      S.dayHost.appendChild(el('p', {
+        className: 's-cal-hint',
+        text: S.empty ? '这个月还没有记录，点日期可以补记一笔' : '点日期看当日流水'
+      }));
+    }
+  }
+
+  /* 2.43.0 选日期局部重绘：只切格子选中态 + 重建日卡，不整页 clearNode，
+     滚动位置与键盘焦点不丢；选中后日卡在视口外 → 平滑滚到可见（尊重 reduced-motion）。 */
+  function refreshSelection(allowScroll) {
+    if (S.dead) { return; }
+    if (S.gridEl) {
+      var cells = S.gridEl.querySelectorAll('.s-cal-cell');
+      for (var i = 0; i < cells.length; i += 1) {
+        var on = cells[i].dataset.date === S.selectedDate && !cells[i].classList.contains('s-cal-cell--out');
+        cells[i].classList.toggle('is-selected', on);
+        cells[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+    }
+    renderDayArea();
+    if (!allowScroll || !S.selectedDate || !S.dayHost || !S.dayHost.firstChild) { return; }
+    var panel = S.dayHost.firstChild;
+    if (typeof panel.getBoundingClientRect !== 'function' || typeof panel.scrollIntoView !== 'function') { return; }
+    var rect = panel.getBoundingClientRect();
+    var vh = global.document && global.document.documentElement ? global.document.documentElement.clientHeight : 0;
+    if (vh && rect.top > vh - 120) {
+      panel.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
+    }
+  }
+
   function paint() {
     if (S.dead || !S.root) { return; }
     var db = (S.ctx && S.ctx.db) || (XZB.app && XZB.app.db && XZB.app.db()) || {};
     clearNode(S.root);
+    S.gridEl = null;
+    S.dayHost = null;
     var wrap = el('div', { className: 's-cal' });
 
     var head = el('div', { className: 's-cal-head' });
@@ -428,22 +562,26 @@
     var data = monthData(db, S.month);
     var base = dailyBase(db, S.month);
     wrap.appendChild(summaryStrip(data, base));
+    S.db = db;
+    S.data = data;
 
     var totalCount = 0;
     for (var i = 0; i < data.days.length; i += 1) { totalCount += data.days[i].count; }
-    if (!totalCount) {
+    S.empty = !totalCount;
+
+    if (!data.days.length) {
+      /* 核心层缺位兜底：整月无日数据（正常不会发生）才整卡空态 */
       wrap.appendChild(emptyMonth());
       S.root.appendChild(wrap);
       return;
     }
 
+    /* 2.43.0：空月份也保留中性网格——日历上下文不丢，点日期仍可补记 */
     wrap.appendChild(buildGrid(data, base));
-    if (S.selectedDate && DATE_RE.test(S.selectedDate) && S.selectedDate.slice(0, 7) === S.month) {
-      wrap.appendChild(dayPanel(db, data));
-    } else {
-      wrap.appendChild(el('p', { className: 's-cal-hint', text: '点日期看当日流水' }));
-    }
+    S.dayHost = el('div', { className: 's-cal-dayhost' });
+    wrap.appendChild(S.dayHost);
     S.root.appendChild(wrap);
+    renderDayArea();
   }
 
   function syncHash() {
@@ -469,7 +607,8 @@
     if (!isMonth(month) || month < MONTH_MIN || month > currentMonth()) { return; }
     if (month === S.month) { return; }
     S.month = month;
-    S.selectedDate = '';
+    /* 2.43.0：回到当前月默认选中今天；过去月清空选择 */
+    S.selectedDate = month === currentMonth() ? todayStr() : '';
     syncHash();
     paint();
   }
@@ -487,6 +626,8 @@
     }
     if (!isMonth(S.month) || S.month > currentMonth()) { S.month = currentMonth(); }
     if (S.selectedDate && S.selectedDate.slice(0, 7) !== S.month) { S.selectedDate = ''; }
+    /* 2.43.0：进当前月默认选中今天，今日流水直接展开，少点一次 */
+    if (!S.selectedDate && S.month === currentMonth()) { S.selectedDate = todayStr(); }
     syncHash();
     paint();
     return { destroy: destroy };
@@ -496,6 +637,10 @@
     S.dead = true;
     S.root = null;
     S.ctx = null;
+    S.gridEl = null;
+    S.dayHost = null;
+    S.db = null;
+    S.data = null;
   }
 
   var screen = {

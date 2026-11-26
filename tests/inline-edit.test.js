@@ -254,12 +254,24 @@ test('7.1 ledger 四热区与唯一写通道', () => {
   check(LEDGER_SRC.indexOf('IE.buildTxPatchMutator') >= 0, 'mutator 接线');
   check(LEDGER_SRC.indexOf("commit(mutator, { label: '行内编辑' })") >= 0, 'commit 通道');
   check(LEDGER_SRC.indexOf('function openCatZone') >= 0, 'openCatZone');
-  check(/function openCatZone\(st, tx\) \{\s*navigate\(st, '#\/add\?id=' \+ encodeURIComponent\(String\(tx\.id \|\| ''\)\) \+ '&pick=cat'/.test(LEDGER_SRC), '图标热区跳记一笔页 pick=cat');
-  check(LEDGER_SRC.indexOf('IE.openPopover(anchor, 320') < 0, '种类宫格浮层已移除');
+  /* 2.43.0：换种类改本页底部 sheet 直选；sheet 缺失才退回记一笔页 pick=cat（深链兜底仍在） */
+  check(LEDGER_SRC.indexOf("className: 's-ledger-catpick-sheet'") >= 0, '换种类本页 sheet');
+  check(LEDGER_SRC.indexOf('commitInlinePatch(st, tx, { categoryId: cat.id }') >= 0, '点新分类即 commit');
+  check(LEDGER_SRC.indexOf("navigate(st, '#/add?id=' + encodeURIComponent(String(tx.id || '')) + '&pick=cat')") >= 0, 'sheet 缺失退回 pick=cat');
+  check(LEDGER_SRC.indexOf("'更换种类：' + title") >= 0, '图标热区无障碍标签');
+  check(LEDGER_SRC.indexOf('IE.openPopover(anchor, 320') < 0, '种类宫格锚定浮层已移除');
   check(ADD_SRC.indexOf("String(context.params.pick || '') === 'cat'") >= 0, 'add 识别 pick=cat');
   check(ADD_SRC.indexOf('if (pickCat) {') >= 0 && ADD_SRC.indexOf('pickSaveName = String(category.name') >= 0, '选分类即保存');
   check(ADD_SRC.indexOf("showToast('种类已改为「' + pickSaveName + '」'") >= 0, '直选成功文案');
   check(LEDGER_SRC.indexOf('function openTimeZone') >= 0, 'openTimeZone');
+  /* 2.43.0：日期时间手机底部弹层 / 桌面浮层双形态 */
+  check(LEDGER_SRC.indexOf('function buildTimeFields') >= 0, '日期时间字段共用件');
+  check(LEDGER_SRC.indexOf("className: 's-ledger-timesheet'") >= 0, '日期时间手机 sheet');
+  check(LEDGER_SRC.indexOf("(pointer: coarse)") >= 0, '触屏判定');
+  /* 2.43.0：保存后滚动恢复改 rAF 轮询新行（旧行打 pre-edit 标） */
+  check(LEDGER_SRC.indexOf("setAttribute('data-pre-edit', '1')") >= 0, '旧行打标');
+  check(LEDGER_SRC.indexOf(":not([data-pre-edit])") >= 0, '只认重建后的新行');
+  check(LEDGER_SRC.indexOf('requestAnimationFrame') >= 0, 'rAF 轮询');
 });
 
 test('7.2 manifest / deps / 声明标签 / sw 预缓存', () => {
@@ -270,9 +282,167 @@ test('7.2 manifest / deps / 声明标签 / sw 预缓存', () => {
 });
 
 test('7.3 CSS 封闭集合新增类都在 index.html', () => {
-  ['.s-ledger-item__zone', '.s-ledger-item__note-input', '.s-ledger-item__amount-wrap', '.s-ledger-pop', '.s-ledger-item.is-flash'].forEach((sel) => {
+  ['.s-ledger-item__zone', '.s-ledger-item__note-input', '.s-ledger-item__amount-wrap', '.s-ledger-pop', '.s-ledger-item.is-flash',
+    /* 2.43.0 新增 */
+    '.s-ledger-item__amount-wrap.is-invalid', '.s-ledger-item__amount-hint', '.s-ledger-timesheet',
+    '.s-ledger-catpick__grid', '.s-ledger-catpick__cell', '.s-ledger-catpick__manage', '--c-flash:'].forEach((sel) => {
     check(INDEX_HTML.indexOf(sel) >= 0, 'CSS 缺 ' + sel);
   });
+  check(INDEX_HTML.indexOf('background: #fff6c2') < 0, 'flash 硬编码亮黄已改令牌');
+  /* 2.43.0：--c-card/--c-line/--c-brand 是从未定义的幽灵令牌（深色下白底白字），不得回潮 */
+  check(!/var\(--c-(card|line|brand)[,)]/.test(INDEX_HTML), '幽灵令牌回潮');
+});
+
+/* ============================== 8 DOM 桩行为（2.43.0） ============================== */
+
+section('8 DOM 桩：金额无效保留 / 提示语分设备 / 浮层滚动即关');
+
+/* 极简 DOM 桩：只实现 inline-edit DOM 件用到的面，真实执行源码而非复写实现。 */
+function makeNode(tag) {
+  const node = {
+    tag, children: [], parentNode: null, listeners: {}, style: {}, dataset: {},
+    className: '', value: '', textContent: '', hidden: false,
+    offsetWidth: 0, offsetHeight: 40, focused: 0, selected: 0,
+    classList: {
+      _set: new Set(),
+      add(c) { this._set.add(c); },
+      remove(c) { this._set.delete(c); },
+      contains(c) { return this._set.has(c); },
+      toggle(c, on) { if (on) { this._set.add(c); } else { this._set.delete(c); } }
+    },
+    appendChild(n) { n.parentNode = this; this.children.push(n); return n; },
+    insertBefore(n, ref) {
+      n.parentNode = this;
+      const i = ref ? this.children.indexOf(ref) : -1;
+      if (i < 0) { this.children.push(n); } else { this.children.splice(i, 0, n); }
+      return n;
+    },
+    removeChild(n) {
+      const i = this.children.indexOf(n);
+      if (i >= 0) { this.children.splice(i, 1); }
+      n.parentNode = null;
+      return n;
+    },
+    contains(n) { let cur = n; while (cur) { if (cur === this) { return true; } cur = cur.parentNode; } return false; },
+    addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); },
+    dispatch(t, ev) { (this.listeners[t] || []).slice().forEach((f) => f(ev || {})); },
+    focus() { this.focused += 1; },
+    select() { this.selected += 1; },
+    getBoundingClientRect() { return { left: 10, top: 100, bottom: 140, right: 90 }; },
+    get nextSibling() {
+      const p = this.parentNode;
+      if (!p) { return null; }
+      return p.children[p.children.indexOf(this) + 1] || null;
+    }
+  };
+  return node;
+}
+
+function domSandbox(opts) {
+  const body = makeNode('body');
+  const docEl = makeNode('html');
+  docEl.clientWidth = 390;
+  docEl.clientHeight = 844;
+  const document = {
+    createElement: makeNode,
+    body,
+    documentElement: docEl,
+    listeners: {},
+    addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); },
+    dispatch(t, ev) { (this.listeners[t] || []).slice().forEach((f) => f(ev)); }
+  };
+  const sandbox = {
+    console, setTimeout, clearTimeout, document,
+    windowListeners: {},
+    addEventListener(t, fn) { (this.windowListeners[t] = this.windowListeners[t] || []).push(fn); }
+  };
+  if (opts && opts.coarse !== undefined) {
+    sandbox.matchMedia = (q) => ({ matches: q === '(pointer: coarse)' ? opts.coarse : false });
+  }
+  vm.createContext(sandbox);
+  vm.runInContext(SRC, sandbox, { filename: 'js/modules/inline-edit.js#dom' });
+  return sandbox;
+}
+
+const KEY = (key) => ({ key, preventDefault() {}, stopPropagation() {} });
+
+test('8.1 金额回车无效：编辑器保留 + 标红提示 + 重新全选，改对后仍能提交', () => {
+  const sb = domSandbox();
+  const IE = sb.XZB.ui.inlineEdit;
+  const host = makeNode('span');
+  const events = [];
+  const handle = IE.mountAmountInput(host, 1390, '-¥', {
+    onCommit: (cents) => events.push(['commit', cents]),
+    onCancel: () => events.push(['cancel']),
+    onInvalid: (info) => events.push(['invalid', info.via])
+  });
+  check(handle, 'mount 成功');
+  const wrap = host.children[0];
+  const input = wrap.children[1];
+  input.value = 'abc';
+  input.dispatch('keydown', KEY('Enter'));
+  checkEq(events.length, 1, '只发一次 invalid');
+  checkEq(events[0][1], 'enter', 'via=enter');
+  check(wrap.classList.contains('is-invalid'), '标红');
+  check(host.children.some((n) => n.textContent === '请输入大于 0 的数字'), '行内提示');
+  checkEq(input.selected, 2, '重新全选（mount 一次 + 无效一次）');
+  check(wrap.parentNode === host, '编辑器保留');
+  /* 重新输入即清错，改对后回车正常提交 */
+  input.value = '12.5';
+  input.dispatch('input');
+  check(!wrap.classList.contains('is-invalid'), '输入即清错');
+  check(!host.children.some((n) => n.textContent === '请输入大于 0 的数字'), '提示移除');
+  input.dispatch('keydown', KEY('Enter'));
+  checkEq(events[events.length - 1].join(':'), 'commit:1250', '改对后提交');
+  handle.destroy();
+  check(wrap.parentNode === null, 'destroy 移除');
+});
+
+test('8.2 金额失焦无效：关闭并回调 via=blur，后续按键不再触发', () => {
+  const sb = domSandbox();
+  const IE = sb.XZB.ui.inlineEdit;
+  const host = makeNode('span');
+  const events = [];
+  IE.mountAmountInput(host, 1390, '-¥', {
+    onCommit: (cents) => events.push(['commit', cents]),
+    onInvalid: (info) => events.push(['invalid', info.via])
+  });
+  const input = host.children[0].children[1];
+  input.value = '0';
+  input.dispatch('blur');
+  checkEq(events.length, 1, '只发一次');
+  checkEq(events[0].join(':'), 'invalid:blur', 'via=blur');
+  input.dispatch('keydown', KEY('Enter'));
+  checkEq(events.length, 1, 'done 后不再触发');
+});
+
+test('8.3 批注提示语分设备：触屏「点空白处保存」，桌面「回车保存 · Esc 取消」', () => {
+  const coarse = domSandbox({ coarse: true });
+  const hostA = makeNode('span');
+  coarse.XZB.ui.inlineEdit.mountNoteInput(hostA, '', {});
+  checkEq(hostA.children[1].textContent, '点空白处保存', '触屏提示');
+  const fine = domSandbox({ coarse: false });
+  const hostB = makeNode('span');
+  fine.XZB.ui.inlineEdit.mountNoteInput(hostB, '', {});
+  checkEq(hostB.children[1].textContent, '回车保存 · Esc 取消', '桌面提示');
+});
+
+test('8.4 浮层滚动即关：外部 scroll 关闭，浮层内部 scroll 不误关，resize 关闭', () => {
+  const sb = domSandbox();
+  const IE = sb.XZB.ui.inlineEdit;
+  const anchor = makeNode('button');
+  const handle = IE.openPopover(anchor, 252, (pop) => { pop.appendChild(makeNode('div')); });
+  check(handle && handle.element.parentNode === sb.document.body, '浮层已挂 body');
+  /* 内部滚动：目标在浮层内 → 不关 */
+  sb.document.dispatch('scroll', { target: handle.element.children[0] });
+  check(handle.element.parentNode === sb.document.body, '内部滚动不关');
+  /* 外部滚动 → 关 */
+  sb.document.dispatch('scroll', { target: makeNode('div') });
+  check(handle.element.parentNode === null, '外部滚动即关');
+  /* 再开一个，resize → 关 */
+  const h2 = IE.openPopover(anchor, 252, () => {});
+  (sb.windowListeners.resize || []).forEach((f) => f());
+  check(h2.element.parentNode === null, 'resize 即关');
 });
 
 /* ============================== 汇总 ============================== */
