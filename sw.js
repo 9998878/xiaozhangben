@@ -1,16 +1,19 @@
 /* ============================================================
-   小账本 2.44.0 · Service Worker（日历点标题直选月份）
-   缓存名：小账本2-v2.44.0（英文缓存键 xzb2-v2.44.0）
-   策略：导航请求网络优先（3 秒超时）→ 缓存；其余静态资源缓存优先。
+   小账本 2.44.1 · Service Worker（离线缓存键修复）
+   缓存名：小账本2-v2.44.1（英文缓存键 xzb2-v2.44.1）
+   策略：导航请求网络优先（8 秒超时）→ 缓存；其余静态资源缓存优先。
    约束：只处理 GET；只处理 http(s) 同源请求；不缓存 chrome-extension 等协议。
    ============================================================ */
 (function (global) {
   'use strict';
 
   /* 人类可读的缓存版本标签，仅用于日志与排查 */
-  var CACHE_LABEL = '小账本2-v2.44.0';
+  var CACHE_LABEL = '小账本2-v2.44.1';
   /* 真正的 Cache Storage 键：换版本号即触发本应用旧缓存清除（activate 时 cleanupCaches） */
-  var CACHE_NAME = 'xzb2-v2.44.0';
+  var CACHE_NAME = 'xzb2-v2.44.1';
+  /* 预缓存版本 query：由 CACHE_NAME 派生，绝不与缓存版本漂移。
+     加载器请求恒带 ?v=<XZB.version>，预缓存按同一键写入才能命中（2.44.1 修 P1-1）。 */
+  var VERSION = CACHE_NAME.slice('xzb2-v'.length);
   /* 预取失败清单的旁路缓存：名字同样带 xzb2- 前缀，清理时必须显式保留（见 cleanupCaches） */
   var META_CACHE = 'xzb2-meta';
   /* 预取失败清单在旁路缓存里的键；内容形如 { v: CACHE_NAME, list: [url, ...] } */
@@ -74,7 +77,7 @@
     return true;
   }
 
-  /* 带超时的 fetch：3 秒拿不到网络响应就 reject，交给缓存回退 */
+  /* 带超时的 fetch：8 秒拿不到网络响应就 reject，交给缓存回退 */
   function fetchWithTimeout(request, timeoutMs) {
     return new Promise(function (resolve, reject) {
       var timer = setTimeout(function () {
@@ -90,9 +93,9 @@
     });
   }
 
-  /* 缓存键归一化：剥掉 v（版本）与 r（重试）两个查询参数。
-     预缓存的键不带 query，而加载器请求恒带 ?v=<XZB.version>（重试再加 &r=2）；
-     读和写都用同一个归一化键，二者才能命中同一条缓存。 */
+  /* 缓存键归一化：只剥重试参数 r，保留版本参数 v。
+     预缓存的 js 分块按 ?v=<VERSION> 写入（见 precacheKey），与加载器运行时键一致；
+     旧 index 带旧 ?v= 时由 cacheFirst 的 ignoreSearch 兜底命中同路径当前分块。 */
   function normalizeKey(request) {
     var url = new URL(request.url, global.location.href);
     /* 2.41.3：保留版本 query v 作为缓存键的一部分——旧版删掉 v 导致所有版本共用一条
@@ -139,16 +142,24 @@
     await cache.put(request, response);
   }
 
-  /* 逐条预缓存：单条失败只记录、不中断其余条目；失败清单留给 activate 后空闲重试 */
+  /* 预缓存写入键：js 分块拼 ?v=（与加载器运行时键逐字一致）；
+     入口/清单/图标/启动图运行时请求不带 query，保持原键。 */
+  function precacheKey(url) {
+    if (url.indexOf('./js/') === 0) { return url + '?v=' + VERSION; }
+    return url;
+  }
+
+  /* 逐条预缓存：单条失败只记录、不中断其余条目；失败清单留给 activate 后空闲重试。
+     清单里存的是带版本的写入键，重试与预缓存走同一个键。 */
   async function precache() {
     var cache = await caches.open(CACHE_NAME);
     var failed = [];
     for (var i = 0; i < PRECACHE.length; i += 1) {
-      var url = PRECACHE[i];
+      var key = precacheKey(PRECACHE[i]);
       try {
-        await addFresh(cache, url);
+        await addFresh(cache, key);
       } catch (error) {
-        failed.push(url);
+        failed.push(key);
       }
     }
     try {
@@ -179,6 +190,11 @@
     var hit = await meta.match(MISSING_KEY);
     if (!hit) return;
     var record = await hit.json();
+    /* 旧版本遗留的清单键不带当前版本，重试也命中不了运行时键：直接作废，下次 install 会全量重取 */
+    if (!record || record.v !== CACHE_NAME) {
+      await meta.delete(MISSING_KEY);
+      return;
+    }
     var list = record && Array.isArray(record.list) ? record.list : [];
     if (!list.length) {
       await meta.delete(MISSING_KEY);
@@ -238,7 +254,7 @@
     });
   }
 
-  /* 导航：网络优先，3 秒超时回退缓存 */
+  /* 导航：网络优先，8 秒超时回退缓存 */
   function networkFirst(request) {
     return fetchWithTimeout(request, NAV_TIMEOUT_MS).then(function (response) {
       putInCache(request, response);
@@ -252,6 +268,11 @@
   function cacheFirst(request) {
     var key = normalizeKey(request);
     return caches.match(key).then(function (hit) {
+      if (hit) return hit;
+      /* 兜底：旧 index 引用上一版 ?v= 时精确键必 miss，忽略 query 命中同路径当前分块。
+         旧版本缓存已由 activate 按 CACHE_NAME 清除，ignoreSearch 不会串到旧版本。 */
+      return caches.match(key, { ignoreSearch: true });
+    }).then(function (hit) {
       if (hit) return hit;
       return fetch(request).then(function (response) {
         if (response && response.ok && response.type === 'basic') {

@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <!-- CSP（R-08 三处同源之一：本行 meta 与 tools/serve.cjs 的 CSP_POLICY 常量、tools/smoke.cjs A3-5 断言逐段相等）
-       script-src 的 'unsafe-inline' 是对 R-08 的必要偏离：build.mjs 把 25 段壳层 JS 内联进产物，'self' 会白屏（T06 实测）
-       刻意不含 frame-ancestors：经 meta 投递该指令被浏览器忽略并报一条 Log 错误，而三处字符串必须逐段相等 -->
+  <!-- CSP（R-08：本行 meta 是站点 CSP 的唯一真源；无构建步骤、无其他投递点）
+       script-src 的 'unsafe-inline' 是对 R-08 的必要偏离：壳层 JS 全部内联在本文件，'self' 会白屏（T06 实测）
+       刻意不含 frame-ancestors：经 meta 投递该指令被浏览器忽略并报一条 Log 错误 -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.44.0';
+  XZB.version = '2.44.1';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -24415,9 +24415,12 @@ textarea::selection {
 
   /* ============================== CSV ============================== */
 
-  /* CSV 字段转义：含逗号/引号/换行 ⇒ 双引号包裹并把 " 变 ""（§3.7） */
+  /* CSV 字段转义：含逗号/引号/换行 ⇒ 双引号包裹并把 " 变 ""（§3.7）。
+     2.44.1（P2-2）：首字符命中 = + - @ \t \r 时前置 '，防 Excel/Numbers 公式注入（CWE-1236）；
+     金额列恒非负、日期时间数字开头，不受影响。 */
   function escapeCsv(value) {
     var text = value === undefined || value === null ? '' : String(value);
+    if (/^[=+\-@\t\r]/.test(text)) { text = "'" + text; }
     if (/[",\r\n]/.test(text)) {
       return '"' + text.replace(/"/g, '""') + '"';
     }
@@ -32876,52 +32879,34 @@ textarea::selection {
 
 </script>
   <script>
-/* 小账本 2.40.0 · js/chunk-manifest.js · owner: frontend（T-02）：20 个 chunk 的源/产物/依赖真源 + URL 查表（CONTRACT §1/§2.5/§3/B1′/B2）；纯数据，Node 可 require。 */
+/* 小账本 2.44.1 · js/chunk-manifest.js · owner: frontend（T-02）：21 个 chunk 的产物/依赖真源 + URL 查表；纯数据，Node 可 require。 */
 (function (global) {
   'use strict';
   var XZB = global.XZB || (global.XZB = {});
-  var SRC = 'src/js/', OUT = 'js/';
+  var OUT = 'js/';
   var ROWS = [
-    ['home', 'screens/home', 'screens/home'], ['add', 'screens/add', 'screens/add'], ['ledger', 'screens/ledger', 'screens/ledger'], ['stats', 'screens/stats', 'screens/stats'],
-    ['calendar', 'screens/calendar', 'screens/calendar'], ['report', 'screens/report', 'screens/report'], ['accounts', 'screens/accounts', 'screens/accounts'], ['books', 'screens/books', 'screens/books'], ['plan', 'screens/plan', 'screens/plan'],
-    ['settings', 'screens/settings', 'screens/settings'], ['assistant', 'screens/assistant', 'screens/assistant'], ['keypad', 'ui/keypad', 'modules/keypad'], ['icon-picker', 'ui/icon-picker', 'modules/icon-picker'],
-    ['charts', 'ui/charts', 'modules/charts'], ['nl', 'core/nl', 'modules/nl'], ['core-assistant', 'core/assistant', 'modules/core-assistant'],
-    ['ai-insights', 'modules/ai-insights', 'modules/ai-insights'], ['habit', 'modules/habit', 'modules/habit'],
-    ['bill-import', 'modules/bill-import', 'modules/bill-import'], ['audit', 'modules/audit', 'modules/audit'],
-    ['inline-edit', 'modules/inline-edit', 'modules/inline-edit']
+    ['home', 'screens/home'], ['add', 'screens/add'], ['ledger', 'screens/ledger'], ['stats', 'screens/stats'],
+    ['calendar', 'screens/calendar'], ['report', 'screens/report'], ['accounts', 'screens/accounts'], ['books', 'screens/books'], ['plan', 'screens/plan'],
+    ['settings', 'screens/settings'], ['assistant', 'screens/assistant'], ['keypad', 'modules/keypad'], ['icon-picker', 'modules/icon-picker'],
+    ['charts', 'modules/charts'], ['nl', 'modules/nl'], ['core-assistant', 'modules/core-assistant'],
+    ['ai-insights', 'modules/ai-insights'], ['habit', 'modules/habit'],
+    ['bill-import', 'modules/bill-import'], ['audit', 'modules/audit'],
+    ['inline-edit', 'modules/inline-edit']
   ];
-  /* 依赖图唯一真源（CONTRACT §1）：未列出的 chunk 恒 [] */
+  /* 依赖图唯一真源：未列出的 chunk 恒 [] */
   var DEPS = { home: ['habit'], ledger: ['inline-edit'], add: ['keypad', 'icon-picker'], stats: ['charts', 'ai-insights', 'audit'], calendar: ['charts'], report: ['charts'], plan: ['charts'], settings: ['icon-picker', 'bill-import'], assistant: ['nl', 'core-assistant'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
-    var e = { key: r[0], src: SRC + r[1] + '.js', out: OUT + r[2] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
+    var e = { key: r[0], out: OUT + r[1] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];
   });
   function has(key) { return Object.prototype.hasOwnProperty.call(byKey, key); }
   function fileProtocol() { try { return typeof location !== 'undefined' && location.protocol === 'file:'; } catch (e) { return false; } }
-  /* E2′：URL 恒查表（两种前缀），查询串取 XZB.version；file:// 恒省略 query */
+  /* E2′：URL 恒查表，查询串取 XZB.version；file:// 恒省略 query */
   function url(key) { var e = byKey[key], v = XZB.version; return e ? e.out + (v && !fileProtocol() ? '?v=' + v : '') : ''; }
   function status(key) { return states[key] || 'idle'; }
   function isModule(key) { return !!byKey[key] && byKey[key].out.indexOf('js/modules/') === 0; }
-  function outputFiles() { return ROWS.map(function (r) { return OUT + r[2] + '.js'; }); }
-  function writeOutputs(dir) { var fs = require('fs'), path = require('path');
-    ROWS.forEach(function (r) { var f = path.join(dir, OUT + r[2] + '.js'); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, fs.readFileSync(path.join(__dirname, '..', '..', SRC + r[1] + '.js'))); });
-    return outputFiles();
-  }
-  /* 构建期静态校验（§2.5/B1′/B2）：20 个声明标签、产物存在、deps 双射、内联区无 lazy 屏前 5 行特征串；失败恒 throw */
-  function checkSync(dir) {
-    var fs = require('fs'), path = require('path'), root = path.join(__dirname, '..', '..'), out = path.resolve(dir || path.join(root, '手机版'));
-    var html = fs.readFileSync(path.join(out, 'index.html'), 'utf8'), errs = [];
-    ROWS.forEach(function (r) {
-      var key = r[0], file = OUT + r[2] + '.js', tags = html.match(new RegExp('<script[^>]*data-xzb-chunk=["\']' + key + '["\'][^>]*>', 'g')) || [], tag = tags.length === 1 && tags[0].indexOf('text/xzb-module') >= 0 && /src=["\']([^"\']+)["\']/.exec(tags[0]);
-      if (!tag || tag[1] !== file) { errs.push(key + ' 声明标签/src'); }
-      if (!fs.existsSync(path.join(out, file))) { errs.push(key + ' 缺产物'); }
-      if (file.indexOf('js/screens/') === 0 && key !== 'home' && key !== 'ledger') { fs.readFileSync(path.join(root, SRC + r[1] + '.js'), 'utf8').split(/\r?\n/).slice(0, 5).forEach(function (line) { if (line.trim().length > 15 && html.indexOf(line.trim()) >= 0) { errs.push(key + ' 内联特征串'); } }); }
-    });
-    if (Object.keys(deps).sort().join() !== ROWS.map(function (r) { return r[0]; }).sort().join() || Object.keys(deps).some(function (k) { return deps[k].some(function (d) { return !byKey[d]; }); })) { errs.push('deps 双射'); }
-    if (errs.length) { throw new Error('chunk-manifest.checkSync: ' + errs.join('; ')); }
-    return true;
-  }
-  var api = { ready: false, deps: deps, url: url, has: has, status: status, isPending: function (key) { return status(key) === 'loading'; }, outputFiles: outputFiles, writeOutputs: writeOutputs, checkSync: checkSync, _mark: function (key, value) { if (value == null) { delete states[key]; } else { states[key] = value; } }, _isModule: isModule };
+  function outputFiles() { return ROWS.map(function (r) { return OUT + r[1] + '.js'; }); }
+  var api = { ready: false, deps: deps, url: url, has: has, status: status, isPending: function (key) { return status(key) === 'loading'; }, outputFiles: outputFiles, _mark: function (key, value) { if (value == null) { delete states[key]; } else { states[key] = value; } }, _isModule: isModule };
   XZB.chunks = api;
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; }
 }(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this)));

@@ -201,7 +201,7 @@ const SW_JS = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 
 test('2.1 index.html 有 audit chunk 声明标签，stats 依赖图含 audit', function () {
   check(/<script type="text\/xzb-module" data-xzb-chunk="audit" src="js\/modules\/audit\.js"><\/script>/.test(INDEX_HTML), '声明标签');
-  check(INDEX_HTML.indexOf("['audit', 'modules/audit', 'modules/audit']") >= 0, 'ROWS 条目');
+  check(INDEX_HTML.indexOf("['audit', 'modules/audit']") >= 0, 'ROWS 条目');
   check(INDEX_HTML.indexOf("stats: ['charts', 'ai-insights', 'audit']") >= 0, 'stats DEPS');
 });
 

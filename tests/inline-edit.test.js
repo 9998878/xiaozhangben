@@ -119,11 +119,22 @@ test('2.3 时间 HH:MM 24 小时制', () => {
   });
 });
 
-test('2.4 批注 trim + 30 字截断', () => {
+test('2.4 批注 trim + 80 字截断（与 schema txNote 一致）', () => {
   checkEq(IE.normalizeNote('  午餐·牛肉面  '), '午餐·牛肉面', 'trim');
   checkEq(IE.normalizeNote(null), '', 'null');
   checkEq(IE.normalizeNote(undefined), '', 'undefined');
-  checkEq(IE.normalizeNote('x'.repeat(40)).length, 30, '截断 30');
+  checkEq(IE.normalizeNote('x'.repeat(100)).length, 80, '截断 80');
+  checkEq(IE.NOTE_MAX, 80, 'NOTE_MAX 与 schema LIMITS.txNote 一致');
+});
+
+test('2.5 既有 80 字批注行内编辑不丢字（2.44.1 P2-1 回归）', () => {
+  const long = '字'.repeat(80);
+  const r = IE.validatePatch({ note: long });
+  check(r.ok, 'ok');
+  checkEq(r.patch.note, long, '80 字原样保留');
+  const r2 = IE.validatePatch({ note: long + '溢' });
+  check(r2.ok, 'ok');
+  checkEq(r2.patch.note.length, 80, '超 80 才截断');
 });
 
 /* ============================== 3 validatePatch ============================== */
@@ -275,7 +286,7 @@ test('7.1 ledger 四热区与唯一写通道', () => {
 });
 
 test('7.2 manifest / deps / 声明标签 / sw 预缓存', () => {
-  check(INDEX_HTML.indexOf("['inline-edit', 'modules/inline-edit', 'modules/inline-edit']") >= 0, 'manifest ROWS');
+  check(INDEX_HTML.indexOf("['inline-edit', 'modules/inline-edit']") >= 0, 'manifest ROWS');
   check(INDEX_HTML.indexOf("ledger: ['inline-edit']") >= 0, 'deps ledger');
   check(INDEX_HTML.indexOf('<script type="text/xzb-module" data-xzb-chunk="inline-edit" src="js/modules/inline-edit.js"></script>') >= 0, '声明标签');
   check(SW_JS.indexOf("'./js/modules/inline-edit.js'") >= 0, 'sw PRECACHE');

@@ -31,7 +31,7 @@
   var Core = XZB.Core || (XZB.Core = {});
   var UI = XZB.UI || (XZB.UI = {});
 
-  var NOTE_MAX = 30;
+  var NOTE_MAX = 80;            /* 与 schema LIMITS.txNote、add.js、bill-import.js 一致（2.44.1 修 P2-1：原 30 会静默截断既有长批注） */
   var CENTS_MAX = 99999999999;   /* 9 位整数元 + 2 位小数，与 keypad 口径一致 */
 
   /* ---------------- 纯函数 ---------------- */

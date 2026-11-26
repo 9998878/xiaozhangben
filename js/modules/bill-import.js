@@ -179,10 +179,21 @@
         if (SYNONYMS[field].indexOf(name) >= 0) { map[field] = c; }
       });
     }
+    mapDirectionFallback(headerCells, map);
     for (var r = 0; r < REQUIRED.length; r++) {
       if (map[REQUIRED[r]] === undefined) { return { ok: false, missing: REQUIRED[r] }; }
     }
     return { ok: true, map: map };
+  }
+
+  /* 2.44.1（P2-3）：小账本自身导出用「类型」列装收支（支出/收入/转账）。
+     支付宝也有「类型」列但装的是交易类型（即时到账交易等），且排在「收/支」之前，
+     所以只在没有「收/支」「收支」时才兜底认「类型」，避免把支付宝方向映射错。 */
+  function mapDirectionFallback(headerCells, map) {
+    if (map.direction !== undefined) { return; }
+    for (var c = 0; c < headerCells.length; c++) {
+      if (normHeader(headerCells[c]) === '类型') { map.direction = c; return; }
+    }
   }
 
   /* ---------------- 分类/账户按名称归位（2.32.0） ---------------- */

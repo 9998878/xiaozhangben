@@ -54,14 +54,21 @@
 
 ## 统计合并 / 日历 / 报告存档（2.40.0）
 
-- 合并方向：以原 insights 为基干重写 `stats.js`（独有模块体量大），旧 stats 的趋势/排行移植进来；`insights.js` 删除。`#/insights` 降为历史别名：只在 `parseHash` 层归一到 `stats`（m/r/regen 参数原样保留），地址栏字面改写由 `syncAliasBar` 负责，与 `#/ledger`、`#/mine` 同一套路。底栏四根 `home / calendar / stats / settings`；chunk-manifest 20 项、sw 预缓存 34 项。
+- 合并方向：以原 insights 为基干重写 `stats.js`（独有模块体量大），旧 stats 的趋势/排行移植进来；`insights.js` 删除。`#/insights` 降为历史别名：只在 `parseHash` 层归一到 `stats`（m/r/regen 参数原样保留），地址栏字面改写由 `syncAliasBar` 负责，与 `#/ledger`、`#/mine` 同一套路。底栏四根 `home / calendar / stats / settings`；chunk-manifest 21 项、sw 预缓存 35 项。
 - 收入结构：collect 增 `incomeCats` 桶、summarize 增 `incomeItems`，结构卡/钻取按 `S.kind` 分流；核心结论、值得留意、体检、报告恒支出口径。结构卡＝环图（top5+其他）＋排行合一清单（默认前 5＋其他行，展开看 8＋其他），行带环比，收入口径 tone 反转。
 - 日历页 `calendar.js`：DOM 7 列网格（周一起始），不用 canvas 热力。净额＝收入−支出，`+` 红 / `−` 绿（股市惯例，**仅本页**，其余页面仍是支出红/收入绿）；深浅四档 r=|净额|÷日基准 ≤0.5/1/2/>2，日基准＝`stats.budgetProgress().totalCents ÷ 当月天数`，未设预算退回固定档 ¥100（`FALLBACK_BASE_CENTS`）并给「设预算 ›」入口。当日流水与日历格同源五道过滤（deleted/账本/类型/金额/日期），转账不计；点日开当日清单 → 单笔弹层 → `#/add?id=` 编辑，「补一笔」走 `#/add?date=`。
 - 热力令牌取舍：`charts.heatmap` 未扩展双色阶，改为把原红档重映射到 `--heat-r1..r4`（语义仍是「花得多」），保持统计页支出热力自洽；日历另用 `--heat-g1..g4` / `--heat-r1..r4` 令牌渲染净额格，浅深两套主题各一份。
 - 报告存档：store 层独立 key `'reports'` 与账本主记录平行存放（keyPath:key，**不升 DB 版本**）；报告是派生内容，不进 `schema.validateDb` / `TABLES` / 导出备份 / 云备份（`exportJson` 只走 `buildBackup(ready.db)`）。同日同月同账期覆盖、按 `generatedAt` 倒序、上限 100 淘汰最旧。门面 `XZB.app.reports` 冻结透传 list/get/save/remove。
 - 报告生命周期：统计页 `reportCard` 状态机 3m/6m 引导 → 模块加载 → 隐私告知（`noticeAt`）→ busy → 有今日记录（查看报告＋快照变动提示 `localFp`）→ 无记录（生成解读/重试＋本地兜底＋去设置）；存档入口恒在。AI 失败不落档可重试；`settleReport` ok 分支即使 `S.dead` 也落档（已计费不能丢）。0 点刷新＝`todayCache` 比对＋`scheduleMidnight`（到下个本地 0 点+500ms 自续）＋visibilitychange/focus 唤醒。`report.js` 列表＋详情只读渲染生成时快照，删除走确认弹层；重新生成仅 `generatedOn===today` 可用，深链 `#/stats?m=&r=&regen=1`。
 - 记一笔日期预填：`add.js` 仅新建分支消费 `?date=`，严格 `YYYY-MM-DD`＋`dates.isValidDateStr` 双重校验，编辑分支不受影响。
-- 回归：`tests/calendar-report.test.js` 32 项（日历纯函数、报告 store 内存模式、reportCard 状态机、路由别名、日期预填、合并接线）；`audit-card` / `same-period-ui` 改读合并后的 `stats.js`。
+- 回归：`tests/calendar-report.test.js` 38 项（日历纯函数、报告 store 内存模式、reportCard 状态机、路由别名、日期预填、合并接线）；`audit-card` / `same-period-ui` 改读合并后的 `stats.js`。
+
+## 验收修复（2.44.1）
+
+- SW 缓存键（修 2.41.3 回归）：`normalizeKey` 保留 `?v=` 后预缓存仍写无 query 键，离线 `?v=` 请求恒 miss。现 `VERSION` 由 `CACHE_NAME` 派生，预缓存 21 个 js 分块按 `?v=VERSION` 写入（入口/图标/启动图保持原键），MISSING 清单存带版本键并校验 `record.v`；`cacheFirst` 精确 miss 后 `ignoreSearch` 兜底，旧 index 的旧 `?v=` 也能命中同路径当前分块。回归 `tests/sw-cache.test.js`（vm + 内存 CacheStorage 真跑 install→断网→fetch，锁写入键=查找键）。
+- CSV 两端：`escapeCsv` 首字符 `= + - @ \t \r` 前置 `'` 防公式注入（CWE-1236）；bill-import 仅在没有「收/支」「收支」时兜底认「类型」列（支付宝「类型」列装交易类型，不能误映射），自身导出 CSV 可回导；转账行进 skipped，「已删除=是」行回导会复活（已知边界见 known-issues）。回归 `tests/csv-export.test.js`。
+- 行内批注上限统一 80（与 schema txNote 一致），修长批注静默截断；账单去重无单号时收紧为「同日+同额+同方向+(同非空备注或同分类)」，双时间非空且不同不判重，删 ±3 天宽窗口。回归 `tests/inline-edit.test.js` 2.4/2.5、`tests/bill-dupe.test.js`。
+- 隐私口径：README 改真实口径（内置 AI 默认开启、首启视为同意、密钥公开、第三方端点、可关闭）；行为不变，仍是所有者有意选择（见 known-issues）。
 
 ## 发布与不变量
 

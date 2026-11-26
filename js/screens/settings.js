@@ -1653,18 +1653,26 @@
     return 'CSV 账单';
   }
 
-  /* 有交易单号就只认单号：同一笔账单重复导入仍会被拦住，而同日同额的两笔真账不会被误判 */
-  function billDupeOf(row0, existing, refSet) {
+  /* 有交易单号就只认单号：同一笔账单重复导入仍会被拦住，而同日同额的两笔真账不会被误判。
+     2.44.1（P2-4）：无单号时收紧为「同日 + 同金额 + 同方向 +（同非空备注 或 同分类）」，
+     双方时间均非空且不同不判重。旧版「同金额 ±3 天」过宽：一天两笔 2 元公交、连续三天
+     同价咖啡都会被默认排除，用户不逐行勾回就漏账。categoryId 由调用方先归位再传入。 */
+  function billDupeOf(row0, existing, refSet, categoryId) {
     if (row0.refNo) { return refSet[row0.refNo] === true; }
+    var note0 = String(row0.note || '').trim();
+    var time0 = String(row0.time || '');
     for (var i = 0; i < existing.length; i++) {
       var ex = existing[i];
       if (!ex || ex.deleted === true) { continue; }
       if (Math.round(Number(ex.amountCents) || 0) !== row0.amountCents) { continue; }
-      var d = String(ex.date || '');
-      if (d >= row0.date && d <= row0.date) { /* 同日 */ return true; }
-      var dt = new Date(row0.date + 'T00:00:00').getTime();
-      var de = new Date(d + 'T00:00:00').getTime();
-      if (isFinite(dt) && isFinite(de) && Math.abs(dt - de) <= 3 * 86400000) { return true; }
+      if (String(ex.date || '') !== row0.date) { continue; }
+      if (ex.type !== row0.type) { continue; }
+      var timeEx = String(ex.time || '');
+      if (time0 && timeEx && time0 !== timeEx) { continue; }
+      var noteEx = String(ex.note || '').trim();
+      var sameNote = note0 !== '' && note0 === noteEx;
+      var sameCat = !!categoryId && ex.categoryId === categoryId;
+      if (sameNote || sameCat) { return true; }
     }
     return false;
   }
@@ -1707,7 +1715,6 @@
     var items = [];
     for (var r = 0; r < parsed.rows.length; r++) {
       var row0 = parsed.rows[r];
-      var dupe = billDupeOf(row0, existing, refSet);
       var categoryId = '';
       var accountId2 = '';
       /* 归位只是锦上添花：万一分类/账户表结构不对，也让它退回手选，不能让整个预览炸掉 */
@@ -1718,6 +1725,8 @@
         categoryId = '';
         accountId2 = '';
       }
+      /* 2.44.1：先归位再判重——无单号行的「同分类」口径要用归位后的 categoryId */
+      var dupe = billDupeOf(row0, existing, refSet, categoryId);
       if (categoryId) { matchedCats += 1; }
       if (accountId2) { matchedAccs += 1; }
       items.push({ row: row0, dupe: dupe, checked: !dupe, categoryId: categoryId, accountId: accountId2 });

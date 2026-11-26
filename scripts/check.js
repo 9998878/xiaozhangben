@@ -153,6 +153,25 @@ if (fs.existsSync(agentsPath) && chunks.length) {
   else bad('AGENTS.md', `地图漏了 ${missing.join('、')}`);
 }
 
+/* ---- 2.44.1：architecture 数字与 README 超时口径对账（验收报告 P3-1 防再漂移）---- */
+const archPath = path.join(ROOT, 'docs/architecture.md');
+if (fs.existsSync(archPath) && chunks.length) {
+  const arch = fs.readFileSync(archPath, 'utf8');
+  const am = /chunk-manifest\s*(\d+)\s*项、sw 预缓存\s*(\d+)\s*项/.exec(arch);
+  if (am && Number(am[1]) === chunks.length) ok(`architecture chunk 数 = ${chunks.length}`);
+  else bad('docs/architecture.md', `chunk-manifest 项数应写 ${chunks.length}（实际 ${am ? am[1] : '未找到'}）`);
+  const pcBlock = /var PRECACHE = \[([\s\S]*?)\];/.exec(readDoc('sw.js'));
+  const pcCount = pcBlock ? pcBlock[1].split('\n').filter((l) => l.includes("'./")).length : 0;
+  if (am && Number(am[2]) === pcCount) ok(`architecture 预缓存数 = ${pcCount}`);
+  else bad('docs/architecture.md', `sw 预缓存项数应写 ${pcCount}（实际 ${am ? am[2] : '未找到'}）`);
+}
+if (readme) {
+  const nav = /NAV_TIMEOUT_MS\s*=\s*(\d+)/.exec(readDoc('sw.js'));
+  const secs = nav ? String(Number(nav[1]) / 1000) : '';
+  if (secs && readme.includes(`${secs} 秒超时`)) ok(`README 导航超时口径 = ${secs} 秒`);
+  else bad('README.md', `导航超时应写「${secs} 秒超时」（sw.js NAV_TIMEOUT_MS）`);
+}
+
 console.log('');
 if (problems.length) {
   console.error(`自检失败：${problems.length} 项`);
