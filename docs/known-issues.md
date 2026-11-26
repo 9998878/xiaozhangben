@@ -9,7 +9,7 @@
 - **密钥公开**：按所有者要求，千问 MaaS 端点 + `qwen4-max` + 密钥直接内置在公开仓库（`js/modules/core-assistant.js` `AI_DEFAULT_SERVICE`），任何打开页面的人都能在源码里看到并调用这把密钥，免费余量可能被陌生人刷掉。这是「手机零配置即用」的固有代价；介意者在「我的→助手→在线模型」换自己的密钥即可（自定义配置不会被播种覆盖）。
 - **默认开启 + 默认同意隐私告知**：首次运行由启动链 `seedDefaultAiService()` 调 `llm.seedDefaultService()` 播种，默认 `enabled:true` 且 `noticeAt>0`，等于替首次打开的人默认同意把当轮原话/账户名/分类名发给该服务。所有者明确选择此口径。2.41.1 起旧内置免费档（OVH 免密钥）随启动升级到新默认服务并保留开关/告知；自定义配置幂等不覆盖。
 - **余量受限**：该密钥当前仅 `qwen4-max` / `deepseek-v4.1-flash` 有免费余量，其余模型 403（额度用完/未开通）。两者默认会思考，故三条出站口均带 `enable_thinking:false`；端点不认时 400 剥字段重试。余量耗尽后在线请求归 `E_AS_NET_CONFIG`，小助手/解读回落本地。
-- **README 已同步（2.44.1）**：隐私段已改为「默认开启 + 首启视为同意 + 密钥公开 + 第三方端点 + 可关闭」的真实口径，不再声称默认关闭。端点域名 `maas.qianwenaiapi.com` 非阿里官方 dashscope 域名，归属仍需所有者核实。
+- **README 已同步（2.44.1）**：隐私段已改为「默认开启 + 首启视为同意 + 密钥公开 + 第三方端点 + 可关闭」的真实口径，不再声称默认关闭。**端点归属已核实（2.44.2 后）**：`maas.qianwenaiapi.com` CNAME 到阿里云北京 NLB（`nlb-*.cn-beijing.nlb.aliyuncsslb.com`），域名 NS 为 `alibabadns.com/.cn`，且千问 AI 平台官方文档（platform.qianwenai.com）以该域名为 OpenAI 兼容 base_url、沿用 `DASHSCOPE_API_KEY`——系阿里官方千问平台新域名，非可疑第三方中转。公开密钥被刷的余量风险仍在（有意取舍）。
 
 ## 已修（2.38.1 批次）
 
@@ -104,7 +104,7 @@
 - UI：`home.js` 情境入口开关只有读取、没有 UI（注释自称「我的里可关」未兑现）——补开关或删死码，需产品定。
 - 解析边界：多笔无分隔已于 2.38.0 保守拆分（每段都落已知分类才拆）；剩余歧义——物品名+数字（如 `ChatGPT25`）按 ASCII 边界语义不拆（与 nl 同口径），单段多候选金额仍取「最后一个候选」口径。
 - 测试基建：580+ 处源码字符串断言易误红（2.44.1 起新增回归优先行为级：sw-cache / csv-export / bill-dupe；2.44.1 后补 books / recurring-engine / migrate-upgrade / goals 四组盲区行为测试；2.44.2 补 bill-csv-edge / store-upgrade；2.44.2 后再补 books-dom（render/表单/管理浮层 DOM 桩）与 store-load-wiring（load 升级接线，假 indexedDB 真跑），验收报告⑦-1/2 已闭合；e2e-harness 已在 docs/release.md 挂指针，仍无 CI 浏览器冒烟）；harness 无共享 helper；CI 已补 GitHub Actions（跑 `scripts/test.js` + `scripts/check.js`）。
-- 首屏体积（遗留 P2）：index.html 约 1.28 MB 单文件未拆分（架构取舍见 architecture）；2.44.2 后已加棘轮体积预算（frontend-perf 用例 5：入口 ≤1.35 MB、单 chunk ≤240 KB、合计 ≤1.6 MB），只防继续膨胀，拆分与线上压缩确认仍待办。
+- 首屏体积（遗留 P2，2.44.2 后核验）：index.html 约 1.28 MB 单文件（CSS 约 355K 字符 + 内联 JS 约 838K 字符）。**线上压缩已确认生效**：Pages 回 gzip（brotli 未启用），入口实际传输约 321 KB（curl 实测 329,023 B），网络层不再是 1.28 MB。拆分评估结论：为传输而拆收益已消失；剩余成本是低端机解析约 840KB 内联 JS，但核心块内联是零构建/离线首启的有意取舍，且 40+ 测试文件靠内联块 marker 加载，外置会破坏测试基建——暂不拆，维持单文件 + 体积预算棘轮（frontend-perf 用例 5）。若低端机解析成为实测瓶颈，再立独立架构批次做构建期压缩 + 核心外置 + 加载器重写。
 - CSV 回导边界（2.44.1）：自身导出 CSV 已可回导，但「已删除=是」的行会被重新导入为有效账——导入侧不认「已删除」列，待后续扩展。引号内换行字段已于 2.44.2 支持（多行批注/微信多行商品不再丢账，回归 `tests/bill-csv-edge.test.js`）；末尾引号未闭合的畸形文件宽容解析并给警告，可能吞并后续行，属已知取舍。
 - **iconOk 白名单**（2.28.3 已回退 2.28.2 的启用）：重新启用前必须先做「未知图标 → 默认图标」的**加载期兼容迁移**——老库图标键可能来自已下线的注册表条目，加载期严格校验会 `E_STORAGE_CORRUPT` 把用户挡在数据门外（数据与快照仍在，但打不开）。教训：加载路径上的校验收紧，必须有迁移或降级方案。
 

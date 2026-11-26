@@ -78,6 +78,13 @@
 - IndexedDB 升级失败闭合（新 P3-2）：`openRawDatabase` 的 `onupgradeneeded` catch 内显式 `req.transaction.abort()`，升级事务不得带半套 schema 提交；失败走 onerror → 内存降级。回归 `tests/store-upgrade.test.js`（沙箱注入假 indexedDB，浏览器升级语义，真跑 store.open）。
 - inline-edit 头注释 30 字 → 80（2.44.1 改值漏改注释，新 P3-3）。
 
+## 首屏体积与压缩核验（2.44.2 后）
+
+- 实测构成（字符数）：index.html 约 1.20M，其中 CSS 约 355K、内联 JS 约 838K（store 118K / icons 83K / schema 82K / backup 58K / stats 57K / photo-viewer 49K / migrate 34K / recurrence 33K 等）。磁盘 UTF-8 约 1.28 MB。
+- 线上压缩：GitHub Pages 对 `Accept-Encoding: gzip` 回 `Content-Encoding: gzip`，入口传输 329,023 B（约 321 KB，压掉约 74%）；只发 `br` 时不压缩（Pages 未启用 brotli）。home.js 14 KB、core-assistant.js 67 KB（gzip）。**「首屏 1.28 MB」是解析/缓存口径，不是网络传输口径。**
+- 拆分决策：为网络传输而拆的收益已被 gzip 消除；剩余成本是低端机 boot 解析约 840KB 内联 JS。核心块内联是零构建 + 离线首启的有意取舍，且测试基建（40+ 文件）按内联块 marker 加载真实实现，外置核心会整体破坏该范式。结论：暂不拆，维持单文件 + frontend-perf 用例 5 体积棘轮。低端机解析若成实测瓶颈，另立架构批次（构建期压缩 + 核心外置 + 加载器重写 + 测试加载器同步），不在验收修复批次里盲改。
+- 浏览器等效抽查（localhost 隔离源，非线上域名）：2.44.2 加载、SW 接管、缓存名 xzb2-v2.44.2、记账/行内改批注/日期弹层/删除（带撤销）全通过；停服后整页导航与离线记一笔均成功（SW 缓存兜底，P1-1 修复真机级验证）。iPhone 真机冷启动/飞行模式仍按 release.md 清单由所有者执行。
+
 ## 发布与不变量
 
 - 版本三处：`index.html` 的 `XZB.version`（2.35.0 起唯一字面量在 `<head>` 的 `js/ui/preload-home.js` 块，app 块不再赋值）、`sw.js` 的 `CACHE_NAME`/`CACHE_LABEL`、`tests/category-expansion.test.js` 7.1/7.2 的转义正则。
