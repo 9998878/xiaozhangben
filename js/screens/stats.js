@@ -1680,7 +1680,7 @@
     var elapsed = 0;
     for (var dm = 0; dm < report.win.months.length; dm += 1) {
       var mKey = report.win.months[dm];
-      elapsed += mKey === now ? Number(todayStr().slice(8, 10)) : daysInMonth(mKey);
+      elapsed += mKey === now ? Number(todayStr().slice(8, 10)) : daysInMonthOf(mKey);
     }
     var dailyAvg = elapsed > 0 ? Math.round(totals.expenseCents / elapsed) : 0;
     var avgCell = el('div', { className: 's-insights-sum__cell' });
@@ -2260,7 +2260,7 @@
     var elapsed = 0;
     for (var dm = 0; dm < report.win.months.length; dm += 1) {
       var mKey = report.win.months[dm];
-      elapsed += mKey === now ? Number(todayStr().slice(8, 10)) : daysInMonth(mKey);
+      elapsed += mKey === now ? Number(todayStr().slice(8, 10)) : daysInMonthOf(mKey);
     }
     var cats = report.win.cats.slice(0, RULES.LEGEND_TOP).map(function (c) {
       return { id: c.id, name: c.name, icon: c.icon, amountCents: c.amountCents, count: c.count, pct: c.pct, colorVar: c.colorVar };
