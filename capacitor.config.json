@@ -1,0 +1,15 @@
+{
+  "appId": "io.github.u9998878.xiaozhangben",
+  "appName": "小账本",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#FFFFFF",
+    "preferredContentMode": "mobile"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

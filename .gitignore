@@ -1,0 +1,7 @@
+# iOS 壳与云构建产物（Web 发布不需要这些）
+node_modules/
+www/
+ios/
+*.ipa
+.DS_Store
+npm-debug.log*

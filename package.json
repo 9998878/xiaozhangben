@@ -1,0 +1,27 @@
+{
+  "name": "xiaozhangben-ios",
+  "version": "1.0.0",
+  "private": true,
+  "description": "小账本 iOS 原生壳（Capacitor）。Web 应用本体仍是仓库根的零依赖 PWA；这里的依赖只服务于原生壳与 GitHub Actions 云构建，不进 Web 产物。",
+  "scripts": {
+    "www": "node scripts/build-www.js",
+    "test": "node scripts/test.js",
+    "check": "node scripts/check.js",
+    "ios:add": "cap add ios",
+    "ios:sync": "cap sync ios",
+    "ios:open": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/share": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

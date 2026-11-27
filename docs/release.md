@@ -78,3 +78,15 @@ curl -s "https://9998878.github.io/xiaozhangben/sw.js?t=$(date +%s)" | grep CACH
 数据安全：schema 新字段一律带默认值向后兼容（老代码读新数据仅丢未知字段不报错）；回滚丢字段前提醒用户先导出 JSON 备份；本机自动快照（IndexedDB `STORE_SNAPSHOTS`）是最后兜底。
 
 约定（2026-11-08 起）：push 前两道闸门——test+check 全绿、用户看过截图；不满足不 push，没 push 就不存在线上回滚。
+
+## iOS 壳发布（自签侧载，不走 Pages）
+
+Web 版本号/缓存名不变，只改壳或桥接时：
+
+1. `node scripts/test.js && node scripts/check.js` 全绿（含 native-bridge / build-www 回归）；
+2. push `main` → `.github/workflows/ios-build.yml` 自动云构建未签名 IPA（也可 Actions 手动 Run workflow）；
+3. Actions 运行页 Artifacts 下载 `xiaozhangben-unsigned-ipa`（zip 内是 .ipa，保留 30 天）；
+4. Windows Sideloadly + 同 Apple ID + 同 Bundle ID **覆盖安装**到 iPhone（严禁先卸载，会清数据）；
+5. 真机抽查：飞行模式冷启动、记一笔强杀重开、「文件」App 看自动镜像更新、导出 JSON 分享面板正常。
+
+完整步骤、7 天续签与丢数据坑：`docs/ios-sideload.md`。

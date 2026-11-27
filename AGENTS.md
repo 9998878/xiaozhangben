@@ -8,6 +8,7 @@
 - `node scripts/test.js` — 跑 `tests/*.test.js`，必须全绿
 - `node scripts/check.js` — 提交前自检：版本三处、AGENTS 长度、文档指针、旧文档残留
 - `node scripts/smoke.js` — 浏览器离线冒烟（需本机 Chrome/Edge；CI 同款，Node 测试测不到的入口闭环）
+- `node scripts/build-www.js` — 生成 Capacitor www 产物（仅 iOS 壳用）；云构建与侧载见 `docs/ios-sideload.md`
 - 发布：push `main` 后 Pages 自动更新（约 1 分钟），清单见 `docs/release.md`
 
 ## 地图
@@ -16,8 +17,9 @@
 - `js/screens/` — 页面：home、ledger、stats、calendar、report、accounts、plan、add、settings、assistant、books
 - `js/modules/` — 共用逻辑：core-assistant（LLM 传输与错误码）、insight-qa（本地洞察问答，纯计算）、ai-insights（月度指标与提示词）、nl（中文解析）、bill-import（账单 CSV 解析）、habit（习惯记账建议）、audit（账单体检：重复/周期/断档/异常，纯函数）、charts、keypad、icon-picker、inline-edit（行内编辑校验/mutator 纯函数 + 浮层与行内输入件）
 - `sw.js` — Service Worker，按 chunk-manifest 预缓存
+- `native/` — iOS 壳桥接（只注入 www 产物，Web 不加载）；`capacitor.config.json`/`package.json` — iOS 壳与云构建配置
 - `tests/` — 纯 node 断言，无框架；`scripts/` — 开发脚本
-- `docs/` — 按需查：`architecture.md`、`known-issues.md`、`release.md`
+- `docs/` — 按需查：`architecture.md`、`known-issues.md`、`release.md`、`ios-sideload.md`
 - `CHANGELOG.md` — 版本历史；`README.md` — 用户视角
 
 ## 不变量（`scripts/check.js` 会红）

@@ -1,0 +1,129 @@
+name: ios-unsigned-ipa
+
+# 云构建未签名 IPA：没有 Mac 也能出 iOS 包。
+# 产物在 Actions 运行页的 Artifacts 下载（zip 里是 xiaozhangben-unsigned.ipa），
+# 拿回 Windows 用 Sideloadly + 免费 Apple ID 签名安装，完整步骤见 docs/ios-sideload.md。
+# 本仓库是 public，macOS runner 不消耗付费分钟数。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/**'
+      - 'native/**'
+      - 'icons/**'
+      - 'splash/**'
+      - 'manifest.webmanifest'
+      - 'favicon.ico'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/build-www.js'
+      - 'scripts/lib.js'
+      - '.github/workflows/ios-build.yml'
+
+concurrency:
+  group: ios-unsigned-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install shell dependencies
+        run: npm ci
+
+      - name: Unit tests (gate)
+        run: node scripts/test.js
+
+      - name: Build www (web runtime + native bridge injection)
+        run: node scripts/build-www.js
+
+      - name: Generate iOS project (SPM, no CocoaPods)
+        run: |
+          # CLI 7.6 已知大小写 bug：--packagemanager SPM 会正确复制 SPM 模板，
+          # 但 add 收尾的 update 步误走 pod install（无 Podfile 必失败）。
+          # 模板此时已复制完整；下一步 cap sync 按磁盘上的 CapApp-SPM 正确走 SPM 路径。
+          npx cap add ios --packagemanager SPM || echo "add trailing update failed (known CLI case bug); cap sync will finish"
+          test -d ios/App/CapApp-SPM || { echo "SPM template missing"; exit 1; }
+
+      - name: Sync web assets and plugins (SPM detected from CapApp-SPM)
+        run: npx cap sync ios
+
+      - name: App icon (prefer icons/icon-1024.png, else upscale 512)
+        run: |
+          ICONSET="ios/App/App/Assets.xcassets/AppIcon.appiconset"
+          if [ -f icons/icon-1024.png ]; then
+            cp icons/icon-1024.png "$ICONSET/AppIcon-1024.png"
+          else
+            sips -z 1024 1024 icons/icon-512.png --out "$ICONSET/AppIcon-1024.png" >/dev/null
+          fi
+          cat > "$ICONSET/Contents.json" <<'EOF'
+          {
+            "images": [
+              { "filename": "AppIcon-1024.png", "idiom": "universal", "platform": "ios", "size": "1024x1024" }
+            ],
+            "info": { "author": "xcode", "version": 1 }
+          }
+          EOF
+
+      - name: Info.plist (Documents visible in Files app, photo/camera usage strings)
+        run: |
+          PLIST="ios/App/App/Info.plist"
+          add_or_set() {
+            /usr/libexec/PlistBuddy -c "Add :$1 $2 $3" "$PLIST" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c "Set :$1 $3" "$PLIST"
+          }
+          add_or_set UIFileSharingEnabled bool true
+          add_or_set LSSupportsOpeningDocumentsInPlace bool true
+          add_or_set ITSAppUsesNonExemptEncryption bool false
+          add_or_set NSPhotoLibraryUsageDescription string "导入账单照片与备份文件时需要访问相册"
+          add_or_set NSCameraUsageDescription string "拍摄票据照片时需要使用相机"
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Build unsigned .app (Release, device)
+        run: |
+          VERSION="$(node -p "require('./scripts/lib').currentVersion()")"
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            build
+
+      - name: Package Payload/IPA
+        run: |
+          cd "$RUNNER_TEMP"
+          mkdir -p Payload
+          cp -R dd/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry "$GITHUB_WORKSPACE/xiaozhangben-unsigned.ipa" Payload
+          ls -lh "$GITHUB_WORKSPACE/xiaozhangben-unsigned.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xiaozhangben-unsigned-ipa
+          path: xiaozhangben-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30

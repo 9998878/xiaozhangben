@@ -111,6 +111,15 @@
 - 冒烟补拆块依赖断言（§6f）：`#/assistant` 访问后 `XZB.core.insightqa` 必须真值。manifest DEPS 漏写 `core-assistant→insight-qa` 时 `handleInsight` 静默降级 `handleQuery`，路由内容照样存在；frontend-perf 1.5 只锁声明不锁运行期，这条是唯一运行期闸门。
 - 文档体积口径：入口实测 1,308,974 B ≈ 1.31 MB，README/architecture/known-issues 统一更新（旧文 1.27/1.28 MB 为 2.44.2 时点口径）。
 
+## iOS 原生壳（Capacitor · 自签侧载）
+
+- 形态：Web 源码零改动。`scripts/build-www.js` 把运行时文件（index.html、js/、icons/、splash/、favicon、manifest）复制进 `www/`，并在唯一 `</body>` 前注入 `native/bridge.js`（作为 `js/native-bridge.js?v=版本`）；sw.js 不进 www——`capacitor://` 协议下 `registerServiceWorker` 的协议守卫（只认 http/https）直接跳过，壳内资源本就在包内。复制用 readdirSync/copyFileSync 保守递归（部分 Windows node 构建上 fs.cpSync 原生崩溃）。
+- 壳配置：`capacitor.config.json`（appId `io.github.u9998878.xiaozhangben`、webDir `www`、CapacitorHttp enabled——AI 解读/Gist 云备份的 fetch 走原生层，绕开 capacitor:// 源 CORS）；`package.json` 依赖只服务壳与云构建（Capacitor 7，SPM 无 CocoaPods），不进 Web 零依赖约束。
+- 桥接（`native/bridge.js`，挂 `XZB.NativeBridge`，非 Capacitor 环境 no-op）：① 接管 `Core.backup.download` → 写 `Documents/导出/` + 系统分享面板（WKWebView 不支持 a[download] Blob 通道，序列化仍走 `backup.exportText`）；② `Core.store.subscribe` → 5s 防抖单飞镜像 `backup.exportJson()` 到 `Documents/小账本-自动备份.json`（照片守卫失败自动降级纯账目），退后台/pagehide 尽力 flush，`savedAt` 去重；③ 冷启动本机 0 笔且镜像有账 → confirm 还原（`backup.import` replace，自带 pre-import 快照/回滚/照片回填），拒绝按镜像 exportedAt 记忆（localStorage `xzb.native.v1`，仅原生容器存在，Web 三键不变）；④ 镜像收缩（删除/清空）先轮转旧镜像为 `小账本-自动备份-上一份.json`。
+- 主存储仍是 IndexedDB `xzb2`；Documents 镜像是手机外可见的额外保险，不是第二数据源。Info.plist 开 `UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`（workflow PlistBuddy 注入），镜像与导出文件在「文件」App → 我的 iPhone → 小账本 可见可取。
+- 云构建：`.github/workflows/ios-build.yml`（macos-15，public 仓库免费分钟数）——npm ci → tests → build-www → `cap add ios --packagemanager SPM`（CLI 7.6 大小写 bug：add 收尾 update 误走 pod install，workflow 容错后由 sync 按磁盘 CapApp-SPM 正确走 SPM）→ `cap sync ios` → 图标（优先 icons/icon-1024.png，否则 sips 放大 512）/Info.plist → `xcodebuild CODE_SIGNING_ALLOWED=NO` → Payload/IPA → artifact（30 天）。Windows 侧 Sideloadly + 免费 Apple ID 签名，7 天覆盖续签；完整步骤与丢数据坑见 `docs/ios-sideload.md`。
+- 回归：`tests/native-bridge.test.js`（假插件 vm 沙箱驱动真实实现）、`tests/build-www.test.js`（产物契约 + 源码零改动 + 输出目录守卫）。
+
 ## 发布与不变量
 
 - 版本四处：`index.html` 的 `XZB.version`（2.35.0 起唯一字面量在 `<head>` 的 `js/ui/preload-home.js` 块，app 块不再赋值）、`sw.js` 的 `CACHE_NAME`/`CACHE_LABEL`、`tests/category-expansion.test.js` 7.1/7.2 与 `tests/calendar-report.test.js` 6.3 的转义正则（第 4 处于 2.44.6 发版踩到后纳入 check.js）。
