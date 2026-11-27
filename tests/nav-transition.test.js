@@ -5,13 +5,16 @@
  *
  * 运行：node tests/nav-transition.test.js（scripts/test.js 自动收集）
  *
- * 真实行为断言在 scripts/smoke.js §6b（CI 浏览器里跑：Tab 根横切不调
- * startViewTransition、二级页进入调用、首页嵌入明细延后挂载落位）。
+ * 真实行为断言在 scripts/smoke.js §6b/6c/6d（CI 浏览器里跑：Tab 根横切不调
+ * startViewTransition、二级页进入调用、首页嵌入明细延后挂载落位、返回路径
+ * back() 后明细必须挂载、记一笔保存回首页新账可见）。
  * 路由渲染器深耦合应用启动，Node 沙箱无法独立真跑，本文件按 frontend-perf
  * 范式做源码契约检查，锁住三处改动的关键结构，防后续重构静默回退：
  *   1) Tab 根排除 VT 快照（renderRoute 闸门含 nav !== 'tab'）
  *   2) 转场专用时长令牌（--dur-nav-push/--dur-nav-tab，reduce 归零）
- *   3) 首页嵌入明细延后挂载 + 过期守卫 + 滚动恢复（home.js / ctx.scrollTop）
+ *   3) 首页嵌入明细经 ctx.afterMount 延后挂载 + 过期守卫 + 滚动恢复
+ *      （2.44.6 P0-1：render 内自排 0ms 定时器会先于 VT 的 swapDom 触发，
+ *      isConnected 守卫把明细永久丢弃；钩子由路由在入文档后调用）
  */
 
 const fs = require('fs');
@@ -88,13 +91,14 @@ test('2.3 屏幕入场与 VT 方向化规则改用专用令牌', function () {
 
 section('3 首页：嵌入明细延后挂载');
 
-test('3.1 mountLedger 调用在 setTimeout 内且有过期守卫', function () {
+test('3.1 mountLedger 经 ctx.afterMount 排期，setTimeout 内且有过期守卫', function () {
   const at = HOME_JS.indexOf('view.controller = mountLedger(ledgerHost, ctx, view);');
   check(at >= 0, '找不到嵌入明细挂载调用');
   const before = HOME_JS.slice(Math.max(0, at - 700), at);
+  check(before.indexOf('ctx.afterMount = function () {') >= 0,
+    '挂载应经 ctx.afterMount 钩子排期（P0-1：render 内自排定时器会与 VT 的 swapDom 竞态）');
   check(before.indexOf('global.setTimeout(function () {') >= 0, '挂载应延后到宏任务（换屏先落轻量内容）');
   check(before.indexOf('view.dead || view.destroyed') >= 0, '缺少 destroy/dead 过期守卫');
-  check(before.indexOf('ledgerHost.isConnected === false') >= 0, '缺少宿主脱离文档守卫');
 });
 
 test('3.2 挂载后按路由目标滚动位恢复', function () {
@@ -112,6 +116,15 @@ test('3.3 同步阶段仍先渲染头部/预算/待入账（轻量内容不等�
   const budgetAt = HOME_JS.indexOf('var budgetCard = buildBudget(view);');
   check(renderAt >= 0 && headAt > renderAt && headAt < mountAt, '头部应先于明细挂载构建');
   check(budgetAt > renderAt && budgetAt < mountAt, '预算卡应先于明细挂载构建');
+});
+
+test('3.4 路由在屏幕入文档后调用 afterMount（2.44.6 P0-1 返回路径契约）', function () {
+  const appendAt = INDEX_HTML.indexOf('rootEl.appendChild(screenEl);');
+  const hookAt = INDEX_HTML.indexOf('screenCtx.afterMount();');
+  check(appendAt >= 0 && hookAt > appendAt, 'swapDom 应在 appendChild 之后调用 screenCtx.afterMount');
+  check(INDEX_HTML.indexOf("typeof screenCtx.afterMount === 'function'") >= 0, '缺少 afterMount 类型守卫');
+  check(HOME_JS.indexOf('ledgerHost.isConnected === false') < 0,
+    'home 不应再以 isConnected 早退（返回路径宿主尚未入文档时会永久丢弃明细）');
 });
 
 console.log('\n通过 ' + passCount + ' / 失败 ' + failCount);

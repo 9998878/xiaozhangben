@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.44.5';
+  XZB.version = '2.44.6';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -33687,10 +33687,11 @@ textarea::selection {
     body.setAttribute('data-screen', route.view);
     screenEl.appendChild(body);
 
+    var screenCtx = null;
     if (isMissing) {
       body.appendChild(buildPlaceholder(route.view, true));
     } else {
-      var screenCtx = buildContext(route);
+      screenCtx = buildContext(route);
       /* 2.44.4：把路由目标滚动位交给屏幕——重块延后挂载时 swapDom 会因列表
          还不够高把 scrollTop 夹回 0，屏幕补建完成后按此值恢复（见 home.js）。 */
       screenCtx.scrollTop = Number(scrollTop) || 0;
@@ -33716,6 +33717,17 @@ textarea::selection {
       }
       focusTitle(screenEl);
       if (typeof opts.after === 'function') opts.after();
+      /* 2.44.6（P0-1）：屏幕挂载钩子——屏幕已 appendChild 进文档后恰好调用一次。
+         VT 的更新回调晚于 0ms 定时器执行：屏幕若在 render 里自排定时器，返回路径
+         （nav=back 走 VT）会先于 swapDom 触发，isConnected 守卫把嵌入明细永久丢弃。
+         移到这里后天然覆盖 VT / 非 VT / 首屏三条路径（见 home.js ctx.afterMount）。 */
+      if (screenCtx && typeof screenCtx.afterMount === 'function') {
+        try {
+          screenCtx.afterMount();
+        } catch (error) {
+          if (global.console && console.warn) console.warn('[小账本] afterMount 失败', error);
+        }
+      }
     }
 
     /* 2.44.4（切页卡顿）：Tab 根横切不再走 View Transition——整页快照捕获 +

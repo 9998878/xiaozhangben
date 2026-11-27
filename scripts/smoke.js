@@ -4,7 +4,8 @@
 /* 浏览器离线冒烟（2.44.3，执行检验报告 P2-2）：把验收时手工跑通的 CDP 流程自动化。
    Node 测试测不到 DOM 渲染、路由、SW 生命周期和离线启动——这里补上最小真实闭环：
    静态服务 → 在线真实键盘记一笔 → 读 IndexedDB → 断网 reload → 离线再记一笔 →
-   恢复联网 reload → 校验版本、缓存名、两笔数据、控制台错误 + 主路由冒烟。
+   恢复联网 reload → 校验版本、缓存名、两笔数据、控制台错误 + 主路由冒烟 +
+   切换/返回路径/端到端记账/历史月统计断言（2.44.6 补 §6c/6d/6e，验收报告 P0-1/P2-2）。
 
    零运行时依赖：Node ≥ 22（内置 fetch/WebSocket）+ 本机 Chrome/Edge headless（CDP）。
    用法：node scripts/smoke.js；可用 CHROME_PATH 指定浏览器可执行文件。
@@ -354,9 +355,16 @@ async function main() {
        手改 location.hash 走 animate:false 的外部地址路径，测不到转场决策。 */
     await evaluate(`(function(){
       window.__vtCalls = 0;
+      window.__vtActive = 0;
       if (document.startViewTransition) {
         var orig = document.startViewTransition.bind(document);
-        document.startViewTransition = function(cb){ window.__vtCalls += 1; return orig(cb); };
+        document.startViewTransition = function(cb){
+          window.__vtCalls += 1;
+          var t = orig(cb);
+          window.__vtActive += 1;
+          t.finished.finally(function(){ window.__vtActive -= 1; });
+          return t;
+        };
       }
       return true;
     })()`);
@@ -376,6 +384,74 @@ async function main() {
     const vtAfterBackTab = await evaluate('window.__vtCalls');
     if (vtAfterBackTab !== vtAfterPush) { fail('子页回 Tab 根也不应新增整页快照，实际 ' + vtAfterBackTab + ' 次'); }
     console.log('✓ 切换行为：Tab 根无整页快照 · 二级页有推入 · 首页明细延后挂载落位');
+
+    /* ---- 6c 返回路径（2.44.6 P0-1 回归）：go('#/add') → back() 走 nav=back/VT，
+       与 6b 的 go('#/home')（tab，无 VT）是两条不同代码路径——验收报告 P0-1
+       正是只测 Tab 漏检的。返回后嵌入明细必须挂载，且 back 确实走了 VT。 ---- */
+    await evaluate("XZB.router.go('#/add')");
+    await waitFor("!!document.querySelector('#view-root .app-screen[data-view=\"add\"]')", 8000, '进入记一笔页');
+    const vtBeforeBack = await evaluate('window.__vtCalls');
+    await evaluate("XZB.router.back()");
+    await waitFor("!!document.querySelector('#view-root .app-screen[data-view=\"home\"]')", 8000, 'back() 返回首页');
+    await waitFor("!!document.querySelector('[data-ledger-embed=\"1\"]')", 8000, '返回首页后明细必须挂载');
+    const vtAfterBack = await evaluate('window.__vtCalls');
+    if (vtAfterBack <= vtBeforeBack) { fail('back() 返回应走 View Transition（nav=back），实际未新增调用'); }
+    console.log('✓ 返回路径：go(#/add)→back() 走 VT · 明细挂载落位');
+
+    /* ---- 6d 记一笔→保存→返回首页端到端（P0-1 用户可见回归）：
+       新账必须出现在明细行里（行数 +1 且金额可见），不能只剩顶部月汇总。 ---- */
+    const rowsBefore = await evaluate("document.querySelectorAll('[data-ledger-embed=\"1\"] .s-ledger-item').length");
+    await evaluate("XZB.router.go('#/add')");
+    await waitFor("!!document.querySelector('.s-add-draft__amt')", 10000, '记一笔页就绪（端到端）');
+    /* 入场推入转场期间点击会被快照层吞掉：等转场完全结束再走真实输入管线 */
+    await waitFor("window.__vtActive === 0", 8000, '记一笔入场转场结束');
+    await clickAt('.s-add-draft__amt');
+    await waitFor("!!document.querySelector('.c-keypad__key[data-key=\"confirm\"]')", 10000, '记账键盘就绪（端到端）');
+    for (const k of ['6', '7', 'dot', '8', '9']) { await clickAt('.c-keypad__key[data-key="' + k + '"]'); }
+    await clickAt('.c-keypad__key[data-key="confirm"]');
+    await waitFor("location.hash === '#/home' || location.hash === '' || location.hash === '#/'", 10000, '保存后回首页');
+    await waitFor("!!document.querySelector('[data-ledger-embed=\"1\"]')", 8000, '保存返回首页后明细挂载');
+    await waitFor("(function(){var h=document.querySelector('[data-ledger-embed=\"1\"]');return !!h && h.textContent.indexOf('67.89')>=0;})()", 8000, '新账 67.89 在明细中可见');
+    const rowsAfter = await evaluate("document.querySelectorAll('[data-ledger-embed=\"1\"] .s-ledger-item').length");
+    if (rowsAfter !== rowsBefore + 1) { fail('保存后明细行数未 +1：' + rowsBefore + ' → ' + rowsAfter); }
+    bills = await readBills();
+    if (!hasBill(bills, 6789)) { fail('端到端记账未落库：' + JSON.stringify(bills)); }
+    console.log('✓ 端到端：记 67.89→保存→返回首页 · 明细行数 +1 · 金额可见');
+
+    /* ---- 6e 历史月统计（2.44.6 P2-2 回归）：经 app.commit 种一笔上月账 →
+       深链进入该月 → 无错误卡、日均分母 = 整月天数、账期标题不再写「本月」。
+       2.44.5 的 daysInMonth 回归潜伏 5 个版本，就是因为统计页没有渲染层断言。 ---- */
+    const now = new Date();
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevKey = prev.getFullYear() + '-' + String(prev.getMonth() + 1).padStart(2, '0');
+    const prevDays = new Date(prev.getFullYear(), prev.getMonth() + 1, 0).getDate();
+    const seedOk = await evaluate(`XZB.app.commit(function (db) {
+      var src = null;
+      for (var i = 0; i < db.transactions.length; i++) {
+        var t = db.transactions[i];
+        if (!t.deleted && t.type === 'expense') { src = t; break; }
+      }
+      if (!src) { return { abort: true, message: '没有可克隆的支出账' }; }
+      var copy = JSON.parse(JSON.stringify(src));
+      copy.id = 'tx_smokehist01';
+      copy.date = '${prevKey}-15';
+      copy.amountCents = 4567;
+      copy.note = '';
+      db.transactions.push(copy);
+    }, { label: '冒烟历史月种子', undo: false }).then(function (r) { return !!(r && r.ok); })`);
+    if (seedOk !== true) { fail('历史月种子账写入失败'); }
+    const expectAvg = (45.67 / prevDays).toFixed(2);
+    await evaluate("location.hash = '#/stats?m=" + prevKey + "'");
+    await waitFor("!!document.querySelector('#view-root .app-screen[data-view=\"stats\"]')", 8000, '进入历史月统计');
+    await waitFor("(function(){var s=document.querySelector('#view-root .app-screen[data-view=\"stats\"]');return !!s && s.textContent.indexOf('日均支出')>=0;})()", 10000, '统计摘要卡渲染');
+    const statsText = await evaluate("document.querySelector('#view-root .app-screen[data-view=\"stats\"]').textContent");
+    if (statsText.indexOf('解读暂时没有生成') >= 0 || statsText.indexOf('出了点问题') >= 0) {
+      fail('历史月统计出现错误卡（2.44.5 类回归复发）');
+    }
+    if (statsText.indexOf(expectAvg) < 0) { fail('历史月日均应为 ' + expectAvg + '（45.67 ÷ ' + prevDays + ' 天），页面未见'); }
+    const periodTitle = await evaluate("(function(){var p=document.querySelector('.s-insights-period');return p?p.textContent:'';})()");
+    if (periodTitle.indexOf('本月') >= 0) { fail('历史月账期标题仍写「本月」：' + periodTitle); }
+    console.log('✓ 历史月统计：' + prevKey + ' 无错误卡 · 日均 ' + expectAvg + '（整月 ' + prevDays + ' 天）· 标题「' + periodTitle + '」');
 
     /* ---- 7 控制台错误 ---- */
     if (consoleErrors.length) { fail('控制台有错误：\n  ' + consoleErrors.join('\n  ')); }

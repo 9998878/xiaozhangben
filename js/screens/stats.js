@@ -936,14 +936,19 @@
 
   function periodText(report) {
     var range = (report && report.range) || RANGE_BY_KEY[S.range] || RANGES[0];
+    /* 2.44.6（P3-2）：深链/趋势点月进入历史月时，「本月」后缀与事实冲突——
+       单月且非当前月改显「单月」；prev 档恒以当前月锚定上月，不受影响。 */
+    var month = report ? report.endMonth : S.month;
+    var label = range.key === 'month' && isMonth(month) && month !== currentMonth()
+      ? '单月' : range.label;
     if (!report) {
-      return monthLabel(S.month) + ' \u00b7 ' + range.label;
+      return monthLabel(S.month) + ' \u00b7 ' + label;
     }
     if (range.key === 'month' || range.key === 'prev') {
-      return monthLabel(report.endMonth) + ' \u00b7 ' + range.label;
+      return monthLabel(report.endMonth) + ' \u00b7 ' + label;
     }
     var start = report.win.months[0];
-    return monthLabel(start) + ' 至 ' + monthLabel(report.endMonth) + ' \u00b7 ' + range.label;
+    return monthLabel(start) + ' 至 ' + monthLabel(report.endMonth) + ' \u00b7 ' + label;
   }
 
   function buildShell() {

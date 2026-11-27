@@ -99,7 +99,7 @@ if (tests) {
     '测试',
     bad.length
       ? `${bad.length} 个文件失败（node scripts/test.js 看明细）`
-      : `${tests.total.pass} 通过 / ${tests.results.length} 文件全绿`
+      : `${tests.total.pass} 通过 / ${tests.results.length} 文件全绿（嵌套口径：scripts-status 防递归跳过未计入，完整断言数见 test.js）`
   );
 } else {
   line('测试', '运行 node scripts/test.js 失败，检查 node 环境');
