@@ -5,7 +5,8 @@
    Node 测试测不到 DOM 渲染、路由、SW 生命周期和离线启动——这里补上最小真实闭环：
    静态服务 → 在线真实键盘记一笔 → 读 IndexedDB → 断网 reload → 离线再记一笔 →
    恢复联网 reload → 校验版本、缓存名、两笔数据、控制台错误 + 主路由冒烟 +
-   切换/返回路径/端到端记账/历史月统计断言（2.44.6 补 §6c/6d/6e，验收报告 P0-1/P2-2）。
+   切换/返回路径/端到端记账/历史月统计断言（2.44.6 补 §6c/6d/6e，验收报告 P0-1/P2-2；
+   2.44.8 补 §6f 拆块依赖：XZB.core.insightqa 必须随 assistant 路由加载）。
 
    零运行时依赖：Node ≥ 22（内置 fetch/WebSocket）+ 本机 Chrome/Edge headless（CDP）。
    用法：node scripts/smoke.js；可用 CHROME_PATH 指定浏览器可执行文件。
@@ -349,6 +350,12 @@ async function main() {
       await waitFor("document.getElementById('app') && document.getElementById('app').textContent.trim().length > 20", 8000, '路由内容 ' + hash);
     }
     console.log('✓ 主路由冒烟：' + routes.length + ' 条路由均有内容');
+
+    /* ---- 6f 拆块依赖（2.44.8）：#/assistant 访问后 insight-qa 必须已随载 ----
+       manifest DEPS 漏写 core-assistant→insight-qa 时，handleInsight 会静默降级
+       handleQuery，路由内容照样存在——只有这条断言能抓住。 */
+    await waitFor('!!(window.XZB && XZB.core && XZB.core.insightqa)', 8000, 'XZB.core.insightqa 随 assistant 路由加载');
+    console.log('✓ 拆块依赖：XZB.core.insightqa 已加载（core-assistant→insight-qa）');
 
     /* ---- 6b 切换行为（2.44.4）：Tab 根不走整页快照、二级页走；首页明细延后挂载落位 ----
        用 XZB.router.go（应用内链接点击的同款入口，onDocumentClick → go）；

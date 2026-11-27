@@ -94,16 +94,22 @@
 
 ## 首屏体积与压缩核验（2.44.2 后）
 
-- 实测构成（字符数）：index.html 约 1.20M，其中 CSS 约 355K、内联 JS 约 838K（store 118K / icons 83K / schema 82K / backup 58K / stats 57K / photo-viewer 49K / migrate 34K / recurrence 33K 等）。磁盘 UTF-8 约 1.28 MB。
-- 线上压缩：GitHub Pages 对 `Accept-Encoding: gzip` 回 `Content-Encoding: gzip`，入口传输 329,023 B（约 321 KB，压掉约 74%）；只发 `br` 时不压缩（Pages 未启用 brotli）。home.js 14 KB、core-assistant.js 67 KB（gzip）。**「首屏 1.28 MB」是解析/缓存口径，不是网络传输口径。**
+- 实测构成（字符数，2.44.2 时点）：index.html 约 1.20M，其中 CSS 约 355K、内联 JS 约 838K（store 118K / icons 83K / schema 82K / backup 58K / stats 57K / photo-viewer 49K / migrate 34K / recurrence 33K 等）。磁盘 UTF-8 当时约 1.28 MB；2.44.8 实测 1,308,974 B ≈ 1.31 MB。
+- 线上压缩：GitHub Pages 对 `Accept-Encoding: gzip` 回 `Content-Encoding: gzip`，入口传输 329,023 B（2.44.2 实测；2.44.7 为 329,860 B，约 322 KB，压掉约 75%）；只发 `br` 时不压缩（Pages 未启用 brotli）。home.js 14 KB、core-assistant.js 67 KB（gzip，2.44.7 拆分前口径）。**「首屏约 1.31 MB」是解析/缓存口径，不是网络传输口径。**
 - 拆分决策：为网络传输而拆的收益已被 gzip 消除；剩余成本是低端机 boot 解析约 840KB 内联 JS。核心块内联是零构建 + 离线首启的有意取舍，且测试基建（40+ 文件）按内联块 marker 加载真实实现，外置核心会整体破坏该范式。结论：暂不拆，维持单文件 + frontend-perf 用例 5 体积棘轮。低端机解析若成实测瓶颈，另立架构批次（构建期压缩 + 核心外置 + 加载器重写 + 测试加载器同步），不在验收修复批次里盲改。
 - 浏览器等效抽查（localhost 隔离源，非线上域名）：2.44.2 加载、SW 接管、缓存名 xzb2-v2.44.2、记账/行内改批注/日期弹层/删除（带撤销）全通过；停服后整页导航与离线记一笔均成功（SW 缓存兜底，P1-1 修复真机级验证）。iPhone 真机冷启动/飞行模式仍按 release.md 清单由所有者执行。
 
 ## 验收 P3 清理（2.44.7）
 
 - core-assistant 拆块（P3-3）：单块 223,988 B 已达 240KB 预算的 93.3%。文件里本就是两个独立 IIFE——助手内核（含 LLM 传输）与 insight-qa 本地洞察问答（纯计算、零网络、只读 cx.db）。按现成接缝把后者拆回 `js/modules/insight-qa.js`（2.25.0 曾并入），主块降到约 182KB（76%）。不选报告建议的 llm-transport 切法：传输层与错误码表/配置读写/提示词装配互相交织，强拆风险高收益同；insight-qa 接缝零改写。加载顺序由 manifest 保证：`core-assistant` 声明依赖 `insight-qa`；`handleInsight` 原有的「模块缺失降级 handleQuery」兜底保留。
-- SW 预缓存去重（P3-4）：`'./'` 与 `'./index.html'` 同源同内容，install 抓两遍 1.28MB 入口、缓存两份。PRECACHE 只留 `'./'`，`matchNavigation` 回退链（请求本身 → index.html → 根路径）天然兜底；预缓存总数不变（35 = 22 分块 + 13 壳资源）。
+- SW 预缓存去重（P3-4）：`'./'` 与 `'./index.html'` 同源同内容，install 抓两遍约 1.3MB 入口、缓存两份。PRECACHE 只留 `'./'`；预缓存总数不变（35 = 22 分块 + 13 壳资源）。运行期的别名二次缓存由 2.44.8 导航键归一收口（见下节）。
 - IDB 晚到连接（P3-5）：`openRawDatabase` 超时 reject 后，晚到的 `onsuccess` 连接原先既不赋值也不 close，极端慢盘下泄漏。现 `settled` 时显式 `database.close()`。回归 `tests/store-upgrade.test.js` 用例 4（假 IDB 延迟 success 真跑）。
+
+## 验收复核收尾（2.44.8）
+
+- 导航键归一：2.44.7 的去重只管 install——直接访问 `/index.html`（或带 query 的启动变体）时 `networkFirst` 仍按请求键 `putInCache`，运行期会再存一份入口，绕过去重。本应用是单入口 SPA（hash 路由不产生新文档），`navigationKey()` 把导航的写缓存键与回退查找键统一归一到作用域根 `'./'`；`matchNavigation` 删除去重后永不命中的 `'./index.html'` 死分支，回退链简化为「归一键 → 离线提示」。回归 `tests/sw-cache.test.js` 2.7（在线导航 index.html 与 ?query 变体：缓存零新增键）。
+- 冒烟补拆块依赖断言（§6f）：`#/assistant` 访问后 `XZB.core.insightqa` 必须真值。manifest DEPS 漏写 `core-assistant→insight-qa` 时 `handleInsight` 静默降级 `handleQuery`，路由内容照样存在；frontend-perf 1.5 只锁声明不锁运行期，这条是唯一运行期闸门。
+- 文档体积口径：入口实测 1,308,974 B ≈ 1.31 MB，README/architecture/known-issues 统一更新（旧文 1.27/1.28 MB 为 2.44.2 时点口径）。
 
 ## 发布与不变量
 

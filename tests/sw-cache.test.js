@@ -10,7 +10,7 @@
  *   1. 预缓存写入键 === cacheFirst 查找键（js 分块带 ?v=<版本>，r 被剥掉）；
  *   2. 断网冷启动 21 个分块 ?v= 请求全部命中缓存，零网络请求；
  *   3. 旧 index 的上一版 ?v= 经 ignoreSearch 兜底命中同路径当前分块；
- *   4. 图标/入口等无 query 资源照常命中；导航断网回退 index.html；
+ *   4. 图标/入口等无 query 资源照常命中；导航断网回退根路径入口（2.44.8 键归一）；
  *   5. MISSING 清单带版本重试同键；旧版本清单作废。
  * 不锁源码字符串，锁的是真实缓存行为。只读业务代码，不修改任何业务文件。
  */
@@ -255,11 +255,27 @@ const JS_CHUNKS = [
     check(res2 && res2.ok, '清单应命中');
   });
 
-  await test('2.5 导航断网回退缓存（index.html 请求经 ./ 兜底，2.44.7 去重后仍可用）', async () => {
+  await test('2.5 导航断网回退缓存（index.html 请求经归一键命中根路径入口）', async () => {
     const res = await fire('fetch', getReq('index.html', 'navigate'));
     check(res && res.ok, '导航断网应回退缓存');
     const root = await fire('fetch', getReq('', 'navigate'));
     check(root && root.ok, '根路径导航断网应回退缓存');
+  });
+
+  await test('2.7 在线导航 /index.html 与 query 变体：归一到根键，不再存第二份入口（2.44.8）', async () => {
+    networkOnline = true;
+    const cache = stores.get(CACHE_NAME);
+    const before = cache.map.size;
+    const res = await fire('fetch', getReq('index.html', 'navigate'));
+    check(res && res.ok, '在线导航应走网络');
+    await new Promise((r) => setImmediate(r));
+    check(!cache.map.has(abs('index.html')), '不得按 index.html 键再存一份入口');
+    const res2 = await fire('fetch', getReq('?from=pwa', 'navigate'));
+    check(res2 && res2.ok, 'query 变体导航应走网络');
+    await new Promise((r) => setImmediate(r));
+    checkEq(cache.map.size, before, '入口缓存仍只有一份（根键被更新，不新增键）');
+    check(cache.map.has(abs('./')), '根键应存在');
+    networkOnline = false;
   });
 
   await test('2.6 非 GET / 跨源请求不接管', async () => {
