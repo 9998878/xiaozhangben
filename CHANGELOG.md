@@ -4,6 +4,8 @@
 
 ## [iOS 壳] 2026-11-27（Web 产物与版本号不变）
 
+- **iPhone App 里点按真震了**：接入原生 Taptic 震动（Capacitor Haptics）——数字键盘、分类选择、保存成功/警告/出错提示都有与 Android 一致的震动手感；设置页出现「点按震动」开关，点按音效自动停用（只震不响）。浏览器/PWA 行为不变，需重新签名安装新 IPA 生效。
+
 - **能装成真 iOS App 了**：新增 Capacitor 7 原生壳与 GitHub Actions macOS 云构建（未签名 IPA），Windows 用 Sideloadly + 免费 Apple ID 签名安装——无 Mac、不上 App Store、不买付费开发者账号。免费证书 7 天过期，覆盖续签即可，数据不清。
 - **数据多一道保险**：原生环境下每次落库自动镜像一份标准 JSON 备份到 App 沙盒 Documents（「文件」App 可见可取）；冷启动空账本可一键还原镜像；删除/清空使镜像收缩时，旧镜像轮转为「上一份」。导出备份改道为写 Documents + 系统分享面板（WKWebView 不支持浏览器下载通道）。
 - Web 源码零改动：桥接只注入 www 构建产物，PWA 行为、版本号、缓存名全部不变，旧备份照常导入。完整指南见 `docs/ios-sideload.md`。

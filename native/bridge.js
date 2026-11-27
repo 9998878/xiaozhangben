@@ -12,6 +12,10 @@
  *     用户拒绝后按镜像 exportedAt 记住，不再反复骚扰（localStorage xzb.native.v1，仅原生容器存在）。
  *  ④ 收缩保护：新镜像笔数少于上一份时（删除/清空），先把旧镜像轮转为
  *     Documents/小账本-自动备份-上一份.json，误清空后还有一次反悔机会。
+ *  ⑤ 原生震动：WKWebView 没有 navigator.vibrate，网页震动/键盘手感在 iPhone 上全哑。
+ *     原生环境下用 Capacitor Haptics 插件补一个 navigator.vibrate 垫片（按时长映射
+ *     Taptic 力度），Web 侧 ui/haptics、keypad、toast 的既有调用一行不改即可真震；
+ *     ui/haptics.supported() 随之为 true → 设置页出震动开关、点按音效自动闭嘴（与 Android 同口径）。
  *
  * 铁律：非 Capacitor 环境一律 no-op（浏览器直接打开 www 也不受影响）；
  *       插件调用全部经 window.Capacitor.Plugins（原生桥自动注入，不依赖打包器）；
@@ -37,6 +41,7 @@
     lastMirroredSavedAt: null,
     lastExportAt: null,
     exports: 0,
+    vibrateShim: false,
     lastError: null
   };
 
@@ -55,6 +60,11 @@
   function fsPlugin() {
     var p = plugins();
     return p && p.Filesystem ? p.Filesystem : null;
+  }
+
+  function hapticsPlugin() {
+    var p = plugins();
+    return p && p.Haptics ? p.Haptics : null;
   }
 
   function backupApi() {
@@ -305,6 +315,75 @@
     return true;
   }
 
+  /* ---------------- 原生震动垫片（navigator.vibrate → Taptic Engine） ---------------- */
+
+  /* 时长 → Taptic 力度：与 Web 侧 ui/haptics 的毫秒口径对齐
+   * （tap 8ms / key 6ms → LIGHT；select 12ms → MEDIUM；warn 18ms / error 26ms → HEAVY） */
+  function impactStyle(ms) {
+    var n = Number(ms) || 0;
+    if (n <= 8) { return 'LIGHT'; }
+    if (n <= 15) { return 'MEDIUM'; }
+    return 'HEAVY';
+  }
+
+  /* 纯函数：把 vibrate(pattern) 翻译成敲击计划 [{at, style}]。
+   * number → 单击；[震,停,震,…] → 按累计偏移排多击（success/error 的双段/三段节奏）；
+   * 0 / 空 / 非法 → 空计划（等价取消）。步数设上限，防异常输入排出一长串定时器。 */
+  function planVibration(pattern) {
+    var segs = Array.isArray(pattern) ? pattern : [pattern];
+    var steps = [];
+    var at = 0;
+    for (var i = 0; i < segs.length && steps.length < 8; i += 2) {
+      var ms = Math.max(0, Number(segs[i]) || 0);
+      if (ms > 0) { steps.push({ at: at, style: impactStyle(ms) }); }
+      at += ms + Math.max(0, Number(segs[i + 1]) || 0);
+    }
+    return steps;
+  }
+
+  /* 只在「原生容器 + Haptics 插件在位 + 本机没有真 vibrate」时安装；
+   * 任何一环缺失都保持原样（浏览器/旧壳零影响）。新调用取消未完成的旧节奏，
+   * 与 navigator.vibrate 的原生语义一致；插件失败静默——震动绝不能影响记账。 */
+  function installVibrateShim() {
+    if (!isNative()) { return false; }
+    var h = hapticsPlugin();
+    if (!h || typeof h.impact !== 'function') { return false; }
+    var nav = global.navigator;
+    if (!nav || typeof nav.vibrate === 'function') { return false; }
+    var timers = [];
+
+    function cancelPending() {
+      for (var i = 0; i < timers.length; i += 1) { global.clearTimeout(timers[i]); }
+      timers = [];
+    }
+
+    function strike(style) {
+      try {
+        var r = h.impact({ style: style });
+        if (r && typeof r.catch === 'function') { r.catch(function () { /* 静默 */ }); }
+      } catch (error) { /* 静默 */ }
+    }
+
+    function shim(pattern) {
+      cancelPending();
+      var steps = planVibration(pattern);
+      for (var i = 0; i < steps.length; i += 1) {
+        if (steps[i].at <= 0) { strike(steps[i].style); }
+        else { timers.push(global.setTimeout(strike.bind(null, steps[i].style), steps[i].at)); }
+      }
+      return true;
+    }
+
+    try {
+      nav.vibrate = shim;
+    } catch (error) {
+      try {
+        Object.defineProperty(nav, 'vibrate', { value: shim, writable: true, configurable: true });
+      } catch (error2) { return false; }
+    }
+    return typeof nav.vibrate === 'function';
+  }
+
   /* ---------------- 启动接线 ---------------- */
 
   function wireFlush() {
@@ -357,6 +436,7 @@
   function init() {
     if (!isNative() || state.initialized) { return false; }
     state.initialized = true;
+    state.vibrateShim = installVibrateShim();
     patchDownload();
     whenReady(function (bootState) {
       if (bootState && bootState.bootError) { return; }
@@ -389,6 +469,7 @@
       lastMirrorCount: state.lastMirrorCount,
       lastExportAt: state.lastExportAt,
       exports: state.exports,
+      vibrateShim: state.vibrateShim,
       lastError: state.lastError,
       mirrorFile: MIRROR_FILE,
       mirrorPrevFile: MIRROR_PREV,
@@ -402,6 +483,7 @@
     status: status,
     decideRestore: decideRestore,
     shouldRotate: shouldRotate,
+    planVibration: planVibration,
     createMirrorScheduler: createMirrorScheduler,
     MIRROR_FILE: MIRROR_FILE,
     MIRROR_PREV: MIRROR_PREV,
@@ -412,7 +494,8 @@
       writeMirror: writeMirror,
       readMirror: readMirror,
       patchDownload: patchDownload,
-      promptRestore: promptRestore
+      promptRestore: promptRestore,
+      installVibrateShim: installVibrateShim
     }
   };
 
