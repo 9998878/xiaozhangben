@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-/* 提交前自检：版本三处、AGENTS 长度、文档指针、旧文档残留、CHANGELOG。
+/* 提交前自检：版本四处、AGENTS 长度、文档指针、旧文档残留、CHANGELOG。
    只做机械校验，不跑测试（测试交给 scripts/test.js）。 */
 
 const fs = require('node:fs');
@@ -46,6 +46,16 @@ if (fs.existsSync(path.join(ROOT, testFile)) && version) {
   const escaped = version.replace(/\./g, '\\.');
   if (readDoc(testFile).includes(escaped)) ok(`测试版本串：${escaped}`);
   else bad(testFile, `缺少转义版本串 ${escaped}（用例 7.1/7.2）`);
+}
+
+/* 2.44.6 复验新发现：第 4 处版本字面量——calendar-report 6.3 也锁 CACHE_NAME。
+   漏改虽会被 test.js 拦红，但发版人应在自检阶段就拿到明确指引，而不是去
+   38 条用例里找一条「源码锁失效」。 */
+const calFile = 'tests/calendar-report.test.js';
+if (fs.existsSync(path.join(ROOT, calFile)) && version) {
+  const escaped = version.replace(/\./g, '\\.');
+  if (readDoc(calFile).includes('xzb2-v' + escaped)) ok(`calendar-report 版本串：xzb2-v${escaped}`);
+  else bad(calFile, `缺少转义版本串 xzb2-v${escaped}（用例 6.3）`);
 }
 
 const agentsPath = path.join(ROOT, 'AGENTS.md');

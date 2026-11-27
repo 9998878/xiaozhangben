@@ -2,12 +2,12 @@
 
 只改文档不必发版；任何用户可见的行为变化都走一遍本清单。
 
-## 1. 版本号同步（三处 + 一处测试锁）
+## 1. 版本号同步（四处）
 
 - `index.html` 搜 `XZB.version =`，改 **head 里 `js/ui/preload-home.js` 预载块中的唯一字面量**为 `x.y.z`（全文件恰一处，`tests/frontend-perf.test.js` 用例 2 守着）；各 core 末尾的 `XZB.version || '…'` 是兜底，不是发布真源，不要改
 - `sw.js` 改 `CACHE_LABEL` 与 `CACHE_NAME`，版本必须进名字（如 `xzb2-vx.y.z`），否则旧缓存清不掉
 - `tests/category-expansion.test.js` 用例 7.1/7.2 是**转义正则**（`2\.x\.y`），纯字符串替换会漏
-- `tests/calendar-report.test.js` 用例 6.3 也锁 `CACHE_NAME`（转义正则）——三处之外的第 4 个版本字面量，漏改会在测试闸门红（2.44.6 发版时踩到，补记）
+- `tests/calendar-report.test.js` 用例 6.3 也锁 `CACHE_NAME`（转义正则）——第 4 处版本字面量（2.44.6 发版踩到后补记，`check.js` 已纳入机械校验）
 
 ## 2. 写 CHANGELOG
 
@@ -20,7 +20,7 @@ node scripts/test.js
 node scripts/check.js
 ```
 
-必须全绿、无 `✗`。`check.js` 会查版本三处、AGENTS 长度、文档指针、旧文档残留。
+必须全绿、无 `✗`。`check.js` 会查版本四处、AGENTS 长度、文档指针、旧文档残留。
 
 ## 4. 提交与发布
 
@@ -61,7 +61,7 @@ git log --oneline -5          # 或 git tag -l
 # 2) revert（可能多个 commit，按从新到旧依次 revert）
 git revert <sha>              # 冲突时逐个解决；不要 reset --hard push 过的提交
 
-# 3) 版本三处改成新的回滚版本号（建议直接 +0.0.1，如 2.28.9 → 2.28.10；
+# 3) 版本四处改成新的回滚版本号（建议直接 +0.0.1，如 2.28.9 → 2.28.10；
 #    复用旧版本号会导致 CACHE_NAME 撞名，用户卡在旧缓存）
 #    - index.html 的 XZB.version
 #    - sw.js 的 CACHE_LABEL / CACHE_NAME（+ 头部注释里的版本串）

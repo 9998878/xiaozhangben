@@ -22,7 +22,7 @@
 
 ## 不变量（`scripts/check.js` 会红）
 
-1. 版本三处同步：`index.html` 的 `XZB.version`、`sw.js` 的 `CACHE_LABEL`/`CACHE_NAME`、`tests/category-expansion.test.js` 用例 7.1/7.2 的转义正则。换缓存名才会清旧缓存。
+1. 版本四处同步：`index.html` 的 `XZB.version`、`sw.js` 的 `CACHE_LABEL`/`CACHE_NAME`、`tests/category-expansion.test.js` 用例 7.1/7.2 与 `tests/calendar-report.test.js` 用例 6.3 的转义正则。换缓存名才会清旧缓存。
 2. 改应用行为，同批加/改测试并全绿；只改文档可跳过。
 3. 发布只从 `main` push；feature 分支合并后删除。
 
