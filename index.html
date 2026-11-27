@@ -54,7 +54,7 @@
 (function (global) {
   'use strict';
   var XZB = global.XZB = global.XZB || {};
-  XZB.version = '2.44.6';
+  XZB.version = '2.44.7';
   try {
     var doc = global.document;
     var loc = global.location;
@@ -17331,6 +17331,12 @@ textarea::selection {
       };
       req.onsuccess = function () {
         var database = req.result;
+        /* 2.44.7（P3-5）：超时 reject 后晚到的连接必须显式关闭——否则既不赋值
+           给 rawDb 也不 close，极端慢盘下每次超时泄漏一条 IDB 连接。 */
+        if (settled) {
+          try { database.close(); } catch (error) { /* 忽略 */ }
+          return;
+        }
         database.onversionchange = function () {
           try { database.close(); } catch (error) { /* 忽略 */ }
           rawDb = null;
@@ -32887,7 +32893,7 @@ textarea::selection {
 
 </script>
   <script>
-/* 小账本 2.44.1 · js/chunk-manifest.js · owner: frontend（T-02）：21 个 chunk 的产物/依赖真源 + URL 查表；纯数据，Node 可 require。 */
+/* 小账本 2.44.7 · js/chunk-manifest.js · owner: frontend（T-02）：22 个 chunk 的产物/依赖真源 + URL 查表；纯数据，Node 可 require。 */
 (function (global) {
   'use strict';
   var XZB = global.XZB || (global.XZB = {});
@@ -32899,10 +32905,10 @@ textarea::selection {
     ['charts', 'modules/charts'], ['nl', 'modules/nl'], ['core-assistant', 'modules/core-assistant'],
     ['ai-insights', 'modules/ai-insights'], ['habit', 'modules/habit'],
     ['bill-import', 'modules/bill-import'], ['audit', 'modules/audit'],
-    ['inline-edit', 'modules/inline-edit']
+    ['inline-edit', 'modules/inline-edit'], ['insight-qa', 'modules/insight-qa']
   ];
   /* 依赖图唯一真源：未列出的 chunk 恒 [] */
-  var DEPS = { home: ['habit'], ledger: ['inline-edit'], add: ['keypad', 'icon-picker'], stats: ['charts', 'ai-insights', 'audit'], calendar: ['charts'], report: ['charts'], plan: ['charts'], settings: ['icon-picker', 'bill-import'], assistant: ['nl', 'core-assistant'] };
+  var DEPS = { home: ['habit'], ledger: ['inline-edit'], add: ['keypad', 'icon-picker'], stats: ['charts', 'ai-insights', 'audit'], calendar: ['charts'], report: ['charts'], plan: ['charts'], settings: ['icon-picker', 'bill-import'], assistant: ['nl', 'core-assistant'], 'core-assistant': ['insight-qa'] };
   var byKey = {}, deps = {}, states = {};
   ROWS.forEach(function (r) {
     var e = { key: r[0], out: OUT + r[1] + '.js' }; byKey[e.key] = e; deps[e.key] = DEPS[e.key] || [];

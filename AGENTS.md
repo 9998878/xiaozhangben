@@ -14,7 +14,7 @@
 
 - `index.html` — 整个应用：启动、hash 路由、账户/设置、IndexedDB schema；内嵌 chunk-manifest，首屏按需加载
 - `js/screens/` — 页面：home、ledger、stats、calendar、report、accounts、plan、add、settings、assistant、books
-- `js/modules/` — 共用逻辑：core-assistant（LLM 传输与错误码）、ai-insights（月度指标与提示词）、nl（中文解析）、bill-import（账单 CSV 解析）、habit（习惯记账建议）、audit（账单体检：重复/周期/断档/异常，纯函数）、charts、keypad、icon-picker、inline-edit（行内编辑校验/mutator 纯函数 + 浮层与行内输入件）
+- `js/modules/` — 共用逻辑：core-assistant（LLM 传输与错误码）、insight-qa（本地洞察问答，纯计算）、ai-insights（月度指标与提示词）、nl（中文解析）、bill-import（账单 CSV 解析）、habit（习惯记账建议）、audit（账单体检：重复/周期/断档/异常，纯函数）、charts、keypad、icon-picker、inline-edit（行内编辑校验/mutator 纯函数 + 浮层与行内输入件）
 - `sw.js` — Service Worker，按 chunk-manifest 预缓存
 - `tests/` — 纯 node 断言，无框架；`scripts/` — 开发脚本
 - `docs/` — 按需查：`architecture.md`、`known-issues.md`、`release.md`

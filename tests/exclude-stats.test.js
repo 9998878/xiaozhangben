@@ -23,6 +23,8 @@ const vm = require('vm');
 const ROOT = path.resolve(__dirname, '..');
 const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const CA_JS = fs.readFileSync(path.join(ROOT, 'js', 'modules', 'core-assistant.js'), 'utf8');
+/* 2.44.7 拆分：sumWindow 随洞察问答块移入 insight-qa.js */
+const QA_JS = fs.readFileSync(path.join(ROOT, 'js', 'modules', 'insight-qa.js'), 'utf8');
 const AI_JS = fs.readFileSync(path.join(ROOT, 'js', 'modules', 'ai-insights.js'), 'utf8');
 
 /* ============================== 极简测试骨架 ============================== */
@@ -227,8 +229,8 @@ test('3.1 normalizeTransaction：缺省 false / true 保留 / 转账强转 false
 });
 
 section('用例 4：问答与月度解读的源码级断言（同 ai-config 范式）');
-test('4.1 core-assistant sumWindow 含 excludeStats 过滤', function () {
-  const body = liftFunction(CA_JS, 'sumWindow');
+test('4.1 insight-qa sumWindow 含 excludeStats 过滤（2.44.7 前在 core-assistant 内）', function () {
+  const body = liftFunction(QA_JS, 'sumWindow');
   check(body, 'sumWindow 可提升');
   check(body.indexOf('tx.excludeStats === true') >= 0, 'sumWindow 缺少不计收支过滤');
 });

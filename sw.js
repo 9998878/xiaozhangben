@@ -1,6 +1,6 @@
 /* ============================================================
-   小账本 2.44.6 · Service Worker（返回首页明细挂载修复）
-   缓存名：小账本2-v2.44.6（英文缓存键 xzb2-v2.44.6）
+   小账本 2.44.7 · Service Worker（预缓存去重 + insight-qa 独立分块）
+   缓存名：小账本2-v2.44.7（英文缓存键 xzb2-v2.44.7）
    策略：导航请求网络优先（8 秒超时）→ 缓存；其余静态资源缓存优先。
    约束：只处理 GET；只处理 http(s) 同源请求；不缓存 chrome-extension 等协议。
    ============================================================ */
@@ -8,9 +8,9 @@
   'use strict';
 
   /* 人类可读的缓存版本标签，仅用于日志与排查 */
-  var CACHE_LABEL = '小账本2-v2.44.6';
+  var CACHE_LABEL = '小账本2-v2.44.7';
   /* 真正的 Cache Storage 键：换版本号即触发本应用旧缓存清除（activate 时 cleanupCaches） */
-  var CACHE_NAME = 'xzb2-v2.44.6';
+  var CACHE_NAME = 'xzb2-v2.44.7';
   /* 预缓存版本 query：由 CACHE_NAME 派生，绝不与缓存版本漂移。
      加载器请求恒带 ?v=<XZB.version>，预缓存按同一键写入才能命中（2.44.1 修 P1-1）。 */
   var VERSION = CACHE_NAME.slice('xzb2-v'.length);
@@ -20,10 +20,11 @@
   var MISSING_KEY = '/precache-missing.json';
   /* 导航请求的网络等待上限：超过即回退缓存，避免弱网白屏 */
   var NAV_TIMEOUT_MS = 8000;
-  /* install 预缓存清单：入口与壳资源；css/js 为外链，由运行时 cacheFirst 兜底 */
+  /* install 预缓存清单：入口与壳资源；css/js 为外链，由运行时 cacheFirst 兜底。
+     2.44.7（P3-4）：'./' 与 './index.html' 同源同内容，只预缓存 './' 一份，
+     导航回退链 matchNavigation 已有 './' 兜底，不再抓两遍 1.28MB 入口。 */
   var PRECACHE = [
     './',
-    './index.html',
     './manifest.webmanifest',
     './icons/icon-180.png',
     './icons/icon-192.png',
@@ -52,6 +53,7 @@
     './js/modules/charts.js',
     './js/modules/nl.js',
     './js/modules/core-assistant.js',
+    './js/modules/insight-qa.js',
     './js/modules/ai-insights.js',
     './js/modules/habit.js',
     './js/modules/bill-import.js',

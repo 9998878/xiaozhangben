@@ -179,7 +179,7 @@ const JS_CHUNKS = [
   'js/screens/calendar.js', 'js/screens/report.js', 'js/screens/accounts.js', 'js/screens/books.js',
   'js/screens/plan.js', 'js/screens/settings.js', 'js/screens/assistant.js',
   'js/modules/keypad.js', 'js/modules/icon-picker.js', 'js/modules/charts.js', 'js/modules/nl.js',
-  'js/modules/core-assistant.js', 'js/modules/ai-insights.js', 'js/modules/habit.js',
+  'js/modules/core-assistant.js', 'js/modules/insight-qa.js', 'js/modules/ai-insights.js', 'js/modules/habit.js',
   'js/modules/bill-import.js', 'js/modules/audit.js', 'js/modules/inline-edit.js'
 ];
 
@@ -197,7 +197,7 @@ const JS_CHUNKS = [
     checkEq(cache.map.size, 35, '预缓存条目数');
   });
 
-  await test('1.2 21 个 js 分块写入键 === 运行时查找键（?v= 当前版本，r 被剥）', async () => {
+  await test('1.2 22 个 js 分块写入键 === 运行时查找键（?v= 当前版本，r 被剥）', async () => {
     const cache = stores.get(CACHE_NAME);
     for (const chunk of JS_CHUNKS) {
       const writeKey = abs(chunk + '?v=' + VERSION);
@@ -211,14 +211,20 @@ const JS_CHUNKS = [
 
   await test('1.3 入口/图标/启动图保持无 query 键（运行时这些请求不带 query）', async () => {
     const cache = stores.get(CACHE_NAME);
-    ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './splash/splash-1170x2532.png'].forEach((u) => {
+    ['./', './manifest.webmanifest', './icons/icon-192.png', './splash/splash-1170x2532.png'].forEach((u) => {
       check(cache.map.has(abs(u)), u + ' 应保持原键');
     });
   });
 
+  await test('1.4 入口只预缓存一份：./index.html 不再单独入缓存（2.44.7 P3-4）', async () => {
+    const cache = stores.get(CACHE_NAME);
+    check(!cache.map.has(abs('./index.html')), './index.html 与 ./ 同源同内容，不应抓两遍');
+    check(cache.map.has(abs('./')), './ 应在缓存');
+  });
+
   section('2 断网冷启动：零网络请求全部命中');
 
-  await test('2.1 断网后 21 个分块 ?v= 请求全部命中缓存，fetch 零调用', async () => {
+  await test('2.1 断网后 22 个分块 ?v= 请求全部命中缓存，fetch 零调用', async () => {
     networkOnline = false;
     fetchCalls = 0;
     for (const chunk of JS_CHUNKS) {
@@ -249,9 +255,11 @@ const JS_CHUNKS = [
     check(res2 && res2.ok, '清单应命中');
   });
 
-  await test('2.5 导航断网回退缓存 index.html', async () => {
+  await test('2.5 导航断网回退缓存（index.html 请求经 ./ 兜底，2.44.7 去重后仍可用）', async () => {
     const res = await fire('fetch', getReq('index.html', 'navigate'));
     check(res && res.ok, '导航断网应回退缓存');
+    const root = await fire('fetch', getReq('', 'navigate'));
+    check(root && root.ok, '根路径导航断网应回退缓存');
   });
 
   await test('2.6 非 GET / 跨源请求不接管', async () => {

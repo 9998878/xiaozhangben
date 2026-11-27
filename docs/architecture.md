@@ -54,7 +54,7 @@
 
 ## 统计合并 / 日历 / 报告存档（2.40.0）
 
-- 合并方向：以原 insights 为基干重写 `stats.js`（独有模块体量大），旧 stats 的趋势/排行移植进来；`insights.js` 删除。`#/insights` 降为历史别名：只在 `parseHash` 层归一到 `stats`（m/r/regen 参数原样保留），地址栏字面改写由 `syncAliasBar` 负责，与 `#/ledger`、`#/mine` 同一套路。底栏四根 `home / calendar / stats / settings`；chunk-manifest 21 项、sw 预缓存 35 项。
+- 合并方向：以原 insights 为基干重写 `stats.js`（独有模块体量大），旧 stats 的趋势/排行移植进来；`insights.js` 删除。`#/insights` 降为历史别名：只在 `parseHash` 层归一到 `stats`（m/r/regen 参数原样保留），地址栏字面改写由 `syncAliasBar` 负责，与 `#/ledger`、`#/mine` 同一套路。底栏四根 `home / calendar / stats / settings`；chunk-manifest 22 项、sw 预缓存 35 项。
 - 收入结构：collect 增 `incomeCats` 桶、summarize 增 `incomeItems`，结构卡/钻取按 `S.kind` 分流；核心结论、值得留意、体检、报告恒支出口径。结构卡＝环图（top5+其他）＋排行合一清单（默认前 5＋其他行，展开看 8＋其他），行带环比，收入口径 tone 反转。
 - 日历页 `calendar.js`：DOM 7 列网格（周一起始），不用 canvas 热力。净额＝收入−支出，`+` 红 / `−` 绿（股市惯例，**仅本页**，其余页面仍是支出红/收入绿）；深浅四档 r=|净额|÷日基准 ≤0.5/1/2/>2，日基准＝`stats.budgetProgress().totalCents ÷ 当月天数`，未设预算退回固定档 ¥100（`FALLBACK_BASE_CENTS`）并给「设预算 ›」入口。当日流水与日历格同源五道过滤（deleted/账本/类型/金额/日期），转账不计；点日开当日清单 → 单笔弹层 → `#/add?id=` 编辑，「补一笔」走 `#/add?date=`。
 - 热力令牌取舍：`charts.heatmap` 未扩展双色阶，改为把原红档重映射到 `--heat-r1..r4`（语义仍是「花得多」），保持统计页支出热力自洽；日历另用 `--heat-g1..g4` / `--heat-r1..r4` 令牌渲染净额格，浅深两套主题各一份。
@@ -65,7 +65,7 @@
 
 ## 验收修复（2.44.1）
 
-- SW 缓存键（修 2.41.3 回归）：`normalizeKey` 保留 `?v=` 后预缓存仍写无 query 键，离线 `?v=` 请求恒 miss。现 `VERSION` 由 `CACHE_NAME` 派生，预缓存 21 个 js 分块按 `?v=VERSION` 写入（入口/图标/启动图保持原键），MISSING 清单存带版本键并校验 `record.v`；`cacheFirst` 精确 miss 后 `ignoreSearch` 兜底，旧 index 的旧 `?v=` 也能命中同路径当前分块。回归 `tests/sw-cache.test.js`（vm + 内存 CacheStorage 真跑 install→断网→fetch，锁写入键=查找键）。
+- SW 缓存键（修 2.41.3 回归）：`normalizeKey` 保留 `?v=` 后预缓存仍写无 query 键，离线 `?v=` 请求恒 miss。现 `VERSION` 由 `CACHE_NAME` 派生，预缓存 22 个 js 分块按 `?v=VERSION` 写入（入口/图标/启动图保持原键），MISSING 清单存带版本键并校验 `record.v`；`cacheFirst` 精确 miss 后 `ignoreSearch` 兜底，旧 index 的旧 `?v=` 也能命中同路径当前分块。回归 `tests/sw-cache.test.js`（vm + 内存 CacheStorage 真跑 install→断网→fetch，锁写入键=查找键）。
 - CSV 两端：`escapeCsv` 首字符 `= + - @ \t \r` 前置 `'` 防公式注入（CWE-1236）；bill-import 仅在没有「收/支」「收支」时兜底认「类型」列（支付宝「类型」列装交易类型，不能误映射），自身导出 CSV 可回导；转账行进 skipped，「已删除=是」行回导会复活（已知边界见 known-issues）。回归 `tests/csv-export.test.js`。
 - 行内批注上限统一 80（与 schema txNote 一致），修长批注静默截断；账单去重无单号时收紧为「同日+同额+同方向+(同非空备注或同分类)」，双时间非空且不同不判重，删 ±3 天宽窗口。回归 `tests/inline-edit.test.js` 2.4/2.5、`tests/bill-dupe.test.js`。
 - 隐私口径：README 改真实口径（内置 AI 默认开启、首启视为同意、密钥公开、第三方端点、可关闭）；行为不变，仍是所有者有意选择（见 known-issues）。
@@ -99,9 +99,15 @@
 - 拆分决策：为网络传输而拆的收益已被 gzip 消除；剩余成本是低端机 boot 解析约 840KB 内联 JS。核心块内联是零构建 + 离线首启的有意取舍，且测试基建（40+ 文件）按内联块 marker 加载真实实现，外置核心会整体破坏该范式。结论：暂不拆，维持单文件 + frontend-perf 用例 5 体积棘轮。低端机解析若成实测瓶颈，另立架构批次（构建期压缩 + 核心外置 + 加载器重写 + 测试加载器同步），不在验收修复批次里盲改。
 - 浏览器等效抽查（localhost 隔离源，非线上域名）：2.44.2 加载、SW 接管、缓存名 xzb2-v2.44.2、记账/行内改批注/日期弹层/删除（带撤销）全通过；停服后整页导航与离线记一笔均成功（SW 缓存兜底，P1-1 修复真机级验证）。iPhone 真机冷启动/飞行模式仍按 release.md 清单由所有者执行。
 
+## 验收 P3 清理（2.44.7）
+
+- core-assistant 拆块（P3-3）：单块 223,988 B 已达 240KB 预算的 93.3%。文件里本就是两个独立 IIFE——助手内核（含 LLM 传输）与 insight-qa 本地洞察问答（纯计算、零网络、只读 cx.db）。按现成接缝把后者拆回 `js/modules/insight-qa.js`（2.25.0 曾并入），主块降到约 182KB（76%）。不选报告建议的 llm-transport 切法：传输层与错误码表/配置读写/提示词装配互相交织，强拆风险高收益同；insight-qa 接缝零改写。加载顺序由 manifest 保证：`core-assistant` 声明依赖 `insight-qa`；`handleInsight` 原有的「模块缺失降级 handleQuery」兜底保留。
+- SW 预缓存去重（P3-4）：`'./'` 与 `'./index.html'` 同源同内容，install 抓两遍 1.28MB 入口、缓存两份。PRECACHE 只留 `'./'`，`matchNavigation` 回退链（请求本身 → index.html → 根路径）天然兜底；预缓存总数不变（35 = 22 分块 + 13 壳资源）。
+- IDB 晚到连接（P3-5）：`openRawDatabase` 超时 reject 后，晚到的 `onsuccess` 连接原先既不赋值也不 close，极端慢盘下泄漏。现 `settled` 时显式 `database.close()`。回归 `tests/store-upgrade.test.js` 用例 4（假 IDB 延迟 success 真跑）。
+
 ## 发布与不变量
 
-- 版本三处：`index.html` 的 `XZB.version`（2.35.0 起唯一字面量在 `<head>` 的 `js/ui/preload-home.js` 块，app 块不再赋值）、`sw.js` 的 `CACHE_NAME`/`CACHE_LABEL`、`tests/category-expansion.test.js` 7.1/7.2 的转义正则。
+- 版本四处：`index.html` 的 `XZB.version`（2.35.0 起唯一字面量在 `<head>` 的 `js/ui/preload-home.js` 块，app 块不再赋值）、`sw.js` 的 `CACHE_NAME`/`CACHE_LABEL`、`tests/category-expansion.test.js` 7.1/7.2 与 `tests/calendar-report.test.js` 6.3 的转义正则（第 4 处于 2.44.6 发版踩到后纳入 check.js）。
 - 缓存名必须随版本变，否则用户永远停在旧 SW。
 - `tests/` 是唯一回归防线：改行为必须同批改测试；`scripts/check.js` 只守机械一致性。
 

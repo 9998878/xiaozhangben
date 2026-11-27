@@ -10,6 +10,7 @@
  * 真跑 XZB.Core.store.open() 的 openRawDatabase/onupgradeneeded 路径，不复写实现。
  * 锁住：建 store 中途抛错时必须 abort 升级事务并降级内存模式，
  * 不得带着半套 schema resolve 成 idb 模式（后续读写 NotFoundError、用户看「空账」）。
+ * 2.44.7（P3-5）补用例 4：open 超时 reject 后晚到的 onsuccess 连接必须 close。
  * 只读业务代码，不修改任何业务文件。
  */
 
@@ -84,7 +85,7 @@ if (!store || typeof store.open !== 'function' || !store.__test) {
    语义对齐浏览器：升级回调里未捕获的异常或显式 transaction.abort() → 请求 onerror；
    否则升级事务提交 → onsuccess。半套 schema 不允许静默提交。 */
 function makeFakeIdb(opts) {
-  const calls = { upgrade: 0, abort: 0, success: 0, error: 0 };
+  const calls = { upgrade: 0, abort: 0, success: 0, error: 0, close: 0 };
   const stores = {};
   const factory = {
     open: function () {
@@ -108,7 +109,7 @@ function makeFakeIdb(opts) {
           stores[n] = true;
           return { createIndex: function () { return {}; } };
         },
-        close: function () {}
+        close: function () { calls.close += 1; }
       };
       setTimeout(function () {
         req.result = db;
@@ -127,7 +128,7 @@ function makeFakeIdb(opts) {
           calls.success += 1;
           if (typeof req.onsuccess === 'function') { req.onsuccess(); }
         }
-      }, 0);
+      }, (opts && opts.successDelay) || 0);
       return req;
     }
   };
@@ -210,6 +211,28 @@ await test('3.1 升级失败 → 换正常工厂 + resetRuntime → idb 恢复',
   checkEq(out2.mode, 'idb', '环境恢复后回到 idb');
   checkEq(out2.degraded, false, '不降级');
   checkEq(good.calls.abort, 0, '正常路径零 abort');
+});
+
+section('4 open 超时：晚到连接必须 close（2.44.7 P3-5）');
+
+await test('4.1 超时降级后晚到的 onsuccess 连接被 close，不泄漏', async function () {
+  const fake = makeFakeIdb({ successDelay: 300 });
+  reset(fake);
+  store.__test.setOpenTimeout(50);
+  const out = await store.open();
+  checkEq(out.mode, 'memory', '超时应降级内存');
+  checkEq(fake.calls.success, 0, '超时时刻 onsuccess 尚未触发');
+  await new Promise(function (r) { setTimeout(r, 450); });
+  checkEq(fake.calls.success, 1, '晚到 onsuccess 已触发');
+  checkEq(fake.calls.close, 1, '晚到连接必须被 close（既不赋值也不关闭即泄漏）');
+});
+
+await test('4.2 正常按时到达的连接不受影响，零 close', async function () {
+  const fake = makeFakeIdb({});
+  reset(fake);
+  const out = await store.open();
+  checkEq(out.mode, 'idb', '正常 idb');
+  checkEq(fake.calls.close, 0, '正常连接不应被 close');
 });
 
 console.log('\n通过 ' + passCount + ' / 失败 ' + failCount);

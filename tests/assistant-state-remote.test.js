@@ -48,6 +48,8 @@ for (const marker of ['js/core/money.js', 'js/core/dates.js', 'js/core/schema.js
 }
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/modules/nl.js'), 'utf8'), sandbox, { filename: 'nl.js' });
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/modules/core-assistant.js'), 'utf8'), sandbox, { filename: 'core-assistant.js' });
+/* 2.44.7 拆分：insight-qa 独立成 chunk，同沙箱随后加载，行为与拆分前一致 */
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/modules/insight-qa.js'), 'utf8'), sandbox, { filename: 'insight-qa.js' });
 
 const llm = sandbox.XZB.Core.assistant.llm;
 const asst = sandbox.XZB.Core.assistant;

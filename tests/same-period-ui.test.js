@@ -92,6 +92,8 @@ const sandbox = {
 sandbox.global = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(CA_JS, sandbox, { filename: 'js/modules/core-assistant.js' });
+/* 2.44.7 拆分：insight-qa 独立成 chunk，同沙箱随后加载（本文件测的就是它） */
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/modules/insight-qa.js'), 'utf8'), sandbox, { filename: 'js/modules/insight-qa.js' });
 
 const qa = (sandbox.XZB.core && sandbox.XZB.core.insightqa) ||
   (sandbox.XZB.Core && sandbox.XZB.Core.insightqa);

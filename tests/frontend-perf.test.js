@@ -154,6 +154,8 @@ test('1.5 预载 URL 与 chunk-manifest.url() 逐字一致（真源比对）', f
   check(sandbox.XZB.chunks.deps.home.indexOf('habit') >= 0, 'home 依赖 habit');
   checkEq(sandbox.XZB.chunks.deps.ledger.length, 1, 'ledger 依赖数');
   check(sandbox.XZB.chunks.deps.ledger.indexOf('inline-edit') >= 0, 'ledger 依赖 inline-edit');
+  /* 2.44.7 拆分：core-assistant 的洞察问答依赖必须声明，否则 insight 意图静默降级 */
+  check(sandbox.XZB.chunks.deps['core-assistant'].indexOf('insight-qa') >= 0, 'core-assistant 依赖 insight-qa');
 });
 
 test('1.6 Node 环境（无 document/location）不抛错，版本仍定稿', function () {
@@ -293,7 +295,7 @@ test('4.2 列表缩略图与详情照片两条路径都设 decoding=async', func
 section('用例 5：入口 / 分块体积预算（棘轮上限）');
 
 const ENTRY_BUDGET_BYTES = 1350000;   /* 基线 1,306,814 B（2.44.2） */
-const CHUNK_BUDGET_BYTES = 240000;    /* 基线最大 core-assistant.js 223,988 B */
+const CHUNK_BUDGET_BYTES = 240000;    /* 2.44.7 拆出 insight-qa 后最大 core-assistant.js 约 182KB（原 223,988 B） */
 const CHUNKS_TOTAL_BUDGET_BYTES = 1600000; /* 基线合计 1,543,792 B */
 
 function jsChunkFiles() {
